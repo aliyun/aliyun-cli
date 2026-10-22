@@ -39,7 +39,7 @@ aliyun utils mcp-proxy --skip-mcp-oauth
 
 When using CLI credentials, grant the corresponding RAM identity `AliyunOpenAPIMCPServerStaticCredentialAccess` and the permissions needed by the requested APIs and MCP server discovery.
 
-Update manually configured STS credentials when they expire, and log in again if a CloudSSO login expires.
+Update manually configured STS credentials when they expire. For a shared CloudSSO session, log in again with `aliyun configure sso login --sso-session <name>` when it expires; see [CloudSSO configuration](configuration.md#cloudsso).
 
 ### Access control
 

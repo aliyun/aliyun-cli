@@ -46,6 +46,7 @@ const (
 	ProcessCommandFlagName             = "process-command"
 	OIDCProviderARNFlagName            = "oidc-provider-arn"
 	OIDCTokenFileFlagName              = "oidc-token-file"
+	SSOSessionFlagName                 = "sso-session"
 	CloudSSOSignInUrlFlagName          = "cloud-sso-sign-in-url"
 	CloudSSOAccessConfigFlagName       = "cloud-sso-access-config"
 	CloudSSOAccountIdFlagName          = "cloud-sso-account-id"
@@ -86,6 +87,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewProcessCommandFlag())
 	fs.Add(NewOIDCProviderARNFlag())
 	fs.Add(NewOIDCTokenFileFlag())
+	fs.Add(NewSSOSessionFlag())
 	fs.Add(NewCloudSSOSignInUrlFlag())
 	fs.Add(NewCloudSSOAccessConfigFlag())
 	fs.Add(NewCloudSSOAccountIdFlag())
@@ -201,6 +203,11 @@ func OIDCProviderARNFlag(fs *cli.FlagSet) *cli.Flag {
 
 func OIDCTokenFileFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(OIDCTokenFileFlagName)
+}
+
+// SSOSessionFlag returns the flag for the shared CloudSSO session name.
+func SSOSessionFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(SSOSessionFlagName)
 }
 
 // CloudSSOSignInUrlFlag returns the flag for cloud sso sign in url
@@ -510,6 +517,18 @@ func NewSkipSecureVerify() *cli.Flag {
 		Short: i18n.T(
 			"use `--skip-secure-verify` to skip https certification validate [Not recommended]",
 			"使用 `--skip-secure-verify` 跳过https的证书校验 [不推荐使用]"),
+	}
+}
+
+func NewSSOSessionFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         SSOSessionFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--sso-session` to specify the shared cloud sso session name",
+			"使用 `--sso-session` 指定共享云SSO会话名称"),
 	}
 }
 

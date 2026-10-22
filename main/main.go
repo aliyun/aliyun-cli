@@ -449,6 +449,7 @@ var rootFlagHelpSpecs = []openapi.RootFlagSpec{
 	{Name: "process-command", Visibility: openapi.RootVisibilityExtended},
 	{Name: "oidc-provider-arn", Visibility: openapi.RootVisibilityExtended},
 	{Name: "oidc-token-file", Visibility: openapi.RootVisibilityExtended},
+	{Name: "sso-session", Visibility: openapi.RootVisibilityExtended},
 	{Name: "cloud-sso-sign-in-url", Visibility: openapi.RootVisibilityExtended},
 	{Name: "cloud-sso-access-config", Visibility: openapi.RootVisibilityExtended},
 	{Name: "cloud-sso-account-id", Visibility: openapi.RootVisibilityExtended},

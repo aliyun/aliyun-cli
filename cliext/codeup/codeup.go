@@ -250,6 +250,7 @@ var stripFlags = map[string]bool{
 	"process-command":                true,
 	"oidc-provider-arn":              true,
 	"oidc-token-file":                true,
+	"sso-session":                    true,
 	"cloud-sso-sign-in-url":          true,
 	"cloud-sso-access-config":        true,
 	"cloud-sso-account-id":           true,

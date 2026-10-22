@@ -46,7 +46,7 @@ export ALIBABA_CLOUD_PROFILE=production
 | 模式 | 适用场景 |
 | --- | --- |
 | `OAuth` | 本地用户交互登录，避免保存长期 AccessKey |
-| `CloudSSO` | 阿里云 CloudSSO 人员身份访问 |
+| `CloudSSO` | 阿里云 CloudSSO 人员身份访问，支持多 profile 共享 session |
 | `AK` | 静态 AccessKey ID 和 Secret；仅在无法使用更安全方式时采用 |
 | `StsToken` | 已签发的临时 AccessKey 和 SecurityToken；不会自动续期 |
 | `RamRoleArn` | 使用 AccessKey 身份扮演 RAM 角色 |
@@ -229,16 +229,88 @@ Saving profile[oauth-profile] ...Done.
 
 ### CloudSSO
 
-CloudSSO 会通过配置的 CloudSSO 门户启动交互式登录流程：
+CloudSSO 支持多个 profile 共享同一个 session。Session 保存登录 URL 和 AccessToken；每个 profile 分别指定目标阿里云账号和访问配置，并保存各自的 STS 凭证。
 
-```text
-$ aliyun configure --mode CloudSSO --profile cloud-sso
-Configuring profile 'cloud-sso' in 'CloudSSO' authenticate mode...
-CloudSSO Sign In Url []: https://signin-cn-shanghai.alibabacloudsso.com/start/login
-按照命令提示完成登录，并选择账号和访问配置。
-Default Region Id []: cn-hangzhou
-Saving profile[cloud-sso] ...Done.
+#### 共享 session
+
+首次使用时，可以一步完成配置和登录：
+
+```sh
+aliyun configure sso login --sso-session company \
+  --cloud-sso-sign-in-url 'https://signin-example.alibabacloudsso.com/device/login'
 ```
+
+请将示例 URL 替换为实际的 CloudSSO 登录入口。命令先保存配置，再打开浏览器完成授权。不传 URL 时，已有 session 直接使用保存的 URL；新 session 会提示输入。授权失败后配置仍会保留，可重新执行登录命令；URL 未变化时，登录失败也不会清除原有 token。
+
+如果只想保存配置、不立即登录，使用：
+
+```sh
+aliyun configure sso set --sso-session company \
+  --cloud-sso-sign-in-url 'https://signin-example.alibabacloudsso.com/device/login'
+```
+
+登录成功后，交互式配置一个 profile，按提示选择账号和访问配置：
+
+```sh
+aliyun configure --mode CloudSSO --profile prod-readonly --sso-session company
+```
+
+也可以直接指定账号和访问配置，创建另一个引用相同 session 的 profile：
+
+```sh
+aliyun configure set --mode CloudSSO --profile test-admin \
+  --sso-session company \
+  --cloud-sso-account-id '<AccountId>' \
+  --cloud-sso-access-config '<AccessConfigurationId>' \
+  --region cn-hangzhou
+```
+
+请将账号 ID 和访问配置 ID 替换为已授权给当前 CloudSSO 用户的实际值。不同 profile 可以使用不同账号和权限，同时共享一次登录：
+
+```sh
+aliyun sts GetCallerIdentity --profile prod-readonly
+aliyun sts GetCallerIdentity --profile test-admin
+```
+
+共享 session 有效时，CLI 按需获取或刷新各 profile 的 STS 凭证，不重复打开浏览器。Session 过期后，重新登录一次即可供所有引用它的 profile 使用：
+
+```sh
+aliyun configure sso login --sso-session company
+# 也可以通过 profile 找到它引用的 session 并登录。
+aliyun configure sso login --profile prod-readonly
+```
+
+重新登录不会清除尚未过期的 STS。不同用户身份应使用不同 session 名称。修改 profile 的 session、账号或访问配置时，会清空该 profile 的旧 STS 凭证。
+
+#### 删除 session
+
+删除不再使用的 session：
+
+```sh
+aliyun configure sso delete --sso-session company
+```
+
+如果仍有 profile 引用该 session，删除会被拒绝，并列出相关 profile。请先修改这些 profile 的关联，或显式删除不再使用的 profile。
+
+#### 原有的 profile 登录流程
+
+没有配置 `sso_session` 的已有 CloudSSO profile，仍使用原流程：
+
+```sh
+aliyun configure --mode CloudSSO --profile cloud-sso
+aliyun sts GetCallerIdentity --profile cloud-sso
+```
+
+按提示输入登录 URL，在浏览器完成授权，再选择账号和访问配置。登录 URL、AccessToken 和 STS 都保存在该 profile 中。登录过期后，重新执行同一条 `configure` 命令。
+
+已有 profile 不会自动迁移。如需关联共享 session，先登录该 session，再执行：
+
+```sh
+aliyun configure --mode CloudSSO --profile cloud-sso --sso-session company
+```
+
+原账号和访问配置仍可用时，会继续使用已有选择。保存成功后，profile 改为引用共享 session，不再单独保存 CloudSSO 登录 URL 和 AccessToken。
+
 
 ## 外部凭证源
 

@@ -36,7 +36,10 @@ func TestCredentialRefreshPropagatesConfigurationFailures(t *testing.T) {
 						if stage == "load" {
 							return nil, cause
 						}
-						return &Configuration{Profiles: []Profile{{Name: "unrelated"}, {Name: "selected", Endpoint: "stored-endpoint"}}}, nil
+						stored := *profile
+						stored.Endpoint = "stored-endpoint"
+						stored.AccessKeyId, stored.AccessKeySecret, stored.StsToken, stored.StsExpiration = "", "", "", 0
+						return &Configuration{Profiles: []Profile{{Name: "unrelated"}, stored}}, nil
 					}
 				}
 				saves := 0

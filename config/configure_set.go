@@ -72,6 +72,7 @@ func doConfigureSet(ctx *cli.Context) error {
 		}
 	}
 
+	oldTarget := cloudSSOTarget(&profile)
 	switch profile.Mode {
 	case AK:
 		profile.AccessKeyId = AccessKeyIdFlag(flags).GetStringOrDefault(profile.AccessKeyId)
@@ -112,6 +113,9 @@ func doConfigureSet(ctx *cli.Context) error {
 		profile.RoleSessionName = RoleSessionNameFlag(flags).GetStringOrDefault(profile.RoleSessionName)
 		profile.ExpiredSeconds = ExpiredSecondsFlag(flags).GetIntegerOrDefault(profile.ExpiredSeconds)
 	case CloudSSO:
+		if f := SSOSessionFlag(flags); f != nil {
+			profile.SSOSession = f.GetStringOrDefault(profile.SSOSession)
+		}
 		profile.CloudSSOAccessConfig = CloudSSOAccessConfigFlag(flags).GetStringOrDefault(profile.CloudSSOAccessConfig)
 		profile.CloudSSOAccountId = CloudSSOAccountIdFlag(flags).GetStringOrDefault(profile.CloudSSOAccountId)
 		profile.CloudSSOSignInUrl = CloudSSOSignInUrlFlag(flags).GetStringOrDefault(profile.CloudSSOSignInUrl)
@@ -122,6 +126,17 @@ func doConfigureSet(ctx *cli.Context) error {
 		profile.BearerTokenHeaderKey = BearerTokenHeaderKeyFlag(flags).GetStringOrDefault(profile.BearerTokenHeaderKey)
 	}
 
+	if profile.Mode == CloudSSO {
+		if oldTarget != cloudSSOTarget(&profile) {
+			clearCloudSSOSTS(&profile)
+		}
+		if profile.SSOSession != "" {
+			if _, err := loadSSOSession(ctx, profile.SSOSession); err != nil {
+				return err
+			}
+			clearCloudSSOLogin(&profile)
+		}
+	}
 	profile.RegionId = RegionFlag(flags).GetStringOrDefault(profile.RegionId)
 	profile.Language = LanguageFlag(flags).GetStringOrDefault(profile.Language)
 	profile.OutputFormat = "json" // "output", profile.OutputFormat)

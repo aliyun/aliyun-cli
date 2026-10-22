@@ -173,6 +173,7 @@ func NewConfigureCommand() *cli.Command {
 		AssignedMode: cli.AssignedNone,
 		Short:        i18n.T("Complete OAuth login by pasting the callback URL, without opening a browser", "不打开浏览器，通过粘贴回调 URL 完成 OAuth 登录"),
 	})
+	c.AddSubCommand(NewConfigureSSOCommand())
 	c.AddSubCommand(NewConfigureGetCommand())
 	c.AddSubCommand(NewConfigureSetCommand())
 	c.AddSubCommand(NewConfigureListCommand())
@@ -267,6 +268,10 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 			configureOIDC(w, &cp)
 		case CloudSSO:
 			cp.Mode = CloudSSO
+			oldTarget := cloudSSOTarget(&cp)
+			if f := SSOSessionFlag(ctx.Flags()); f != nil {
+				cp.SSOSession = f.GetStringOrDefault(cp.SSOSession)
+			}
 			// parameter from command has higher priority, use it directly
 			if CloudSSOSignInUrlFlag(ctx.Flags()).IsAssigned() {
 				cp.CloudSSOSignInUrl, _ = CloudSSOSignInUrlFlag(ctx.Flags()).GetValue()
@@ -277,7 +282,15 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 			if CloudSSOAccessConfigFlag(ctx.Flags()).IsAssigned() {
 				cp.CloudSSOAccessConfig, _ = CloudSSOAccessConfigFlag(ctx.Flags()).GetValue()
 			}
-			err := configureCloudSSO(w, &cp)
+			if oldTarget != cloudSSOTarget(&cp) {
+				clearCloudSSOSTS(&cp)
+			}
+			var err error
+			if cp.SSOSession != "" {
+				err = configureSharedCloudSSO(ctx, w, &cp)
+			} else {
+				err = configureCloudSSO(w, &cp)
+			}
 			if err != nil {
 				return err
 			}
@@ -957,8 +970,15 @@ func configureCloudSSO(w io.Writer, cp *Profile) error {
 	}
 	cp.AccessToken = accessToken.AccessToken
 	cp.CloudSSOAccessTokenExpire = utilGetCurrentUnixTime() + int64(accessToken.ExpiresIn)
+	return configureCloudSSOTarget(w, cp, httpClient)
+}
+
+func configureCloudSSOTarget(w io.Writer, cp *Profile, httpClient *http.Client) error {
 	// parse base url
-	baseUrl, err := url.Parse(ssoLogin.SignInUrl)
+	baseUrl, err := url.Parse(cp.CloudSSOSignInUrl)
+	if err != nil {
+		return err
+	}
 	// list account for choose
 	userParameter := cloudsso.ListUserParameter{
 		AccessToken: cp.AccessToken,
