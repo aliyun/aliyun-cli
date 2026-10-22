@@ -19,5 +19,9 @@ const (
 	DiscoveryURL = DiscoveryURLCN
 )
 
-var MetadataHostAllowlist = []string{"api.aliyun.com", "api.alibabacloud.com"}
-var RecoveryHostAllowlist = []string{"api.aliyun.com", "api.alibabacloud.com"}
+var MetadataHostAllowlist = []string{
+	"api.aliyun.com", "api.alibabacloud.com", "aliyuncli.alicdn.com",
+}
+var RecoveryHostAllowlist = []string{
+	"api.aliyun.com", "api.alibabacloud.com", "aliyuncli.alicdn.com",
+}
