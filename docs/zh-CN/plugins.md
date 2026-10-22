@@ -95,7 +95,9 @@ aliyun configure plugin-settings clear
 ```
 
 `site` 只选择信任 Discovery 门户；CLI 会把当前有效的 `source-base`
-发送给该门户，并验证这个仓库对应的签名索引。门户未配置的仓库会失败关闭，
+发送给该门户，再从该仓库自己的 `trust/` 树拉取签名元数据和插件索引。
+内网仓库（`cli.aliyun-inc.com`）要求使用者同时能访问公网门户和公司内网。
+门户未配置的仓库会失败关闭，
 只有显式指定 `--allow-unverified-plugin` 才会降级为未验证访问。单次命令可以
 使用 `--source-base <url>` 覆盖全局设置。环境变量
 `ALIBABA_CLOUD_CLI_PLUGIN_SITE` 和

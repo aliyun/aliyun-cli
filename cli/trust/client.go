@@ -58,6 +58,10 @@ func New(cfg Config) *Client {
 	if len(cfg.RecoveryHosts) == 0 {
 		cfg.RecoveryHosts = append([]string(nil), RecoveryHostAllowlist...)
 	}
+	if host := sourceHost(cfg.SourceBase); host != "" {
+		cfg.MetadataHosts = appendHost(cfg.MetadataHosts, host)
+		cfg.RecoveryHosts = appendHost(cfg.RecoveryHosts, host)
+	}
 	if len(cfg.BootstrapRoot) == 0 {
 		cfg.BootstrapRoot = builtinMaterial(
 			BuiltinRootEnvelope, BuiltinRootEnvelopeBase64,
@@ -653,6 +657,21 @@ func checkedOrigin(raw string, allowTestHTTP bool) (string, error) {
 		return "", fmt.Errorf("origin must be a public HTTPS origin")
 	}
 	return u.Scheme + "://" + u.Host, nil
+}
+
+func sourceHost(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+}
+
+func appendHost(hosts []string, host string) []string {
+	if host == "" || hostAllowed(host, hosts) {
+		return hosts
+	}
+	return append(hosts, host)
 }
 
 func hostAllowed(host string, values []string) bool {
