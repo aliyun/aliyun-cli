@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -1074,4 +1075,18 @@ func contains(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+func TestRemoveFlagsForMainCli_StripsSSOSession(t *testing.T) {
+	for _, selector := range [][]string{{"--sso-session", "company"}, {"--sso-session=company"}} {
+		t.Run(selector[0], func(t *testing.T) {
+			args := append([]string{"list", "--profile", "prod"}, selector...)
+			args = append(args, "--region", "cn-hangzhou", "--child-option", "value")
+			got := new(Context).RemoveFlagsForMainCli(args)
+			want := []string{"list", "--region", "cn-hangzhou", "--child-option", "value"}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("got %v, want %v", got, want)
+			}
+		})
+	}
 }
