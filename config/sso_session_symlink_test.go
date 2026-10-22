@@ -19,7 +19,7 @@ func TestSharedSSOConfigSymlinksReuseLogin(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("requires Unix symlink support")
 	}
-	for _, kind := range []string{"default file", "custom file", "directory", "missing config in linked directory"} {
+	for _, kind := range []string{"default file", "custom file", "directory", "missing config in linked directory", "symlink parent traversal", "relative symlink parent traversal", "missing config after symlink parent traversal", "missing directory after symlink parent traversal"} {
 		for _, loginViaLink := range []bool{true, false} {
 			direction := "real to link"
 			if loginViaLink {
@@ -40,7 +40,8 @@ func TestSharedSSOConfigSymlinksReuseLogin(t *testing.T) {
 				realPath := filepath.Join(realDir, "config.json")
 				linkPath := filepath.Join(base, "alias.json")
 				conf := &Configuration{CurrentProfile: "prod", Profiles: []Profile{{Name: "prod", Mode: CloudSSO, RegionId: "cn-hangzhou", OutputFormat: "json", Language: "en", SSOSession: "company", CloudSSOAccountId: "account", CloudSSOAccessConfig: "read"}}}
-				if kind != "missing config in linked directory" {
+				missing := kind == "missing config in linked directory" || kind == "missing config after symlink parent traversal" || kind == "missing directory after symlink parent traversal"
+				if !missing {
 					require.NoError(t, SaveConfigurationWithContext(ssoPathContext(realPath), conf))
 				}
 				switch kind {
@@ -50,6 +51,28 @@ func TestSharedSSOConfigSymlinksReuseLogin(t *testing.T) {
 					require.NoError(t, os.Symlink(realPath, linkPath))
 				case "custom file":
 					require.NoError(t, os.Symlink(realPath, linkPath))
+				case "symlink parent traversal", "relative symlink parent traversal", "missing config after symlink parent traversal", "missing directory after symlink parent traversal":
+					nested := filepath.Join(realDir, "nested")
+					require.NoError(t, os.MkdirAll(nested, 0700))
+					alias := filepath.Join(base, "alias")
+					require.NoError(t, os.Symlink(nested, alias))
+					// Do not use Join: it would remove alias/.. before the filesystem sees it.
+					linkPath = alias + "/../config.json"
+					if kind == "relative symlink parent traversal" {
+						t.Chdir(base)
+						linkPath = "alias/../config.json"
+					}
+					if kind == "missing directory after symlink parent traversal" {
+						realPath = filepath.Join(realDir, "future", "config.json")
+						linkPath = alias + "/../future/config.json"
+					}
+					if !missing {
+						direct, err := os.Stat(realPath)
+						require.NoError(t, err)
+						viaLink, err := os.Stat(linkPath)
+						require.NoError(t, err)
+						require.True(t, os.SameFile(direct, viaLink))
+					}
 				default:
 					aliasDir := filepath.Join(base, "alias")
 					require.NoError(t, os.Symlink(realDir, aliasDir))
@@ -74,8 +97,13 @@ func TestSharedSSOConfigSymlinksReuseLogin(t *testing.T) {
 				sessionPathBeforeSave := ssoSessionPath(loginCtx, "company")
 				require.Equal(t, sessionPathBeforeSave, ssoSessionPath(useCtx, "company"))
 				// The namespace must remain stable when a previously absent config is created.
-				require.NoError(t, SaveConfigurationWithContext(loginCtx, conf))
+				require.NoError(t, SaveConfigurationWithContext(realCtx, conf))
 				require.Equal(t, sessionPathBeforeSave, ssoSessionPath(loginCtx, "company"))
+				directInfo, err := os.Stat(realPath)
+				require.NoError(t, err)
+				aliasInfo, err := os.Stat(linkPath)
+				require.NoError(t, err)
+				require.True(t, os.SameFile(directInfo, aliasInfo))
 				calls := 0
 				tryRefreshStsTokenFunc = func(_ *string, token, ac, account *string, _ *http.Client) (*cloudsso.CloudCredentialResponse, error) {
 					calls++

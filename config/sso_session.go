@@ -38,27 +38,50 @@ func validateSSOSessionName(name string) error {
 }
 
 func normalizeSSOConfigPath(path string) string {
-	if absolute, err := filepath.Abs(path); err == nil {
-		path = absolute
-	} else {
-		path = filepath.Clean(path)
+	// Anchor ordinary relative paths without cleaning their components. Resolve
+	// the working directory first, since PWD itself may name a directory link.
+	if !filepath.IsAbs(path) && filepath.VolumeName(path) == "" && (path == "" || !os.IsPathSeparator(path[0])) {
+		if cwd, err := os.Getwd(); err == nil {
+			if resolved, err := filepath.EvalSymlinks(cwd); err == nil {
+				cwd = resolved
+			}
+			path = cwd + string(os.PathSeparator) + path
+		}
 	}
-	// Resolve file and directory links. When login precedes creation of the
-	// configuration file, resolve its existing ancestors so the namespace does
-	// not change once the file is saved.
-	for ancestor := path; ; ancestor = filepath.Dir(ancestor) {
+	// EvalSymlinks must see the original traversal: Abs, Dir, Rel and Join
+	// would lexically collapse a link followed by .. into a different path.
+	var suffix []string
+	for ancestor := path; ; {
 		resolved, err := filepath.EvalSymlinks(ancestor)
 		if err == nil {
-			suffix, relErr := filepath.Rel(ancestor, path)
-			if relErr == nil {
-				return filepath.Join(resolved, suffix)
+			if absolute, err := filepath.Abs(resolved); err == nil {
+				resolved = absolute
 			}
-			return path
+			return filepath.Join(append([]string{resolved}, suffix...)...)
 		}
-		if !os.IsNotExist(err) || filepath.Dir(ancestor) == ancestor {
-			return path
+		if !os.IsNotExist(err) {
+			break
+		}
+		dir, base := filepath.Split(ancestor)
+		if base == "" {
+			trimmed := strings.TrimRightFunc(ancestor, func(r rune) bool { return r == '/' || r == '\\' && os.PathSeparator == '\\' })
+			// Preserve Unix roots, Windows drive roots, and UNC volume roots.
+			if trimmed == "" || trimmed == filepath.VolumeName(ancestor) {
+				break
+			}
+			ancestor = trimmed
+			continue
+		}
+		suffix = append([]string{base}, suffix...)
+		ancestor = dir
+		if ancestor == "" {
+			ancestor = "."
 		}
 	}
+	if absolute, err := filepath.Abs(path); err == nil {
+		return absolute
+	}
+	return filepath.Clean(path)
 }
 
 func ssoSessionPath(ctx *cli.Context, name string) string {
