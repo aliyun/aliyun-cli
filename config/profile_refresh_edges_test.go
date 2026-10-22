@@ -22,8 +22,8 @@ func TestCredentialRefreshPropagatesConfigurationFailures(t *testing.T) {
 	for _, mode := range []AuthenticateMode{OAuth, CloudSSO} {
 		for _, stage := range []string{"load", "save", "persist matching profile"} {
 			t.Run(string(mode)+"/"+stage, func(t *testing.T) {
-				profile := &Profile{Name: "selected", Mode: mode, CloudSSOSignInUrl: "https://sso.example.invalid", CloudSSOAccountId: "account", CloudSSOAccessConfig: "config", CloudSSOAccessTokenExpire: 9999999999}
-				exchangeFromOAuthFunc = func(_ io.Writer, p *Profile) error {
+				profile := &Profile{Name: "selected", Mode: mode, OAuthSiteType: "CN", CloudSSOSignInUrl: "https://sso.example.invalid", CloudSSOAccountId: "account", CloudSSOAccessConfig: "config", CloudSSOAccessTokenExpire: 9999999999}
+				exchangeFromOAuthFunc = func(_ io.Writer, p *Profile, _ func() error) error {
 					p.AccessKeyId, p.AccessKeySecret, p.StsToken = "id", "secret", "token"
 					p.StsExpiration = 9999999999
 					return nil
@@ -36,7 +36,7 @@ func TestCredentialRefreshPropagatesConfigurationFailures(t *testing.T) {
 						if stage == "load" {
 							return nil, cause
 						}
-						return &Configuration{Profiles: []Profile{{Name: "unrelated"}, {Name: "selected", Endpoint: "stored-endpoint"}}}, nil
+						return &Configuration{Profiles: []Profile{{Name: "unrelated"}, {Name: "selected", Mode: mode, OAuthSiteType: "CN", Endpoint: "stored-endpoint"}}}, nil
 					}
 				}
 				saves := 0

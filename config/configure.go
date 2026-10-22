@@ -174,6 +174,7 @@ func NewConfigureCommand() *cli.Command {
 		Short:        i18n.T("Complete OAuth login by pasting the callback URL, without opening a browser", "不打开浏览器，通过粘贴回调 URL 完成 OAuth 登录"),
 	})
 	c.AddSubCommand(NewConfigureGetCommand())
+	c.AddSubCommand(NewConfigureOAuthCredentialCommand())
 	c.AddSubCommand(NewConfigureSetCommand())
 	c.AddSubCommand(NewConfigureListCommand())
 	c.AddSubCommand(NewConfigureDeleteCommand())
@@ -393,6 +394,12 @@ func configureOAuthWithFlow(w io.Writer, cp *Profile, flow func(io.Writer, *Prof
 
 // exchange tmp ak from oauth token
 func exchangeFromOAuth(w io.Writer, cp *Profile) error {
+	return exchangeFromOAuthWithCheckpoint(w, cp, nil)
+}
+
+// The refresh transaction persists a rotated OAuth generation before making
+// another network request. Interactive login can use the original wrapper.
+func exchangeFromOAuthWithCheckpoint(w io.Writer, cp *Profile, checkpoint func() error) error {
 	oauthSiteType := cp.OAuthSiteType
 	if oauthSiteType != "CN" && oauthSiteType != "INTL" {
 		return fmt.Errorf("invalid OAuth site type: %s, only support CN or INTL", oauthSiteType)
@@ -400,13 +407,18 @@ func exchangeFromOAuth(w io.Writer, cp *Profile) error {
 	// 检查 refresh token 是否过期
 	refreshToken := cp.OAuthRefreshToken
 	accessTokenExpire := cp.OAuthAccessTokenExpire
-	if accessTokenExpire == 0 || accessTokenExpire < util.GetCurrentUnixTime() {
+	if accessTokenExpire <= util.GetCurrentUnixTime()+oauthRefreshSkewSeconds {
 		if refreshToken == "" {
 			return fmt.Errorf("both access token and refresh token are empty, please re-authenticate, cmd: %s", buildReLoginOauthCommand(cp))
 		}
 		// refresh token
 		err := oauthTryRefreshOauthToken(w, cp)
 		if err != nil {
+			return err
+		}
+	}
+	if checkpoint != nil {
+		if err := checkpoint(); err != nil {
 			return err
 		}
 	}
@@ -455,14 +467,15 @@ func exchangeFromOAuth(w io.Writer, cp *Profile) error {
 	if err != nil {
 		return err
 	}
-	// 写入 cp
+	// Validate the complete STS tuple before replacing the previous generation.
+	parsedTime, err := time.Parse(time.RFC3339, result.Expiration)
+	if err != nil || parsedTime.Unix() <= util.GetCurrentUnixTime() || result.AccessKeyId == "" || result.AccessKeySecret == "" || result.SecurityToken == "" {
+		return fmt.Errorf("invalid STS credential response")
+	}
 	cp.AccessKeyId = result.AccessKeyId
 	cp.AccessKeySecret = result.AccessKeySecret
 	cp.StsToken = result.SecurityToken
-	parsedTime, err := time.Parse(time.RFC3339, result.Expiration)
-	if err == nil {
-		cp.StsExpiration = parsedTime.Unix()
-	}
+	cp.StsExpiration = parsedTime.Unix()
 	return nil
 }
 
@@ -587,11 +600,20 @@ func tryRefreshOauthToken(w io.Writer, cp *Profile) error {
 	if err != nil {
 		return err
 	}
+	// A refresh response may omit refresh_token when the existing token remains
+	// valid. Persist a returned rotation even if the rest of the response is bad.
+	if tokenResp.RefreshToken != "" {
+		cp.OAuthRefreshToken = tokenResp.RefreshToken
+	}
 	if tokenResp.AccessToken == "" {
+		cp.OAuthAccessTokenExpire = 0
 		return fmt.Errorf("access token not found in response")
 	}
+	if tokenResp.ExpiresIn <= 0 {
+		cp.OAuthAccessTokenExpire = 0
+		return fmt.Errorf("invalid OAuth access token response")
+	}
 	cp.OAuthAccessToken = tokenResp.AccessToken
-	cp.OAuthRefreshToken = tokenResp.RefreshToken
 	cp.OAuthAccessTokenExpire = utilGetCurrentUnixTime() + tokenResp.ExpiresIn
 	return nil
 }

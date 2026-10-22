@@ -22,6 +22,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -171,7 +172,7 @@ func TestExchangeFromOAuth_Success(t *testing.T) {
 				"requestId":       "mock_request_id",
 				"accessKeyId":     "mock_access_key_id",
 				"accessKeySecret": "mock_access_key_secret",
-				"expiration":      "2023-12-31T23:59:59Z",
+				"expiration":      time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
 				"securityToken":   "mock_security_token",
 			}
 			json.NewEncoder(w).Encode(exchangeResp)
@@ -234,7 +235,7 @@ func TestExchangeFromOAuth_TokenExpired_RefreshSuccess(t *testing.T) {
 				"requestId":       "mock_request_id",
 				"accessKeyId":     "mock_access_key_id",
 				"accessKeySecret": "mock_access_key_secret",
-				"expiration":      "2023-12-31T23:59:59Z",
+				"expiration":      time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
 				"securityToken":   "mock_security_token",
 			}
 			json.NewEncoder(w).Encode(exchangeResp)
