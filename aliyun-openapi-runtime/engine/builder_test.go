@@ -87,6 +87,31 @@ func newDispatchErrorTestEngine() *Engine {
 	}, nil)
 }
 
+func TestBuildExecContextLanguage(t *testing.T) {
+	for _, test := range []struct {
+		name, requestLanguage, profileLanguage, want string
+	}{
+		{"Chinese profile", "", "zh", "zh"},
+		{"English profile", "", "en", "en"},
+		{"explicit English", "en", "zh", "en"},
+		{"explicit Chinese", "zh", "en", "zh"},
+		{"unset", "", "", ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ec, err := buildExecContext(Request{
+				Lang: test.requestLanguage,
+				Host: runtime.StaticHost{SettingsVal: runtime.Settings{Language: test.profileLanguage}},
+			}, &meta.API{}, &argparser.Result{Reserved: argparser.Reserved{DryRun: true}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ec.Language != test.want {
+				t.Fatalf("Language = %q, want %q", ec.Language, test.want)
+			}
+		})
+	}
+}
+
 func TestDispatchPreservesUnknownFlagDetails(t *testing.T) {
 	err := newDispatchErrorTestEngine().Dispatch(Request{
 		Args: []string{"demo", "run-thing", "--instnace-type", "ecs.g6"},

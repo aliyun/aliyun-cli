@@ -16,6 +16,7 @@ package openapi
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"regexp"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 )
 
@@ -47,6 +49,70 @@ type estimateCostRequest struct {
 	PopVersion string                 `json:"popVersion"`
 	ApiName    string                 `json:"apiName"`
 	Parameters map[string]interface{} `json:"parameters"`
+}
+
+// Quote-service error codes the CLI treats specially. They are deliberately
+// distinct: "confirmed free" answers the question "what does this call cost?",
+// while "not supported" means the question cannot be answered yet. Collapsing
+// them — as this CLI did before — leaves users unable to tell a free API from
+// an unmapped one.
+const (
+	estimateCostCodeNotRequired  = "PricingNotRequired"
+	estimateCostCodeNotSupported = "PricingNotSupported"
+)
+
+// costIrrelevantQuote is what --estimate-cost prints for an API the pricing
+// side has confirmed as free.
+//
+// It is a normal result (exit code 0), not an error: the user asked what the
+// call costs and got a definitive answer — nothing. Failing the process here
+// would make scripts and agents that gate on `$?` abort on exactly the
+// operations that are free to run. "Cannot be quoted" stays an error; "costs
+// nothing" does not.
+type costIrrelevantQuote struct {
+	CostIrrelevant bool   `json:"costIrrelevant"`
+	PopCode        string `json:"popCode"`
+	PopVersion     string `json:"popVersion"`
+	ApiName        string `json:"apiName"`
+	Message        string `json:"message"`
+}
+
+// costIrrelevantMessage is the CLI's own wording for the confirmed-free
+// answer, localized using the effective CLI language rather than the server's.
+var costIrrelevantMessage = i18n.T(
+	"this OpenAPI is confirmed to incur no charge, so there is nothing to quote",
+	"该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。",
+)
+
+// newCostIrrelevantQuote renders the confirmed-free answer as JSON so the
+// normal output pipeline (--cli-query / --output / --quiet) works on it like
+// any other quote.
+func newCostIrrelevantQuote(popCode string, popVersion string, apiName string, language string) string {
+	if language == "" {
+		language = i18n.GetLanguage()
+	}
+	// Marshalling a fixed struct of one bool and four strings cannot fail, so
+	// there is no error to propagate through every caller.
+	body, _ := json.Marshal(costIrrelevantQuote{
+		CostIrrelevant: true,
+		PopCode:        popCode,
+		PopVersion:     popVersion,
+		ApiName:        apiName,
+		Message:        costIrrelevantMessage.Get(language),
+	})
+	return string(body)
+}
+
+// costIrrelevantFromError recognises the confirmed-free answer on the error
+// channel and renders it as a result document. ok=false means "this is a real
+// error, translate it normally" — kept separate from the HTTP call so the
+// classification is testable without standing up a signed quote server.
+func costIrrelevantFromError(popCode string, popVersion string, apiName string, err error, language string) (string, bool) {
+	serverErr, isServerErr := err.(*sdkerrors.ServerError)
+	if !isServerErr || serverErr.ErrorCode() != estimateCostCodeNotRequired {
+		return "", false
+	}
+	return newCostIrrelevantQuote(popCode, popVersion, apiName, language), true
 }
 
 // processEstimateCost handles --estimate-cost for both RPC and ROA(restful)
@@ -431,6 +497,16 @@ func estimateCostEndpoint() string {
 	return defaultEstimateCostHost
 }
 
+func setEstimateCostEndpoint(request *requests.CommonRequest) {
+	request.Domain = estimateCostEndpoint()
+	// The legacy SDK appends Port when building the URL, so an explicit
+	// endpoint port must be kept separate from Domain.
+	if host, port, err := net.SplitHostPort(request.Domain); err == nil {
+		request.Domain = host
+		request.Port = port
+	}
+}
+
 // invokeEstimateCost issues the signed quote request and returns the raw
 // response body. Reuses the standard authenticated client so signing and
 // credential refresh behave identically to a real OpenAPI call.
@@ -455,7 +531,7 @@ func invokeEstimateCost(ctx *cli.Context, profile *config.Profile, popCode strin
 	request.Version = estimateCostApiVersion
 	request.Method = "POST"
 	request.PathPattern = estimateCostQuotePath
-	request.Domain = estimateCostEndpoint()
+	setEstimateCostEndpoint(request)
 	request.Scheme = "https"
 	if host := os.Getenv(estimateCostHostEnv); host != "" {
 		request.Headers["Host"] = host
@@ -465,22 +541,36 @@ func invokeEstimateCost(ctx *cli.Context, profile *config.Profile, popCode strin
 
 	resp, err := client.ProcessCommonRequest(request)
 	if err != nil {
+		// A confirmed cost-irrelevant API arrives on the error channel — the
+		// quote service models it as errorCode=PricingNotRequired — but it is
+		// a successful determination. Turn it into a normal result document
+		// so callers print it and exit 0 like any other quote.
+		// Use the resolved profile explicitly: OSS quote entry points can load
+		// a different profile without changing the process-wide i18n language.
+		if out, isCostIrrelevant := costIrrelevantFromError(popCode, popVersion, apiName, err, profile.Language); isCostIrrelevant {
+			return out, nil
+		}
 		return "", translateEstimateCostError(popCode, popVersion, apiName, err)
 	}
 	return resp.GetHttpContentString(), nil
 }
 
 // translateEstimateCostError turns ccapi-side server errors into actionable
-// CLI tips. PricingNotSupported is the common "this API isn't billable"
-// signal — surface that as a friendly hint rather than a raw error string,
-// since users mistake it for a misconfiguration otherwise.
+// CLI tips. PricingNotSupported means the quote cannot be produced — surface
+// that as a friendly hint rather than a raw error string, since users mistake
+// it for a misconfiguration otherwise.
+//
+// Note it does NOT mean "free": an API confirmed to incur no charge reports
+// PricingNotRequired and is handled as a successful result upstream of here.
+// The tip says so explicitly, because reading "not supported" as "free" is a
+// billing-relevant mistake.
 func translateEstimateCostError(popCode string, popVersion string, apiName string, err error) error {
 	if serverErr, ok := err.(*sdkerrors.ServerError); ok {
 		switch serverErr.ErrorCode() {
-		case "PricingNotSupported":
+		case estimateCostCodeNotSupported:
 			return cli.NewErrorWithTip(
 				fmt.Errorf("no pricing information for %s/%s/%s", popCode, popVersion, apiName),
-				"this OpenAPI either incurs no cost or has no pricing mapping registered yet")
+				"no pricing mapping is registered for this OpenAPI yet, so it cannot be quoted; this does not mean the call is free — an API confirmed to be free is reported as cost-irrelevant instead")
 		case "InvalidParameter":
 			return cli.NewErrorWithTip(err,
 				"cost estimation rejected the parameters, please check them against the target API")

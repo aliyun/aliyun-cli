@@ -118,7 +118,8 @@ type Request struct {
 	Out  io.Writer
 	// AIMode enables metadata constraint validation for agent-driven calls.
 	AIMode bool
-	// Lang selects help/description locale ("zh" / "en"). Empty => en.
+	// Lang selects help and local-message locale ("zh" / "en"). Calls fall
+	// back to Host.Settings().Language when empty, then to English.
 	Lang string
 	// Host supplies region + credentials. May be nil for help or dry-run that needs neither (endpoint then resolves region-less).
 	Host runtime.Host
@@ -388,6 +389,7 @@ func resolveDispatchAPI(ldr loader.Loader, product, command string, tail []strin
 func buildExecContext(req Request, api *meta.API, res *argparser.Result) (*runtime.ExecContext, error) {
 	ec := &runtime.ExecContext{
 		API:        api,
+		Language:   req.Lang,
 		Args:       res.Args,
 		Region:     res.Reserved.Region,
 		Endpoint:   res.Reserved.Endpoint,
@@ -437,6 +439,9 @@ func buildExecContext(req Request, api *meta.API, res *argparser.Result) (*runti
 			ec.Region = req.Host.Region()
 		}
 		settings := req.Host.Settings()
+		if ec.Language == "" {
+			ec.Language = settings.Language
+		}
 		ec.ReadTimeout = settings.ReadTimeout
 		ec.ConnectTimeout = settings.ConnectTimeout
 		ec.RetryCount = settings.RetryCount

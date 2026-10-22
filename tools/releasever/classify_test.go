@@ -3,6 +3,7 @@ package releasever
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -147,6 +148,38 @@ type errWriter struct{}
 
 func (errWriter) Write([]byte) (int, error) {
 	return 0, os.ErrClosed
+}
+
+func TestExecuteCommandErrors(t *testing.T) {
+	var stderr bytes.Buffer
+	if code := Execute([]string{"plan"}, &bytes.Buffer{}, &stderr); code == 0 || !strings.Contains(stderr.String(), "usage:") {
+		t.Fatalf("plan usage code=%d stderr=%q", code, stderr.String())
+	}
+	stderr.Reset()
+	if code := Execute([]string{"plan", ""}, &bytes.Buffer{}, &stderr); code == 0 || !strings.Contains(stderr.String(), "usage:") {
+		t.Fatalf("empty plan code=%d stderr=%q", code, stderr.String())
+	}
+	stderr.Reset()
+	if code := Execute([]string{"supported-public-keys", "1"}, &bytes.Buffer{}, &stderr); code == 0 || !strings.Contains(stderr.String(), "usage:") {
+		t.Fatalf("extra arg code=%d stderr=%q", code, stderr.String())
+	}
+	stderr.Reset()
+	missing := filepath.Join(t.TempDir(), "missing")
+	if code := Execute([]string{"append-version", "3.5.2", missing, "1"}, &bytes.Buffer{}, &stderr); code == 0 || !strings.Contains(stderr.String(), "missing") {
+		t.Fatalf("missing file code=%d stderr=%q", code, stderr.String())
+	}
+	path := filepath.Join(t.TempDir(), "versions")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stderr.Reset()
+	if code := Execute([]string{"append-version", "3.5.2", path, "no spaces"}, &bytes.Buffer{}, &stderr); code == 0 || !strings.Contains(stderr.String(), "invalid public key") {
+		t.Fatalf("bad key code=%d stderr=%q", code, stderr.String())
+	}
+	stderr.Reset()
+	if code := Execute([]string{"append-version", "3.5.2", path, "1"}, errWriter{}, &stderr); code == 0 || !strings.Contains(stderr.String(), "closed") {
+		t.Fatalf("write code=%d stderr=%q", code, stderr.String())
+	}
 }
 
 func TestExecutePlanWriteError(t *testing.T) {

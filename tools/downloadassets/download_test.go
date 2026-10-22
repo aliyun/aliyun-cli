@@ -1,6 +1,7 @@
 package downloadassets
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -23,12 +24,15 @@ func TestDownloadSuccessAndRerunReplacesChecksum(t *testing.T) {
 	var seenAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seenAuth = r.Header.Get("Authorization")
-		name := strings.TrimPrefix(r.URL.Path, "/")
-		if !strings.Contains(name, "1.2.3") {
+		name := filepath.Base(r.URL.Path)
+		asset := strings.TrimSuffix(name, ".minisig")
+		if !strings.Contains(asset, "1.2.3") {
 			http.NotFound(w, r)
 			return
 		}
-		_, _ = w.Write([]byte("asset-" + filepath.Base(name)))
+		signedHandler(func(assetName string) []byte {
+			return []byte("asset-" + assetName)
+		})(w, r)
 	}))
 	defer srv.Close()
 
@@ -73,11 +77,11 @@ func TestDownloadSuccessAndRerunReplacesChecksum(t *testing.T) {
 func TestDownloadHTTP404DoesNotCommitChecksum(t *testing.T) {
 	names := AssetNames("1.2.3")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, names[2]) {
+		if strings.HasSuffix(filepath.Base(r.URL.Path), names[2]) || filepath.Base(r.URL.Path) == names[2] {
 			http.NotFound(w, r)
 			return
 		}
-		_, _ = w.Write([]byte("ok"))
+		signedHandler(func(string) []byte { return []byte("ok") })(w, r)
 	}))
 	defer srv.Close()
 
@@ -125,11 +129,11 @@ func TestDownloadTimeoutDoesNotCommitChecksum(t *testing.T) {
 func TestDownloadEmptyAssetIsMissing(t *testing.T) {
 	names := AssetNames("1.2.3")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, names[1]) {
+		if filepath.Base(r.URL.Path) == names[1] {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		_, _ = w.Write([]byte("ok"))
+		signedHandler(func(string) []byte { return []byte("ok") })(w, r)
 	}))
 	defer srv.Close()
 
@@ -329,6 +333,98 @@ func TestDownloadInvalidDigestDoesNotCommit(t *testing.T) {
 	}
 }
 
+func TestPublisherSignatureFailuresDoNotCommit(t *testing.T) {
+	names := AssetNames("1.2.3")
+	cases := []struct {
+		name string
+		body []byte
+		want string
+	}{
+		{name: "rejected", body: []byte("not-a-signature"), want: "publisher signature"},
+		{name: "too-large", body: bytes.Repeat([]byte("a"), 5000), want: "too large"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if filepath.Base(r.URL.Path) == names[0]+".minisig" {
+					_, _ = w.Write(tc.body)
+					return
+				}
+				signedHandler(func(string) []byte { return []byte("ok") })(w, r)
+			}))
+			defer srv.Close()
+			dir := t.TempDir()
+			err := Download(context.Background(), Options{Version: "1.2.3", BaseURL: srv.URL, WorkDir: dir})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %s, got %v", tc.want, err)
+			}
+			if _, statErr := os.Stat(filepath.Join(dir, checksumName)); !os.IsNotExist(statErr) {
+				t.Fatal("bad signature committed checksum")
+			}
+		})
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if filepath.Base(r.URL.Path) == names[0]+".cdx.json.minisig" {
+			http.NotFound(w, r)
+			return
+		}
+		signedHandler(func(string) []byte { return []byte("ok") })(w, r)
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+	err := Download(context.Background(), Options{Version: "1.2.3", BaseURL: srv.URL, WorkDir: dir})
+	if err == nil || !strings.Contains(err.Error(), "HTTP 404") {
+		t.Fatalf("expected missing trace signature, got %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, checksumName)); !os.IsNotExist(statErr) {
+		t.Fatal("missing trace signature committed checksum")
+	}
+}
+
+func TestTraceDownloadAndCommitFailures(t *testing.T) {
+	trace := TraceNames("1.2.3")[0]
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if filepath.Base(r.URL.Path) == trace {
+			http.NotFound(w, r)
+			return
+		}
+		signedHandler(func(string) []byte { return []byte("ok") })(w, r)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	err := Download(context.Background(), Options{Version: "1.2.3", BaseURL: srv.URL, WorkDir: dir})
+	if err == nil || !strings.Contains(err.Error(), "HTTP 404") {
+		t.Fatalf("expected missing trace, got %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, checksumName)); !os.IsNotExist(statErr) {
+		t.Fatal("missing trace committed checksum")
+	}
+
+	dir = t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, trace), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ok := httptest.NewServer(signedHandler(func(string) []byte { return []byte("ok") }))
+	defer ok.Close()
+	err = Download(context.Background(), Options{Version: "1.2.3", BaseURL: ok.URL, WorkDir: dir})
+	if err == nil || !strings.Contains(err.Error(), "commit "+trace) {
+		t.Fatalf("expected trace commit failure, got %v", err)
+	}
+}
+
+func TestProductionVerifierRejectsUnsignedAsset(t *testing.T) {
+	dir := t.TempDir()
+	asset := filepath.Join(dir, "a.tgz")
+	if err := os.WriteFile(asset, []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := productionVerify("a.tgz", asset, []byte("not-a-signature")); err == nil {
+		t.Fatal("expected the production verifier to reject an unsigned asset")
+	}
+}
+
 func assertFreshChecksum(t *testing.T, dir string, names []string, body string) {
 	t.Helper()
 	if err := verifyChecksum(body, names); err != nil {
@@ -343,6 +439,45 @@ func assertFreshChecksum(t *testing.T, dir string, names []string, body string) 
 		if strings.Count(body, name) != 1 {
 			t.Fatalf("checksum listing for %s is not unique:\n%s", name, body)
 		}
+		if _, err := os.Stat(path + ".minisig"); err != nil {
+			t.Fatalf("signature for %s missing after success: %v", name, err)
+		}
+		for _, suffix := range []string{".cdx.json", ".provenance.json"} {
+			trace := path + suffix
+			if _, err := os.Stat(trace); err != nil {
+				t.Fatalf("trace %s missing after success: %v", trace, err)
+			}
+			if _, err := os.Stat(trace + ".minisig"); err != nil {
+				t.Fatalf("signature for %s missing after success: %v", trace, err)
+			}
+			if strings.Contains(body, name+suffix) {
+				t.Fatalf("checksum includes trace file %s:\n%s", name+suffix, body)
+			}
+		}
+	}
+}
+
+func TestTraceEnsureAndSignatureReadFailures(t *testing.T) {
+	origEnsure := ensurePresent
+	ensurePresent = func(path string) error {
+		return errors.New("not a regular file")
+	}
+	defer func() { ensurePresent = origEnsure }()
+	srv := httptest.NewServer(signedHandler(func(string) []byte { return []byte("ok") }))
+	defer srv.Close()
+	dir := t.TempDir()
+	err := Download(context.Background(), Options{Version: "1.2.3", BaseURL: srv.URL, WorkDir: dir})
+	if err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("trace check = %v", err)
+	}
+
+	ensurePresent = origEnsure
+	origRead := readFile
+	readFile = func(string) ([]byte, error) { return nil, errors.New("read signature") }
+	defer func() { readFile = origRead }()
+	err = Download(context.Background(), Options{Version: "1.2.3", BaseURL: srv.URL, WorkDir: t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "read signature") {
+		t.Fatalf("signature read = %v", err)
 	}
 }
 

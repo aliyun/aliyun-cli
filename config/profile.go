@@ -118,6 +118,7 @@ type Profile struct {
 	CredentialsURI             string           `json:"credentials_uri,omitempty"`
 	OIDCProviderARN            string           `json:"oidc_provider_arn,omitempty"`
 	OIDCTokenFile              string           `json:"oidc_token_file,omitempty"`
+	SSOSession                 string           `json:"sso_session,omitempty"`
 	CloudSSOSignInUrl          string           `json:"cloud_sso_sign_in_url,omitempty"`
 	AccessToken                string           `json:"access_token,omitempty"`                  // for CloudSSO, read only
 	CloudSSOAccessTokenExpire  int64            `json:"cloud_sso_access_token_expire,omitempty"` // for CloudSSO, read only
@@ -256,7 +257,12 @@ func (cp *Profile) Validate() error {
 				cp.Name, cp.Name)
 		}
 	case CloudSSO:
-		if cp.CloudSSOSignInUrl == "" {
+		if cp.SSOSession != "" {
+			if err := validateSSOSessionName(cp.SSOSession); err != nil {
+				return err
+			}
+		}
+		if cp.CloudSSOSignInUrl == "" && cp.SSOSession == "" {
 			return fmt.Errorf("cloud_sso_sign_in_url is not configured for profile '%s'. Run `aliyun configure --profile %s --mode CloudSSO` to set it",
 				cp.Name, cp.Name)
 		}
@@ -313,9 +319,16 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.ProcessCommand = ProcessCommandFlag(ctx.Flags()).GetStringOrDefault(cp.ProcessCommand)
 	cp.OIDCProviderARN = OIDCProviderARNFlag(ctx.Flags()).GetStringOrDefault(cp.OIDCProviderARN)
 	cp.OIDCTokenFile = OIDCTokenFileFlag(ctx.Flags()).GetStringOrDefault(cp.OIDCTokenFile)
+	oldTarget := cloudSSOTarget(cp)
+	if f := SSOSessionFlag(ctx.Flags()); f != nil {
+		cp.SSOSession = f.GetStringOrDefault(cp.SSOSession)
+	}
 	cp.CloudSSOSignInUrl = CloudSSOSignInUrlFlag(ctx.Flags()).GetStringOrDefault(cp.CloudSSOSignInUrl)
 	cp.CloudSSOAccessConfig = CloudSSOAccessConfigFlag(ctx.Flags()).GetStringOrDefault(cp.CloudSSOAccessConfig)
 	cp.CloudSSOAccountId = CloudSSOAccountIdFlag(ctx.Flags()).GetStringOrDefault(cp.CloudSSOAccountId)
+	if cp.Mode == CloudSSO && oldTarget != cloudSSOTarget(cp) {
+		clearCloudSSOSTS(cp)
+	}
 	cp.EndpointType = EndpointTypeFlag(ctx.Flags()).GetStringOrDefault(cp.EndpointType)
 	cp.Endpoint = EndpointFlag(ctx.Flags()).GetStringOrDefault(cp.Endpoint)
 	cp.ExternalAccountType = ExternalAccountTypeFlag(ctx.Flags()).GetStringOrDefault(cp.ExternalAccountType)
@@ -418,7 +431,7 @@ func AutoModeRecognition(cp *Profile) {
 		cp.Mode = External
 	} else if cp.OIDCProviderARN != "" && cp.OIDCTokenFile != "" && cp.RamRoleArn != "" {
 		cp.Mode = OIDC
-	} else if cp.CloudSSOSignInUrl != "" {
+	} else if cp.CloudSSOSignInUrl != "" || cp.SSOSession != "" {
 		cp.Mode = CloudSSO
 	} else if cp.BearerTokenValue != "" {
 		cp.Mode = BearerToken
@@ -462,6 +475,9 @@ func resolveSTSEndpoint(cp *Profile) string {
 // in-memory profile may include one-off CLI overrides(e.g. --endpoint) merged via OverwriteWithFlags; those must not overwrite stored settings.
 func mergeProfileAfterCredentialRefresh(disk Profile, cp *Profile) Profile {
 	out := disk
+	if cp.Mode == CloudSSO && cloudSSOTarget(&disk) != cloudSSOTarget(cp) {
+		return out
+	}
 	out.AccessKeyId = cp.AccessKeyId
 	out.AccessKeySecret = cp.AccessKeySecret
 	out.StsToken = cp.StsToken
@@ -686,6 +702,16 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetSessionExpiration(3600)
 
 	case CloudSSO:
+		if cp.SSOSession != "" {
+			session, loadErr := loadSSOSession(ctx, cp.SSOSession)
+			if loadErr != nil {
+				return nil, loadErr
+			}
+			if session.AccessToken == "" || session.ExpiresAt <= util.GetCurrentUnixTime() {
+				return nil, ssoLoginRequired(cp.SSOSession)
+			}
+			cp.CloudSSOSignInUrl, cp.AccessToken, cp.CloudSSOAccessTokenExpire = session.SignInURL, session.AccessToken, session.ExpiresAt
+		}
 		// check sts expiration
 		stsExpiration := cp.StsExpiration
 		currentUnixTime := util.GetCurrentUnixTime()
@@ -721,7 +747,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			// update expiration
 			cp.StsExpiration = token.ExpirationInt64 - 5
 			// flush back
-			conf, err := loadOrCreateConfiguration()
+			conf, err := hookLoadOrCreateConfiguration(LoadOrCreateConfiguration)(getConfigurePath(ctx))
 			if err != nil {
 				return nil, err
 			}
@@ -731,7 +757,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 					break
 				}
 			}
-			err = saveConfigurationFunc(conf)
+			err = saveConfigurationFunc(ctx, conf)
 			if err != nil {
 				return nil, err
 			}
@@ -765,7 +791,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			if err != nil {
 				return nil, err
 			}
-			conf, err := loadOrCreateConfiguration()
+			conf, err := hookLoadOrCreateConfiguration(LoadOrCreateConfiguration)(getConfigurePath(ctx))
 			if err != nil {
 				return nil, err
 			}
@@ -775,7 +801,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 					break
 				}
 			}
-			err = saveConfigurationFunc(conf)
+			err = saveConfigurationFunc(ctx, conf)
 			if err != nil {
 				return nil, err
 			}
@@ -801,7 +827,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 	return credentialsv2.NewCredential(config)
 }
 
-var saveConfigurationFunc = SaveConfiguration
+var saveConfigurationFunc = SaveConfigurationWithContext
 
 func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 	envs := map[string]string{

@@ -922,7 +922,7 @@ func TestGetProfileWithCloudSSO(t *testing.T) {
 	p.CloudSSOSignInUrl = "333"
 	cf.PutProfile(*p)
 
-	saveConfigurationFunc = func(config *Configuration) (err error) {
+	saveConfigurationFunc = func(ctx *cli.Context, config *Configuration) (err error) {
 		// 模拟保存配置成功
 		return nil
 	}
@@ -949,7 +949,7 @@ func TestGetCredentialWithCloudSSOMockSuccess(t *testing.T) {
 		}, nil
 	}
 
-	saveConfigurationFunc = func(config *Configuration) (err error) {
+	saveConfigurationFunc = func(ctx *cli.Context, config *Configuration) (err error) {
 		// 模拟保存配置成功
 		return nil
 	}
@@ -1463,7 +1463,7 @@ func TestGetCredentialWithOAuthStsExpired(t *testing.T) {
 	}()
 
 	// Mock保存配置函数
-	saveConfigurationFunc = func(config *Configuration) error {
+	saveConfigurationFunc = func(ctx *cli.Context, config *Configuration) error {
 		return nil
 	}
 
@@ -1579,7 +1579,7 @@ func TestGetCredentialWithOAuthRefreshError(t *testing.T) {
 	}()
 
 	// Mock保存配置函数
-	saveConfigurationFunc = func(config *Configuration) error {
+	saveConfigurationFunc = func(ctx *cli.Context, config *Configuration) error {
 		return nil
 	}
 
@@ -1672,7 +1672,7 @@ func TestGetCredentialWithOAuthMissingCredentials(t *testing.T) {
 	}()
 
 	// Mock保存配置函数
-	saveConfigurationFunc = func(config *Configuration) error {
+	saveConfigurationFunc = func(ctx *cli.Context, config *Configuration) error {
 		return nil
 	}
 

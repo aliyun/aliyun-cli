@@ -542,6 +542,9 @@ func TestHostSettingsAppliedToExecContext(t *testing.T) {
 	if cap.last.Region != "cn-hangzhou" {
 		t.Errorf("region = %q", cap.last.Region)
 	}
+	if cap.last.Language != "en" {
+		t.Errorf("language = %q", cap.last.Language)
+	}
 	if !cap.last.SkipSecureVerify {
 		t.Error("SkipSecureVerify not applied")
 	}

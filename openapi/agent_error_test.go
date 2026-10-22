@@ -714,8 +714,6 @@ func TestNormalizeAgentErrorStrictlyBypassesExcludedErrors(t *testing.T) {
 		name string
 		err  error
 	}{
-		{name: "runtime credential", err: &engine.CredentialError{Err: errors.New("profile not configured")}},
-		{name: "host credential", err: &credentialConfigurationError{Err: errors.New("profile not configured")}},
 		{name: "network", err: &net.DNSError{Err: "temporary failure", Name: "ecs.aliyuncs.com", IsTemporary: true}},
 		{name: "external plugin", err: &externalPluginError{err: errors.New("plugin process failed")}},
 		{name: "postprocessing", err: errors.New("invalid --cli-query expression")},
@@ -730,6 +728,90 @@ func TestNormalizeAgentErrorStrictlyBypassesExcludedErrors(t *testing.T) {
 			var agentErr *cli.AgentError
 			assert.False(t, errors.As(got, &agentErr))
 		})
+	}
+}
+
+func TestNormalizeAgentErrorProfileConfiguration(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+		err  error
+		code int
+	}{
+		{"profile with tip", []string{"ecs", "DescribeInstances"}, cli.NewErrorWithTip(&credentialConfigurationError{Err: errors.New("unknown profile missing")}, "configure it"), 3},
+		{"profile without tip", []string{"ecs", "describe-instances"}, &credentialConfigurationError{Err: errors.New("credential-secret")}, 1},
+		{"runtime profile", []string{"ecs", "describe-instances"}, &engine.CredentialError{Err: errors.New("credential-secret")}, 1},
+		{"configure validation", []string{"configure", "set"}, errors.New("invalid region credential-secret"), 1},
+		{"configure leading profile", []string{"--profile", "default", "configure", "set"}, errors.New("invalid region credential-secret"), 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := normalizeAgentError(test.err, test.args)
+			var agentErr *cli.AgentError
+			require.ErrorAs(t, got, &agentErr)
+			assert.ErrorIs(t, got, test.err)
+			assert.Equal(t, test.code, agentErr.ExitCode())
+			assert.Equal(t, test.code, agentErr.WithSchemaVersion().ExitCode())
+			assert.Empty(t, agentErr.Envelope().ErrorCode)
+			assert.Equal(t, "check_configuration", agentErr.Envelope().Recovery.Action)
+			assert.Equal(t, "aliyun configure", agentErr.Envelope().Recovery.Command)
+			assert.NotContains(t, agentErr.Error(), "credential-secret")
+		})
+	}
+}
+
+func TestProfileConfigurationErrorOutput(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+		text string
+	}{
+		{"legacy profile", []string{"ecs", "DescribeInstances", "--profile", "missing"}, "unknown profile missing"},
+		{"kebab profile", []string{"ecs", "describe-instances", "--biz-region-id", "cn-hangzhou", "--profile", "missing"}, "resolve credential: unknown profile missing"},
+		{"configure validation", []string{"configure", "set", "--region", "#bad"}, "fail to set configuration: invalid region #bad"},
+		{"configure leading profile", []string{"--profile", "default", "configure", "set", "--region", "#bad"}, "fail to set configuration: invalid region #bad"},
+		{"configure profile", []string{"configure", "get", "--profile", "missing"}, "profile missing not found"},
+	} {
+		for _, aiMode := range []string{"false", "true"} {
+			t.Run(test.name+"/ai="+aiMode, func(t *testing.T) {
+				testHome := t.TempDir()
+				defer setTestHomeDir(t, testHome)()
+				writeMinimalConfigJSON(t, testHome)
+				t.Setenv(aimode.EnvAIMode, aiMode)
+				t.Setenv("NO_COLOR", "1")
+				stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+				cmd := &cli.Command{Name: "aliyun", EnableUnknownFlag: true}
+				config.AddFlags(cmd.Flags())
+				AddFlags(cmd.Flags())
+				commando := NewCommando(stdout, config.Profile{Language: "en"})
+				commando.InitWithCommand(cmd)
+				cmd.AddSubCommand(config.NewConfigureCommand())
+				ctx := cli.NewCommandContext(stdout, stderr)
+				ctx.EnterCommand(cmd)
+				cli.DisableExitCode()
+				defer cli.EnableExitCode()
+				originalArgs := os.Args
+				os.Args = append([]string{"aliyun"}, test.args...)
+				defer func() { os.Args = originalArgs }()
+				cmd.Execute(ctx, test.args)
+
+				assert.Empty(t, stdout.String())
+				if aiMode == "false" {
+					assert.Contains(t, stderr.String(), "ERROR: "+test.text)
+					assert.False(t, json.Valid(stderr.Bytes()))
+					return
+				}
+				var envelope cli.AgentErrorEnvelope
+				require.NoError(t, json.Unmarshal(stderr.Bytes(), &envelope))
+				assert.Equal(t, "v1", envelope.SchemaVersion)
+				assert.Empty(t, envelope.ErrorCode)
+				var fields map[string]json.RawMessage
+				require.NoError(t, json.Unmarshal(stderr.Bytes(), &fields))
+				assert.NotContains(t, fields, "error_code")
+				assert.Equal(t, "aliyun configure", envelope.Recovery.Command)
+				assert.Equal(t, 1, strings.Count(stderr.String(), "\n"))
+				assert.NotContains(t, stderr.String(), "\x1b[")
+			})
+		}
 	}
 }
 
@@ -921,7 +1003,7 @@ func TestServerAgentErrorFallsBackToActionHelpWithoutCode(t *testing.T) {
 func TestNormalizeAgentErrorServerErrorKeepsTipPath(t *testing.T) {
 	tipped := cli.NewErrorWithTip(
 		sdkerrors.NewServerError(400, `{"Code":"PricingNotSupported","Message":"no pricing"}`, ""),
-		"this OpenAPI either incurs no cost or has no pricing mapping registered yet",
+		"no pricing mapping is registered for this OpenAPI yet, so it cannot be quoted; this does not mean the call is free — an API confirmed to be free is reported as cost-irrelevant instead",
 	)
 	got := normalizeAgentErrorWithSearch(tipped, []string{"ecs", "describe-instances"}, nil)
 	assert.Same(t, tipped, got)

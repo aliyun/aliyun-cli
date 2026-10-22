@@ -56,6 +56,7 @@ type Monitor struct {
 	seekAheadEnd   bool
 	finish         bool
 	_              uint32 //Add padding to make sure the next data 64bits alignment
+	stateMu        sync.Mutex
 }
 
 func (m *Monitor) init(opStr string) {
@@ -70,15 +71,21 @@ func (m *Monitor) init(opStr string) {
 }
 
 func (m *Monitor) setScanError(err error) {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	m.seekAheadError = err
 	m.seekAheadEnd = true
 }
 
 func (m *Monitor) updateScanNum(num int64) {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	m.totalNum = m.totalNum + num
 }
 
 func (m *Monitor) setScanEnd() {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	m.seekAheadEnd = true
 }
 
@@ -92,14 +99,16 @@ func (m *Monitor) updateErrNum(num int64) {
 
 func (m *Monitor) getSnapshot() *MonitorSnap {
 	var snap MonitorSnap
-	snap.okNum = m.okNum
-	snap.errNum = m.errNum
-	snap.skipNum = m.skipNum
+	snap.okNum = atomic.LoadInt64(&m.okNum)
+	snap.errNum = atomic.LoadInt64(&m.errNum)
+	snap.skipNum = atomic.LoadInt64(&m.skipNum)
 	snap.dealNum = snap.okNum + snap.errNum
 	return &snap
 }
 
 func (m *Monitor) progressBar(finish bool, exitStat int) string {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	if m.finish {
 		return ""
 	}
@@ -110,6 +119,7 @@ func (m *Monitor) progressBar(finish bool, exitStat int) string {
 	return m.getFinishBar(exitStat)
 }
 
+// Rendering helpers below are called with stateMu held by progressBar.
 func (m *Monitor) getProgressBar() string {
 	snap := m.getSnapshot()
 	if m.seekAheadEnd && m.seekAheadError == nil {

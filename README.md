@@ -69,6 +69,18 @@ For an interactive local environment, OAuth avoids storing a long-lived AccessKe
 aliyun configure --mode OAuth --profile default
 ```
 
+For a remote machine without a browser, use:
+
+```shell
+aliyun configure --mode OAuth --profile default --no-browser
+```
+
+Open the printed authorization link on a device with a browser. After signing in,
+copy the complete callback URL from the address bar and paste it into the CLI,
+even if the browser reports a connection error. Include both `code` and `state`.
+This mode does not start a local callback server or require port forwarding.
+Press Ctrl+C to cancel.
+
 You can also use AK, StsToken, RamRoleArn, EcsRamRole, OIDC, External, CredentialsURI, ChainableRamRoleArn, CloudSSO, BearerToken, or Anonymous mode where applicable.
 
 ```sh
@@ -88,7 +100,7 @@ aliyun ecs DescribeRegions
 aliyun ecs describe-regions
 ```
 
-Safety policy matches command spelling by design: it ignores case but does not expand API aliases or equate PascalCase with kebab-case. Configure rules for each spelling your automation uses; see the [matching contract](./docs/en/usage.md#command-matching-contract).
+Safety policy matches command names case-insensitively, without expanding API aliases. Configure a rule for each command name used by your automation. See [command matching rules](./docs/en/usage.md#command-matching-rules).
 
 ### 3. Explore help
 

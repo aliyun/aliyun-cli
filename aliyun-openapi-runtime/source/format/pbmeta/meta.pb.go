@@ -44,7 +44,9 @@ type CommandDefinition struct {
 	// without expanding the protobuf schema.
 	Responses []byte `protobuf:"bytes,14,opt,name=responses,proto3" json:"responses,omitempty"`
 	// JSON-encoded “components“ object (typically “schemas“ for response $ref).
-	Components    []byte `protobuf:"bytes,15,opt,name=components,proto3" json:"components,omitempty"`
+	Components []byte `protobuf:"bytes,15,opt,name=components,proto3" json:"components,omitempty"`
+	// Final client read timeout in milliseconds, including margin, capped at 62000; zero means absent.
+	TimeoutMs     int64 `protobuf:"varint,16,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -182,6 +184,13 @@ func (x *CommandDefinition) GetComponents() []byte {
 		return x.Components
 	}
 	return nil
+}
+
+func (x *CommandDefinition) GetTimeoutMs() int64 {
+	if x != nil {
+		return x.TimeoutMs
+	}
+	return 0
 }
 
 type Operation struct {
@@ -650,7 +659,7 @@ var File_aliyun_openapi_meta_proto protoreflect.FileDescriptor
 
 const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\n" +
-	"\x19aliyun_openapi_meta.proto\x12\x16aliyun.openapi.meta.v1\"\xbf\x04\n" +
+	"\x19aliyun_openapi_meta.proto\x12\x16aliyun.openapi.meta.v1\"\xde\x04\n" +
 	"\x11CommandDefinition\x12!\n" +
 	"\fproduct_code\x18\x01 \x01(\tR\vproductCode\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x19\n" +
@@ -673,7 +682,9 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\tresponses\x18\x0e \x01(\fR\tresponses\x12\x1e\n" +
 	"\n" +
 	"components\x18\x0f \x01(\fR\n" +
-	"components\"\xb1\x02\n" +
+	"components\x12\x1d\n" +
+	"\n" +
+	"timeout_ms\x18\x10 \x01(\x03R\ttimeoutMs\"\xb1\x02\n" +
 	"\tOperation\x12\x16\n" +
 	"\x06action\x18\x01 \x01(\tR\x06action\x12\x1b\n" +
 	"\tapi_style\x18\x02 \x01(\tR\bapiStyle\x12\x1f\n" +

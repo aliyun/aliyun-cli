@@ -69,6 +69,16 @@ PATH 配置、源码构建和升级方法见[安装指南](./docs/zh-CN/installa
 aliyun configure --mode OAuth --profile default
 ```
 
+在没有浏览器的远程机器上，可以使用：
+
+```shell
+aliyun configure --mode OAuth --profile default --no-browser
+```
+
+在有浏览器的设备上打开打印的授权链接。登录后，即使页面提示连接失败，
+也请从地址栏复制包含 `code` 和 `state` 的完整回调 URL，粘贴回 CLI。
+此模式不启动本地回调服务，也不需要端口转发。按 Ctrl+C 可取消。
+
 CLI 还支持 AK、StsToken、RamRoleArn、EcsRamRole、OIDC、External、CredentialsURI、ChainableRamRoleArn、CloudSSO、BearerToken，以及适用场景下的 Anonymous 模式。
 
 ```sh
@@ -88,7 +98,7 @@ aliyun ecs DescribeRegions
 aliyun ecs describe-regions
 ```
 
-安全策略按命令写法匹配，这是预期设计：不区分大小写，但不会展开 API 别名或将大驼峰与短横线写法视为等价。请为自动化使用的各类写法配置规则，详见[命令匹配约定](./docs/zh-CN/usage.md#命令匹配约定)。
+安全策略按输入的命令名称匹配，不区分大小写，但不会自动匹配同一 API 的其他名称。请为使用的每种命令名称分别配置规则，详见[命令匹配规则](./docs/zh-CN/usage.md#命令匹配规则)。
 
 ### 3. 查看帮助
 

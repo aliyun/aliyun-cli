@@ -5,6 +5,7 @@ import "encoding/json"
 // API represents a Canonical API JSON file.
 // Fields not needed by the old CLI are omitted from deserialization.
 type API struct {
+	TimeoutMS    int64  `json:"timeout_ms,omitempty"`
 	Name         string `json:"name"`
 	CmdName      string `json:"cmd_name,omitempty"`
 	CmdFullName  string `json:"cmd_full_name,omitempty"`

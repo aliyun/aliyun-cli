@@ -68,6 +68,9 @@ type ExecContext struct {
 	// objects and maps.
 	Args map[string]any
 
+	// Language selects local user-facing messages ("zh" / "en"); empty uses English.
+	Language string
+
 	// Wire-time knobs.
 	Region         string
 	Endpoint       string // if non-empty, overrides Endpoints.Resolve
@@ -567,6 +570,10 @@ func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) 
 	))
 	if ec.ReadTimeout > 0 {
 		conf.ReadTimeout = tea.Int(int(ec.ReadTimeout / time.Millisecond))
+	} else if !ec.API.IsSSE {
+		if timeout := meta.MetadataReadTimeout(ec.API.TimeoutMS); timeout > 0 {
+			conf.ReadTimeout = tea.Int(int(timeout / time.Millisecond))
+		}
 	}
 	if ec.ConnectTimeout > 0 {
 		conf.ConnectTimeout = tea.Int(int(ec.ConnectTimeout / time.Millisecond))

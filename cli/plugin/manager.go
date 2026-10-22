@@ -147,16 +147,11 @@ func (m *Manager) ApplySourceBaseOverride(raw string) error {
 		return fmt.Errorf("source-base must not be empty")
 	}
 	u, err := url.Parse(v)
-	scheme := ""
-	if err == nil && u != nil {
-		scheme = strings.ToLower(u.Scheme)
+	if err != nil || u == nil || u.Host == "" {
+		return fmt.Errorf("source-base must use https://")
 	}
-	if err != nil || u == nil || u.Host == "" || scheme != "https" {
-		// Public HTTP is rejected here. go test still accepts loopback HTTP
-		// through validatePluginTransportURL so httptest fixtures keep working.
-		if scheme != "http" || m.validatePluginTransportURL(v) != nil {
-			return fmt.Errorf("source-base must use https://")
-		}
+	if err := m.validatePluginTransportURL(v); err != nil {
+		return fmt.Errorf("source-base: %w", err)
 	}
 	m.sourceBase = strings.TrimRight(v, "/")
 	m.trustClient = newArtifactTrustClient(m.trustCacheDir, m.sourceBase)
@@ -303,10 +298,7 @@ func (m *Manager) fetchWithCache(url, cacheFile string, result interface{}) erro
 }
 
 func (m *Manager) GetIndex() (*Index, error) {
-	if m.indexURL == "" {
-		if m.trustClient == nil {
-			return nil, fmt.Errorf("plugin index trust client is not configured")
-		}
+	if m.indexURL == "" && m.trustClient != nil {
 		artifact, err := m.trustClient.FetchArtifact(context.Background(), trust.PurposePluginIndex, "plugins")
 		if err == nil {
 			var index Index

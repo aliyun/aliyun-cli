@@ -36,6 +36,7 @@ func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
 	a.request.Headers["Date"] = time.Now().Format(time.RFC1123Z)
 	a.request.PathPattern = a.path
 	a.request.Method = a.method
+	a.applyMetadataTimeout(a.api)
 
 	if a.request.RegionId != "" {
 		a.request.Headers["x-acs-region-id"] = a.request.RegionId
