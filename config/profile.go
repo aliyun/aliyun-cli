@@ -39,7 +39,7 @@ import (
 var tryRefreshStsTokenFunc = cloudsso.TryRefreshStsToken
 
 // 添加可以在测试中mock的exchangeFromOAuth函数变量
-var exchangeFromOAuthFunc = exchangeFromOAuth
+var exchangeFromOAuthFunc = exchangeFromOAuthWithCheckpoint
 
 type AuthenticateMode string
 
@@ -749,41 +749,12 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 		return nil, nil
 
 	case OAuth:
-		// check sts expiration
-		stsExpiration := cp.StsExpiration
-		currentUnixTime := util.GetCurrentUnixTime()
-		// if sts not expired, and all sts info not empty, just return
-		if stsExpiration > currentUnixTime &&
-			cp.AccessKeyId != "" && cp.AccessKeySecret != "" && cp.StsToken != "" {
-			config.SetType("sts").
-				SetAccessKeyId(cp.AccessKeyId).
-				SetAccessKeySecret(cp.AccessKeySecret).
-				SetSecurityToken(cp.StsToken)
-		} else {
-			// 尝试刷新
-			err := exchangeFromOAuthFunc(ctx.Stdout(), cp)
-			if err != nil {
+		if !hasUsableOAuthSTS(cp) {
+			if err := cp.refreshOAuthCredential(ctx); err != nil {
 				return nil, err
 			}
-			conf, err := hookLoadOrCreateConfiguration(LoadOrCreateConfiguration)(getConfigurePath(ctx))
-			if err != nil {
-				return nil, err
-			}
-			for i, profile := range conf.Profiles {
-				if profile.Name == cp.Name {
-					conf.Profiles[i] = mergeProfileAfterCredentialRefresh(profile, cp)
-					break
-				}
-			}
-			err = saveConfigurationFunc(ctx, conf)
-			if err != nil {
-				return nil, err
-			}
-			config.SetType("sts").
-				SetAccessKeyId(cp.AccessKeyId).
-				SetAccessKeySecret(cp.AccessKeySecret).
-				SetSecurityToken(cp.StsToken)
 		}
+		config.SetType("sts").SetAccessKeyId(cp.AccessKeyId).SetAccessKeySecret(cp.AccessKeySecret).SetSecurityToken(cp.StsToken)
 
 	default:
 		return nil, fmt.Errorf("unexcepted certificate mode: %s", cp.Mode)
