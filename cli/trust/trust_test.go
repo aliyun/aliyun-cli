@@ -513,6 +513,24 @@ func TestDiscoveryURLForSite(t *testing.T) {
 	assert.Equal(t, DiscoveryURLCN, DiscoveryURLForSite("invalid"))
 }
 
+func TestNewAllowsConfiguredSourceBaseHost(t *testing.T) {
+	client := New(Config{
+		SourceBase: "https://cli.aliyun-inc.com/registry_id/2/env/pre/plugins-v2",
+	})
+
+	assert.Contains(t, client.cfg.MetadataHosts, "api.aliyun.com")
+	assert.Contains(t, client.cfg.MetadataHosts, "cli.aliyun-inc.com")
+	assert.Contains(t, client.cfg.RecoveryHosts, "cli.aliyun-inc.com")
+	assert.NoError(t, client.validateURL(
+		"https://cli.aliyun-inc.com/registry_id/2/env/pre/plugins-v2/trust/timestamp.json",
+		client.cfg.MetadataHosts,
+	))
+	assert.Error(t, client.validateURL(
+		"https://evil.example/trust/timestamp.json",
+		client.cfg.MetadataHosts,
+	))
+}
+
 func TestNewUsesConfiguredPluginSite(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
