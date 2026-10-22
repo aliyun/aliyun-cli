@@ -37,14 +37,19 @@ func validateSSOSessionName(name string) error {
 	return nil
 }
 
+func normalizeSSOConfigPath(path string) string {
+	if absolute, err := filepath.Abs(path); err == nil {
+		return absolute
+	}
+	return filepath.Clean(path)
+}
+
 func ssoSessionPath(ctx *cli.Context, name string) string {
-	// Keep a stable directory name and isolate explicitly selected configuration files.
-	dir := filepath.Join(GetConfigDir(ctx), "sso")
-	if _, custom := ConfigurePathFlag(ctx.Flags()).GetValue(); custom {
-		path, err := filepath.Abs(getConfigurePath(ctx))
-		if err != nil {
-			path = getConfigurePath(ctx)
-		}
+	// Namespace by the actual configuration path, not how it was specified.
+	path := normalizeSSOConfigPath(getConfigurePath(ctx))
+	defaultPath := normalizeSSOConfigPath(filepath.Join(hookGetHomePath(GetHomePath)()+configPath, configFile))
+	dir := filepath.Join(filepath.Dir(path), "sso")
+	if path != defaultPath {
 		namespace := sha256.Sum256([]byte(path))
 		dir = filepath.Join(dir, hex.EncodeToString(namespace[:]))
 	}
