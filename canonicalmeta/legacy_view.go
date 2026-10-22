@@ -297,6 +297,12 @@ func (v *LegacyParameterView) IsLegacyRepeatList() bool {
 		p.ParamStyle != "json"
 }
 
+// IsJSONEncoded reports parameters supplied as a single JSON value rather than
+// indexed flags. Schema children remain available for help rendering.
+func (v *LegacyParameterView) IsJSONEncoded() bool {
+	return v.source == SourceCanonical && v.canonical.ParamStyle == "json"
+}
+
 // IsRPCFlatArray identifies the additive indexed syntax, without changing the
 // metadata serialization style or the legacy behavior of other array formats.
 func (v *LegacyParameterView) IsRPCFlatArray() bool { return v.rpcFlatArray }
