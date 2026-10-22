@@ -177,6 +177,10 @@ func TestNewInstallCommand_Run_NamesAndSourceConflict(t *testing.T) {
 
 func TestNewInstallCommand_Run_WithPackageFlagSuccess(t *testing.T) {
 	cmd := newInstallCommand()
+	fetcher := &fakePluginArtifactFetcher{err: fmt.Errorf("must not fetch trust metadata")}
+	originalTrustClient := newArtifactTrustClient
+	newArtifactTrustClient = func(string, string) artifactFetcher { return fetcher }
+	t.Cleanup(func() { newArtifactTrustClient = originalTrustClient })
 
 	testHome := t.TempDir()
 	cleanup := setTestHomeDir(t, testHome)
@@ -195,7 +199,6 @@ func TestNewInstallCommand_Run_WithPackageFlagSuccess(t *testing.T) {
 	assert.NotNil(t, pkgFlag)
 	pkgFlag.SetAssigned(true)
 	pkgFlag.SetValue(archivePath)
-	ctx.Flags().Get("allow-unverified-plugin").SetAssigned(true)
 
 	err := cmd.Run(ctx, []string{})
 	assert.NoError(t, err)
@@ -208,6 +211,7 @@ func TestNewInstallCommand_Run_WithPackageFlagSuccess(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "4.5.6", p.Version)
 	assert.Contains(t, stdout.String(), "Installing plugin from")
+	assert.Equal(t, 0, fetcher.calls)
 }
 
 func TestManager_InstallFromPackage_RemoteURL(t *testing.T) {
