@@ -51,10 +51,13 @@ aliyun plugin install --name <plugin-name> --enable-pre
 
 ```sh
 aliyun plugin install --package ./plugin-package.tar.gz
-aliyun plugin install --package https://example.com/plugin-package.zip
+aliyun plugin install --package https://example.com/plugin-package.zip --allow-unverified-plugin
 ```
 
-支持 `.zip`、`.tar.gz` 和 `.tgz`。从本地文件或 URL 安装时，请确认插件来源可信。
+支持 `.zip`、`.tar.gz` 和 `.tgz`。本地文件安装不会访问远程 Discovery，也不要求
+`--allow-unverified-plugin`；可以通过 `--checksum <sha256>` 额外校验本地文件。
+直接安装远程 URL 会绕过签名索引，因此必须显式指定
+`--allow-unverified-plugin`。
 
 ## 更新和卸载
 

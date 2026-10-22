@@ -606,8 +606,13 @@ func executeInstall(ctx *cli.Context, names []string, pkgRef, version string, en
 	}
 
 	if strings.TrimSpace(pkgRef) != "" {
-		if f := ctx.Flags().Get("allow-unverified-plugin"); f == nil || !f.IsAssigned() {
-			return fmt.Errorf("--package requires --allow-unverified-plugin")
+		lowerRef := strings.ToLower(strings.TrimSpace(pkgRef))
+		isRemote := strings.HasPrefix(lowerRef, "http://") ||
+			strings.HasPrefix(lowerRef, "https://")
+		if isRemote {
+			if f := ctx.Flags().Get("allow-unverified-plugin"); f == nil || !f.IsAssigned() {
+				return fmt.Errorf("remote --package URL requires --allow-unverified-plugin")
+			}
 		}
 		mgr.expectedPackageChecksum = strings.TrimSpace(checksum)
 		return mgr.InstallFromPackage(ctx, pkgRef)

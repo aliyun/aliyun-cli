@@ -51,10 +51,14 @@ Install a local or HTTPS plugin archive:
 
 ```sh
 aliyun plugin install --package ./plugin-package.tar.gz
-aliyun plugin install --package https://example.com/plugin-package.zip
+aliyun plugin install --package https://example.com/plugin-package.zip --allow-unverified-plugin
 ```
 
-Supported archive suffixes are `.zip`, `.tar.gz`, and `.tgz`. When installing from a local file or URL, make sure the plugin comes from a trusted source.
+Supported archive suffixes are `.zip`, `.tar.gz`, and `.tgz`. A local-file
+install does not contact remote Discovery and does not require
+`--allow-unverified-plugin`; use `--checksum <sha256>` for optional local-file
+integrity checking. Installing a remote URL directly bypasses the signed index
+and therefore requires `--allow-unverified-plugin`.
 
 ## Update and remove
 
