@@ -101,6 +101,7 @@ func (r *Reader) ReadAPI(version, name string) (*meta.API, error) {
 
 func toCanonical(def *CommandDefinition) (*schema.CommandDefinition, error) {
 	canonical := &schema.CommandDefinition{
+		TimeoutMS:     def.TimeoutMs,
 		Name:          def.Name,
 		CmdName:       def.CmdName,
 		CmdFullName:   def.CmdFullName,

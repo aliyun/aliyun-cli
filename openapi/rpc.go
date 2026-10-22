@@ -37,6 +37,7 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 	request.ApiName = api.Name
 	request.Scheme = api.GetProtocol()
 	request.Method = api.GetMethod()
+	a.applyMetadataTimeout(api)
 
 	// if `--insecure` assigned, use http
 	if _, ok := InsecureFlag(ctx.Flags()).GetValue(); ok {

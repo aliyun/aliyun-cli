@@ -161,6 +161,7 @@ type VersionAPIEntry struct {
 // but composite parameters are strict: arrays require element and maps require
 // value at every nesting level.
 type CommandDefinition struct {
+	TimeoutMS     int64                `json:"timeout_ms,omitempty"`
 	Name          string               `json:"name"`
 	CmdName       string               `json:"cmd_name"`
 	CmdFullName   string               `json:"cmd_full_name"`
