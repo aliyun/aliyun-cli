@@ -50,7 +50,7 @@ func TestSharedSSODefaultPathExplicitAndImplicitAreEquivalent(t *testing.T) {
 			// Saving the profile after login must not change the session namespace.
 			conf := &Configuration{CurrentProfile: "prod", Profiles: []Profile{{Name: "prod", Mode: CloudSSO, RegionId: "cn-hangzhou", SSOSession: "company", CloudSSOAccountId: "account", CloudSSOAccessConfig: "read"}}}
 			require.NoError(t, SaveConfigurationWithContext(loginCtx, conf))
-			expected := filepath.Join(home, ".aliyun", "sso", "company.json")
+			expected := filepath.Join(normalizeSSOConfigPath(home), ".aliyun", "sso", "company.json")
 			require.Equal(t, expected, ssoSessionPath(loginCtx, "company"))
 			require.Equal(t, expected, ssoSessionPath(useCtx, "company"))
 			calls := 0

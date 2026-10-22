@@ -39,9 +39,26 @@ func validateSSOSessionName(name string) error {
 
 func normalizeSSOConfigPath(path string) string {
 	if absolute, err := filepath.Abs(path); err == nil {
-		return absolute
+		path = absolute
+	} else {
+		path = filepath.Clean(path)
 	}
-	return filepath.Clean(path)
+	// Resolve file and directory links. When login precedes creation of the
+	// configuration file, resolve its existing ancestors so the namespace does
+	// not change once the file is saved.
+	for ancestor := path; ; ancestor = filepath.Dir(ancestor) {
+		resolved, err := filepath.EvalSymlinks(ancestor)
+		if err == nil {
+			suffix, relErr := filepath.Rel(ancestor, path)
+			if relErr == nil {
+				return filepath.Join(resolved, suffix)
+			}
+			return path
+		}
+		if !os.IsNotExist(err) || filepath.Dir(ancestor) == ancestor {
+			return path
+		}
+	}
 }
 
 func ssoSessionPath(ctx *cli.Context, name string) string {
