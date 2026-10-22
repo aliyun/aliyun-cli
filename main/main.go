@@ -31,6 +31,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cliext/acrutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/agentbay"
 	"github.com/aliyun/aliyun-cli/v3/cliext/appmanagerutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/bl"
 	"github.com/aliyun/aliyun-cli/v3/cliext/cms2"
 	"github.com/aliyun/aliyun-cli/v3/cliext/codeup"
 	"github.com/aliyun/aliyun-cli/v3/cliext/computenestutil"
@@ -202,6 +203,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	addExtension(ossutil.NewOssutilCommand())
 	// AgentBay command
 	addExtension(agentbay.NewAgentBayCommand())
+	// Alibaba Cloud Model Studio command
+	addExtension(bl.NewBlCommand())
 	// tablestore command
 	addExtension(otsutil.NewOtsutilCommand())
 	// EMR Serverless spark-submit command
@@ -394,6 +397,7 @@ var rootCommandHelpSpecs = []openapi.RootCommandSpec{
 	{Path: []string{"oss"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"ossutil"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"agentbay"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"bl"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"otsutil"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"kmscli"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"lindorm"}, Group: openapi.RootGroupExtension},
