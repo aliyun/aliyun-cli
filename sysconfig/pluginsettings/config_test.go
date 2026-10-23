@@ -13,16 +13,18 @@ func TestLoad_MissingFile(t *testing.T) {
 	c, err := Load(dir)
 	assert.NoError(t, err)
 	assert.Equal(t, "", c.SourceBase)
+	assert.Equal(t, SiteCN, c.Site)
 }
 
 func TestSaveLoad_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	err := Save(dir, &PluginSettings{SourceBase: "https://mirror.example.com/plugins"})
+	err := Save(dir, &PluginSettings{SourceBase: "https://mirror.example.com/plugins", Site: SiteIntl})
 	assert.NoError(t, err)
 
 	c, err := Load(dir)
 	assert.NoError(t, err)
 	assert.Equal(t, "https://mirror.example.com/plugins", c.SourceBase)
+	assert.Equal(t, SiteIntl, c.Site)
 }
 
 func TestEffectiveSourceBase_EnvOverrides(t *testing.T) {
@@ -48,10 +50,27 @@ func TestGetConfigFilePath(t *testing.T) {
 	assert.Equal(t, filepath.Join("/tmp/cfg", ConfigFileName), p)
 }
 
+func TestEffectiveSite_DefaultFileAndEnv(t *testing.T) {
+	t.Setenv(EnvSite, "")
+	assert.Equal(t, SiteCN, EffectiveSite(nil))
+	assert.Equal(t, SiteIntl, EffectiveSite(&PluginSettings{Site: SiteIntl}))
+
+	t.Setenv(EnvSite, SiteCN)
+	assert.Equal(t, SiteCN, EffectiveSite(&PluginSettings{Site: SiteIntl}))
+}
+
+func TestSiteValidation(t *testing.T) {
+	assert.True(t, IsValidSite(" CN "))
+	assert.True(t, IsValidSite("intl"))
+	assert.False(t, IsValidSite("global"))
+	assert.Equal(t, SiteCN, NormalizeSite("invalid"))
+}
+
 func TestLoad_InvalidJSON(t *testing.T) {
 	dir := t.TempDir()
 	assert.NoError(t, os.WriteFile(filepath.Join(dir, ConfigFileName), []byte("{"), 0600))
 	c, err := Load(dir)
 	assert.NoError(t, err)
 	assert.Equal(t, "", c.SourceBase)
+	assert.Equal(t, SiteCN, c.Site)
 }

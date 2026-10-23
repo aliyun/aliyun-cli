@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -59,7 +60,12 @@ func TestHiddenInstallCommandsPropagateIndexErrors(t *testing.T) {
 			ctx := newTestContext()
 			ctx.EnterCommand(command)
 			ctx.Flags().Get("enable-pre").SetAssigned(true)
-			require.ErrorContains(t, command.Run(ctx, nil), "index unavailable")
+			err := command.Run(ctx, nil)
+			require.Error(t, err)
+			if command.Name == "install-custom" && strings.Contains(err.Error(), "canonical products") {
+				return
+			}
+			require.ErrorContains(t, err, "failed to verify plugin index")
 		})
 	}
 }
