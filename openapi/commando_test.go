@@ -1146,6 +1146,15 @@ func TestDetectInConfigureMode(t *testing.T) {
 	flags.Add(modeFlag)
 	result = DetectInConfigureMode(flags)
 	assert.True(t, result, "Expected true when OIDCTokenFile flag is set")
+
+	// Test case 13: OIDCToken flag set
+	flags = cli.NewFlagSet()
+	oidcTokenFlag := &cli.Flag{Name: config.OIDCTokenFlagName}
+	oidcTokenFlag.SetAssigned(true)
+	flags.Add(oidcTokenFlag)
+	flags.Add(modeFlag)
+	result = DetectInConfigureMode(flags)
+	assert.True(t, result, "Expected true when OIDCToken flag is set")
 }
 
 func TestProcessApiInvoke(t *testing.T) {

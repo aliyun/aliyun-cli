@@ -201,7 +201,11 @@ func TestValidateWithOIDC(t *testing.T) {
 	assert.EqualError(t, err, "oidc_provider_arn is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
 	actual.OIDCProviderARN = "oidc_provider_arn"
 	err = actual.Validate()
-	assert.EqualError(t, err, "oidc_token_file is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
+	assert.EqualError(t, err, "oidc_token or oidc_token_file is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
+	actual.OIDCToken = "header.payload.sig"
+	err = actual.Validate()
+	assert.EqualError(t, err, "ram_role_arn is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
+	actual.OIDCToken = ""
 	actual.OIDCTokenFile = "/path/to/oidc/token/file"
 	err = actual.Validate()
 	assert.EqualError(t, err, "ram_role_arn is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
@@ -377,6 +381,34 @@ func TestOverwriteWithFlagsWithRegionIDEnv(t *testing.T) {
 	actual.OverwriteWithFlags(ctx)
 	exp.RegionId = "alibaba"
 	assert.Equal(t, exp, actual)
+}
+
+func TestOverwriteWithFlagsOIDCTokenBeatsFile(t *testing.T) {
+	resetEnv()
+	t.Setenv("ALIBABA_CLOUD_OIDC_TOKEN", "env-token")
+	t.Setenv("ALIBABA_CLOUD_OIDC_TOKEN_FILE", "/env/token")
+
+	buf := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(buf, stderr)
+	AddFlags(ctx.Flags())
+
+	withFile := newProfile()
+	withFile.OIDCTokenFile = "/explicit/token"
+	withFile.OverwriteWithFlags(ctx)
+	assert.Equal(t, "env-token", withFile.OIDCToken)
+	assert.Equal(t, "/explicit/token", withFile.OIDCTokenFile)
+
+	explicit := newProfile()
+	explicit.OIDCToken = "explicit-token"
+	explicit.OverwriteWithFlags(ctx)
+	assert.Equal(t, "explicit-token", explicit.OIDCToken)
+
+	t.Setenv("ALIBABA_CLOUD_OIDC_TOKEN", "")
+	fileOnly := newProfile()
+	fileOnly.OverwriteWithFlags(ctx)
+	assert.Empty(t, fileOnly.OIDCToken)
+	assert.Equal(t, "/env/token", fileOnly.OIDCTokenFile)
 }
 
 func TestOverwriteWithFlagsWithStsTokenEnv(t *testing.T) {
@@ -697,6 +729,20 @@ func TestGetCredentialWithOIDCStsEndpoint(t *testing.T) {
 	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", credentialSTSEndpoint(t, credential))
 }
 
+func TestGetCredentialWithOIDCToken(t *testing.T) {
+	actual := newProfile()
+	actual.Mode = OIDC
+	actual.OIDCProviderARN = "acs:ram::123456789:oidc-provider/test"
+	actual.OIDCToken = "header.payload.sig"
+	actual.RamRoleArn = "acs:ram::123456789:role/test"
+	actual.RoleSessionName = "ack-session"
+
+	credential, err := actual.GetCredential(newCtx(), nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, credential)
+	assert.Equal(t, "oidc_role_arn", *credential.GetType())
+}
+
 func TestGetCredentialWithRamRoleArnStsEndpoint(t *testing.T) {
 	actual := newProfile()
 	actual.Mode = RamRoleArn
@@ -790,6 +836,10 @@ func TestAutoModeRecognition(t *testing.T) {
 	assert.Equal(t, External, p.Mode)
 
 	p = &Profile{OIDCProviderARN: "oidc_provider_arn", OIDCTokenFile: "/path/to/tokenfile", RamRoleArn: "ram/role/arn"}
+	AutoModeRecognition(p)
+	assert.Equal(t, OIDC, p.Mode)
+
+	p = &Profile{OIDCProviderARN: "oidc_provider_arn", OIDCToken: "header.payload.sig", RamRoleArn: "ram/role/arn"}
 	AutoModeRecognition(p)
 	assert.Equal(t, OIDC, p.Mode)
 

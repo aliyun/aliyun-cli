@@ -358,6 +358,7 @@ var stripFlags = map[string]bool{
 	"expired-seconds":                true,
 	"process-command":                true,
 	"oidc-provider-arn":              true,
+	"oidc-token":                     true,
 	"oidc-token-file":                true,
 	"sso-session":                    true,
 	"cloud-sso-sign-in-url":          true,
