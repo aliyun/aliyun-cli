@@ -1,0 +1,484 @@
+package bl
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"reflect"
+	"runtime"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/config"
+)
+
+func newTestContext() (*cli.Context, *bytes.Buffer, *bytes.Buffer) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	ctx := cli.NewCommandContext(stdout, stderr)
+	config.AddFlags(ctx.Flags())
+	return ctx, stdout, stderr
+}
+
+func helperCommand(exitCode int) *exec.Cmd {
+	return exec.Command(os.Args[0], "-test.run=^TestHelperProcess$", "--", strconv.Itoa(exitCode))
+}
+
+func successfulCommand() *exec.Cmd {
+	return helperCommand(0)
+}
+
+func TestHelperProcess(t *testing.T) {
+	for i, arg := range os.Args {
+		if arg != "--" || i+1 >= len(os.Args) {
+			continue
+		}
+		code, err := strconv.Atoi(os.Args[i+1])
+		if err != nil {
+			os.Exit(2)
+		}
+		os.Exit(code)
+	}
+}
+
+func TestNewBlCommandUsesRawArgs(t *testing.T) {
+	cmd := NewBlCommand()
+	if cmd.Name != "bl" {
+		t.Fatalf("name = %q", cmd.Name)
+	}
+	if cmd.Usage != "aliyun bl <command> [args...]" {
+		t.Fatalf("usage = %q", cmd.Usage)
+	}
+	if !cmd.RawArgs || !cmd.SkipDefaultHelp || !cmd.EnableUnknownFlag {
+		t.Fatalf("raw delegation flags are not enabled: %#v", cmd)
+	}
+	if cmd.Run == nil {
+		t.Fatal("Run is nil")
+	}
+}
+
+func TestPrepareArgsStripsOnlyHostFlags(t *testing.T) {
+	ctx, _, _ := newTestContext()
+	bridge := NewContext(ctx)
+	args := []string{
+		"help",
+		"--profile", "prod",
+		"--mode=RamRoleArn",
+		"--ram-role-arn", "acs:ram::123:role/test",
+		"--access-key-id", "bl-ak",
+		"--access-key-secret=bl-sk",
+		"--security-token", "bl-token",
+		"--region", "cn-hangzhou",
+		"--config", "team",
+		"--endpoint", "example.test",
+		"-e", "short.example.test",
+		"--output", "json",
+		"--unknown=value",
+		"--", "--profile", "child-profile",
+	}
+	want := []string{
+		"help",
+		"--access-key-id", "bl-ak",
+		"--access-key-secret=bl-sk",
+		"--security-token", "bl-token",
+		"--region", "cn-hangzhou",
+		"--config", "team",
+		"--endpoint", "example.test",
+		"-e", "short.example.test",
+		"--output", "json",
+		"--unknown=value",
+		"--", "--profile", "child-profile",
+	}
+	got, err := bridge.PrepareArgs(args)
+	if err != nil {
+		t.Fatalf("PrepareArgs: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("args mismatch\nwant: %#v\n got: %#v", want, got)
+	}
+	if got, _ := ctx.Flags().Get(config.ProfileFlagName).GetValue(); got != "prod" {
+		t.Fatalf("profile = %q", got)
+	}
+	if got, _ := ctx.Flags().Get(config.ModeFlagName).GetValue(); got != "RamRoleArn" {
+		t.Fatalf("mode = %q", got)
+	}
+}
+
+func TestPrepareArgsSupportsProfileShorthandForms(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{name: "separate", args: []string{"-p", "prod", "help"}},
+		{name: "equals", args: []string{"-p=prod", "help"}},
+		{name: "joined", args: []string{"-pprod", "help"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, _, _ := newTestContext()
+			got, err := NewContext(ctx).PrepareArgs(tc.args)
+			if err != nil {
+				t.Fatalf("PrepareArgs: %v", err)
+			}
+			if !reflect.DeepEqual(got, []string{"help"}) {
+				t.Fatalf("forwarded args = %#v", got)
+			}
+			if value, _ := ctx.Flags().Get(config.ProfileFlagName).GetValue(); value != "prod" {
+				t.Fatalf("profile = %q", value)
+			}
+		})
+	}
+}
+
+func TestPrepareArgsRejectsMissingHostFlagValue(t *testing.T) {
+	ctx, _, _ := newTestContext()
+	_, err := NewContext(ctx).PrepareArgs([]string{"help", "--profile"})
+	if err == nil || !strings.Contains(err.Error(), "--profile requires a value") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBuildExecEnvReplacesAKAndRemovesStaleSTS(t *testing.T) {
+	ctx, _, _ := newTestContext()
+	bridge := NewContext(ctx)
+	bridge.environ = func() []string {
+		return []string{
+			"KEEP=value",
+			"ALIBABA_CLOUD_ACCESS_KEY_ID=old-ak",
+			"ALIBABA_CLOUD_ACCESS_KEY_SECRET=old-sk",
+			"ALIBABA_CLOUD_SECURITY_TOKEN=old-token",
+		}
+	}
+	bridge.loadProfile = func(*cli.Context) (config.Profile, error) {
+		return config.Profile{Mode: config.AK, AccessKeyId: "profile-ak", AccessKeySecret: "profile-sk"}, nil
+	}
+
+	env, err := bridge.BuildExecEnv()
+	if err != nil {
+		t.Fatalf("BuildExecEnv: %v", err)
+	}
+	got := envMap(env)
+	if got["ALIBABA_CLOUD_ACCESS_KEY_ID"] != "profile-ak" || got["ALIBABA_CLOUD_ACCESS_KEY_SECRET"] != "profile-sk" {
+		t.Fatalf("profile credentials not injected: %#v", got)
+	}
+	if _, ok := got["ALIBABA_CLOUD_SECURITY_TOKEN"]; ok {
+		t.Fatalf("stale STS token remains: %#v", got)
+	}
+	if got["KEEP"] != "value" {
+		t.Fatalf("unrelated env missing: %#v", got)
+	}
+}
+
+func TestBuildExecEnvInjectsSTSWithoutRegion(t *testing.T) {
+	ctx, _, _ := newTestContext()
+	bridge := NewContext(ctx)
+	bridge.environ = func() []string { return []string{"ALIBABA_CLOUD_REGION_ID=cn-hangzhou"} }
+	bridge.loadProfile = func(*cli.Context) (config.Profile, error) {
+		return config.Profile{
+			Mode: config.StsToken, AccessKeyId: "ak", AccessKeySecret: "sk", StsToken: "token", RegionId: "cn-shanghai",
+		}, nil
+	}
+
+	env, err := bridge.BuildExecEnv()
+	if err != nil {
+		t.Fatalf("BuildExecEnv: %v", err)
+	}
+	got := envMap(env)
+	if got["ALIBABA_CLOUD_SECURITY_TOKEN"] != "token" {
+		t.Fatalf("STS token not injected: %#v", got)
+	}
+	if got["ALIBABA_CLOUD_REGION_ID"] != "cn-hangzhou" {
+		t.Fatalf("region must not be injected or replaced: %#v", got)
+	}
+}
+
+func TestBuildExecEnvPreservesUserEnvForUnconfiguredProfile(t *testing.T) {
+	base := []string{
+		"ALIBABA_CLOUD_ACCESS_KEY_ID=user-ak",
+		"ALIBABA_CLOUD_ACCESS_KEY_SECRET=user-sk",
+		"ALIBABA_CLOUD_SECURITY_TOKEN=user-token",
+	}
+	ctx, _, _ := newTestContext()
+	bridge := NewContext(ctx)
+	bridge.environ = func() []string { return append([]string(nil), base...) }
+	bridge.loadProfile = func(*cli.Context) (config.Profile, error) { return config.Profile{Name: "default"}, nil }
+
+	got, err := bridge.BuildExecEnv()
+	if err != nil {
+		t.Fatalf("BuildExecEnv: %v", err)
+	}
+	if !reflect.DeepEqual(got, base) {
+		t.Fatalf("env changed\nwant: %#v\n got: %#v", base, got)
+	}
+}
+
+func TestBuildExecEnvRejectsIncompleteConfiguredCredentials(t *testing.T) {
+	ctx, _, _ := newTestContext()
+	bridge := NewContext(ctx)
+	bridge.loadProfile = func(*cli.Context) (config.Profile, error) {
+		return config.Profile{Name: "broken", Mode: config.AK, AccessKeyId: "ak"}, nil
+	}
+	_, err := bridge.BuildExecEnv()
+	if err == nil || !strings.Contains(err.Error(), "access key ID and secret must be configured together") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBuildExecEnvPropagatesProfileError(t *testing.T) {
+	ctx, _, _ := newTestContext()
+	bridge := NewContext(ctx)
+	bridge.loadProfile = func(*cli.Context) (config.Profile, error) {
+		return config.Profile{}, fmt.Errorf("unknown profile missing")
+	}
+	_, err := bridge.BuildExecEnv()
+	if err == nil || !strings.Contains(err.Error(), "unknown profile missing") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestInitBasicInfoUsesManagedPlatformPaths(t *testing.T) {
+	for _, tc := range []struct {
+		goos string
+		want string
+	}{
+		{goos: "linux", want: filepath.Join("root", prefixDirName, "bin", binName)},
+		{goos: "windows", want: filepath.Join("root", prefixDirName, binName+".cmd")},
+	} {
+		t.Run(tc.goos, func(t *testing.T) {
+			t.Setenv(execPathEnv, "")
+			ctx, _, _ := newTestContext()
+			bridge := NewContext(ctx)
+			bridge.configPath = func() string { return "root" }
+			bridge.goos = func() string { return tc.goos }
+			if err := bridge.InitBasicInfo(); err != nil {
+				t.Fatalf("InitBasicInfo: %v", err)
+			}
+			if bridge.execFilePath != tc.want {
+				t.Fatalf("exec path = %q, want %q", bridge.execFilePath, tc.want)
+			}
+		})
+	}
+}
+
+func TestEnsureNodeAvailableEnforces1817(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		major, minor int
+		wantErr      bool
+	}{
+		{name: "too old minor", major: 18, minor: 16, wantErr: true},
+		{name: "minimum", major: 18, minor: 17},
+		{name: "newer major", major: 20, minor: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(nodePathEnv, "")
+			ctx, _, _ := newTestContext()
+			bridge := NewContext(ctx)
+			bridge.lookPath = func(string) (string, error) { return "/fake/node", nil }
+			bridge.nodeVersion = func(string) (int, int, int, error) { return tc.major, tc.minor, 0, nil }
+			err := bridge.EnsureNodeAvailable()
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("error = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateExecPathOverride(t *testing.T) {
+	ctx, _, _ := newTestContext()
+	bridge := NewContext(ctx)
+
+	missing := filepath.Join(t.TempDir(), "missing")
+	bridge.execFilePath = missing
+	if err := bridge.validateExecPathOverride(); err == nil || !strings.Contains(err.Error(), execPathEnv) {
+		t.Fatalf("missing path error = %v", err)
+	}
+
+	dir := t.TempDir()
+	bridge.execFilePath = dir
+	if err := bridge.validateExecPathOverride(); err == nil || !strings.Contains(err.Error(), "regular file") {
+		t.Fatalf("directory error = %v", err)
+	}
+
+	if runtime.GOOS != "windows" {
+		file := filepath.Join(t.TempDir(), "bl")
+		if err := os.WriteFile(file, []byte("fake"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		bridge.execFilePath = file
+		bridge.goos = func() string { return "linux" }
+		if err := bridge.validateExecPathOverride(); err == nil || !strings.Contains(err.Error(), "executable") {
+			t.Fatalf("permission error = %v", err)
+		}
+	}
+}
+
+func TestNpmInstallUsesVersionRegistryAndPrefix(t *testing.T) {
+	t.Setenv(versionEnv, "2.5.0")
+	t.Setenv(registryEnv, "https://registry.example.test")
+	ctx, _, _ := newTestContext()
+	bridge := NewContext(ctx)
+	bridge.npmPath = "/fake/npm"
+	bridge.prefixPath = "/managed/bl"
+	var gotName string
+	var gotArgs []string
+	bridge.command = func(name string, args ...string) *exec.Cmd {
+		gotName = name
+		gotArgs = append([]string(nil), args...)
+		return successfulCommand()
+	}
+	if err := bridge.npmInstall(); err != nil {
+		t.Fatalf("npmInstall: %v", err)
+	}
+	if gotName != "/fake/npm" {
+		t.Fatalf("command = %q", gotName)
+	}
+	want := []string{
+		"install", "-g", "--prefix", "/managed/bl", "--no-fund", "--no-audit", "--loglevel=warn",
+		"--registry", "https://registry.example.test", "bailian-cli@2.5.0",
+	}
+	if !reflect.DeepEqual(gotArgs, want) {
+		t.Fatalf("npm args mismatch\nwant: %#v\n got: %#v", want, gotArgs)
+	}
+}
+
+func TestExecutePreservesArgsStdioCwdAndExitCode(t *testing.T) {
+	ctx, stdout, stderr := newTestContext()
+	bridge := NewContext(ctx)
+	bridge.execFilePath = "/fake/bl"
+	bridge.environ = func() []string { return []string{"KEEP=value"} }
+	bridge.loadProfile = func(*cli.Context) (config.Profile, error) { return config.Profile{}, nil }
+	workingDir := t.TempDir()
+	bridge.getwd = func() (string, error) { return workingDir, nil }
+	var gotName string
+	var gotArgs []string
+	var gotCmd *exec.Cmd
+	bridge.command = func(name string, args ...string) *exec.Cmd {
+		gotName = name
+		gotArgs = append([]string(nil), args...)
+		gotCmd = helperCommand(7)
+		return gotCmd
+	}
+
+	err := bridge.Execute([]string{"auth", "login", "--console"})
+	exitErr, ok := err.(*ExitError)
+	if !ok || exitErr.Code != 7 {
+		t.Fatalf("exit error = %#v", err)
+	}
+	if gotName != "/fake/bl" || !reflect.DeepEqual(gotArgs, []string{"auth", "login", "--console"}) {
+		t.Fatalf("command = %q %#v", gotName, gotArgs)
+	}
+	if gotCmd.Stdout != stdout || gotCmd.Stderr != stderr || gotCmd.Stdin != os.Stdin || gotCmd.Dir != workingDir {
+		t.Fatalf("stdio/cwd not preserved: %#v", gotCmd)
+	}
+}
+
+func TestLoadBlProfileUsesRawConfigWithoutInheritedSTS(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	t.Setenv("ALIBABA_CLOUD_SECURITY_TOKEN", "inherited-token")
+	configDir := filepath.Join(home, ".aliyun")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configJSON := `{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":"ak","access_key_secret":"sk"}]}`
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(configJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, _, _ := newTestContext()
+	profile, err := loadBlProfile(ctx)
+	if err != nil {
+		t.Fatalf("loadBlProfile: %v", err)
+	}
+	if profile.StsToken != "" {
+		t.Fatalf("inherited token contaminated raw profile: %q", profile.StsToken)
+	}
+}
+
+func TestLoadBlProfileAppliesExplicitHostCredentialFlags(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	ctx, _, _ := newTestContext()
+	for name, value := range map[string]string{
+		config.ModeFlagName:            "StsToken",
+		config.AccessKeyIdFlagName:     "flag-ak",
+		config.AccessKeySecretFlagName: "flag-sk",
+		config.StsTokenFlagName:        "flag-token",
+	} {
+		flag := ctx.Flags().Get(name)
+		flag.SetAssigned(true)
+		flag.SetValue(value)
+	}
+	profile, err := loadBlProfile(ctx)
+	if err != nil {
+		t.Fatalf("loadBlProfile: %v", err)
+	}
+	if profile.Mode != config.StsToken || profile.AccessKeyId != "flag-ak" || profile.AccessKeySecret != "flag-sk" || profile.StsToken != "flag-token" {
+		t.Fatalf("flag credentials not applied: %#v", profile)
+	}
+}
+
+func TestBuildExecEnvResolvesCachedOAuthCredentials(t *testing.T) {
+	ctx, _, _ := newTestContext()
+	bridge := NewContext(ctx)
+	bridge.environ = func() []string { return nil }
+	bridge.loadProfile = func(*cli.Context) (config.Profile, error) {
+		return config.Profile{
+			Mode: config.OAuth, AccessKeyId: "oauth-ak", AccessKeySecret: "oauth-sk", StsToken: "oauth-token",
+			StsExpiration: time.Now().Unix() + 3600, RegionId: "cn-hangzhou",
+		}, nil
+	}
+	env, err := bridge.BuildExecEnv()
+	if err != nil {
+		t.Fatalf("BuildExecEnv: %v", err)
+	}
+	got := envMap(env)
+	if got["ALIBABA_CLOUD_ACCESS_KEY_ID"] != "oauth-ak" || got["ALIBABA_CLOUD_ACCESS_KEY_SECRET"] != "oauth-sk" || got["ALIBABA_CLOUD_SECURITY_TOKEN"] != "oauth-token" {
+		t.Fatalf("oauth credentials not resolved: %#v", got)
+	}
+}
+
+func TestLoadBlProfileRecognizesModeFromExplicitHostCredentials(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	ctx, _, _ := newTestContext()
+	for name, value := range map[string]string{
+		config.AccessKeyIdFlagName:     "flag-ak",
+		config.AccessKeySecretFlagName: "flag-sk",
+	} {
+		flag := ctx.Flags().Get(name)
+		flag.SetAssigned(true)
+		flag.SetValue(value)
+	}
+	profile, err := loadBlProfile(ctx)
+	if err != nil {
+		t.Fatalf("loadBlProfile: %v", err)
+	}
+	if profile.Mode != config.AK {
+		t.Fatalf("mode = %q, want AK", profile.Mode)
+	}
+}
+
+func envMap(env []string) map[string]string {
+	result := make(map[string]string, len(env))
+	for _, item := range env {
+		key, value, ok := strings.Cut(item, "=")
+		if ok {
+			result[key] = value
+		}
+	}
+	return result
+}
