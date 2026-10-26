@@ -926,8 +926,30 @@ func configureCredentialsURI(w io.Writer, cp *Profile) error {
 func configureOIDC(w io.Writer, cp *Profile) error {
 	cli.Printf(w, "OIDC Provider ARN [%s]: ", cp.OIDCProviderARN)
 	cp.OIDCProviderARN = ReadInput(cp.OIDCProviderARN)
-	cli.Printf(w, "OIDC Token File [%s]: ", cp.OIDCTokenFile)
-	cp.OIDCTokenFile = ReadInput(cp.OIDCTokenFile)
+
+	previousToken := cp.OIDCToken
+	previousFile := cp.OIDCTokenFile
+	tokenHint := previousToken
+	if tokenHint != "" {
+		tokenHint = MosaicString(tokenHint, 4)
+	}
+	cli.Printf(w, "OIDC Token [%s]: ", tokenHint)
+	tokenInput := ReadInput(previousToken)
+	cli.Printf(w, "OIDC Token File [%s]: ", previousFile)
+	fileInput := ReadInput(previousFile)
+	tokenChanged := tokenInput != previousToken
+	fileChanged := fileInput != previousFile
+	cp.OIDCToken = tokenInput
+	cp.OIDCTokenFile = fileInput
+	// Enter keeps the saved value. Typing a new token or a new file replaces that
+	// source and drops the other one, matching configure set.
+	if tokenChanged && !fileChanged {
+		cp.OIDCTokenFile = ""
+	}
+	if fileChanged && !tokenChanged {
+		cp.OIDCToken = ""
+	}
+
 	cli.Printf(w, "RAM Role ARN [%s]: ", cp.RamRoleArn)
 	cp.RamRoleArn = ReadInput(cp.RamRoleArn)
 	cli.Printf(w, "Role Session Name [%s]: ", cp.RoleSessionName)

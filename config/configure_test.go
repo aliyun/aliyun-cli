@@ -16,6 +16,7 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -334,8 +335,72 @@ func TestConfigureOIDC(t *testing.T) {
 		RegionId:        "cn-hangzhou",
 		OutputFormat:    "json",
 	})
-	assert.Equal(t, "OIDC Provider ARN [oidcproviderarn]: OIDC Token File [/path/to/oidc/token/file]: RAM Role ARN [rra]: Role Session Name [rsn]: ", w.String())
+	assert.Equal(t, "OIDC Provider ARN [oidcproviderarn]: OIDC Token []: OIDC Token File [/path/to/oidc/token/file]: RAM Role ARN [rra]: Role Session Name [rsn]: ", w.String())
 	assert.Nil(t, err)
+}
+
+// promptReader returns one line per Read. ReadInput scans stdin with a new
+// buffered scanner on every prompt, so a single buffered reader would swallow
+// later answers.
+type promptReader struct {
+	lines []string
+	rest  string
+}
+
+func (r *promptReader) Read(p []byte) (int, error) {
+	if r.rest == "" {
+		if len(r.lines) == 0 {
+			return 0, io.EOF
+		}
+		r.rest = r.lines[0]
+		r.lines = r.lines[1:]
+	}
+	n := copy(p, r.rest)
+	r.rest = r.rest[n:]
+	return n, nil
+}
+
+func TestConfigureOIDCReplacesConflictingSource(t *testing.T) {
+	originalStdin := stdin
+	t.Cleanup(func() { stdin = originalStdin })
+
+	profile := &Profile{
+		Name:            "default",
+		Mode:            OIDC,
+		OIDCProviderARN: "oidcproviderarn",
+		OIDCToken:       "saved-token",
+		OIDCTokenFile:   "/old/file",
+		RamRoleArn:      "rra",
+		RoleSessionName: "rsn",
+	}
+	w := new(bytes.Buffer)
+	stdin = &promptReader{lines: []string{"\n", "\n", "/new/token/file\n", "\n", "\n"}}
+	assert.NoError(t, configureOIDC(w, profile))
+	assert.Empty(t, profile.OIDCToken)
+	assert.Equal(t, "/new/token/file", profile.OIDCTokenFile)
+	assert.Contains(t, w.String(), "OIDC Token [*******oken]: ")
+
+	profile.OIDCToken = "saved-token"
+	profile.OIDCTokenFile = "/old/file"
+	w.Reset()
+	stdin = &promptReader{lines: []string{"\n", "fresh-token\n", "\n", "\n", "\n"}}
+	assert.NoError(t, configureOIDC(w, profile))
+	assert.Equal(t, "fresh-token", profile.OIDCToken)
+	assert.Empty(t, profile.OIDCTokenFile)
+
+	profile.OIDCToken = "saved-token"
+	profile.OIDCTokenFile = "/old/file"
+	stdin = &promptReader{lines: []string{"\n", "fresh-token\n", "/new/file\n", "\n", "\n"}}
+	assert.NoError(t, configureOIDC(w, profile))
+	assert.Equal(t, "fresh-token", profile.OIDCToken)
+	assert.Equal(t, "/new/file", profile.OIDCTokenFile)
+
+	profile.OIDCToken = "saved-token"
+	profile.OIDCTokenFile = "/old/file"
+	stdin = &promptReader{lines: []string{"\n", "\n", "\n", "\n", "\n"}}
+	assert.NoError(t, configureOIDC(w, profile))
+	assert.Equal(t, "saved-token", profile.OIDCToken)
+	assert.Equal(t, "/old/file", profile.OIDCTokenFile)
 }
 
 func TestConfigureBearerToken(t *testing.T) {
