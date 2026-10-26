@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-const defaultTelemetryEndpoint = "https://telemetry-inner.aliyun-inc.com/v1/telemetry/events"
+const defaultTelemetryEndpoint = "https://openapi-acore.aliyuncs.com/v1/telemetry/events"
 
 type uploadEvent struct {
 	SchemaVersion string         `json:"schemaVersion"`
