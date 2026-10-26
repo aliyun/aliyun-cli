@@ -743,6 +743,39 @@ func TestGetCredentialWithOIDCToken(t *testing.T) {
 	assert.Equal(t, "oidc_role_arn", *credential.GetType())
 }
 
+func TestCommandOIDCTokenWithoutTokenFile(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
+	t.Setenv("ALIBABA_CLOUD_OIDC_TOKEN", "")
+	t.Setenv("ALIBABA_CLOUD_OIDC_TOKEN_FILE", "")
+	t.Setenv("ALIBABACLOUD_OIDC_TOKEN_FILE", "")
+
+	ctx := newCtx()
+	parser := cli.NewParser([]string{
+		"--mode", "OIDC",
+		"--region", "cn-hangzhou",
+		"--oidc-provider-arn", "acs:ram::123456789:oidc-provider/test",
+		"--oidc-token", "header.payload.sig",
+		"--ram-role-arn", "acs:ram::123456789:role/test",
+		"--role-session-name", "ack-session",
+	}, ctx)
+	remain, err := parser.ReadAll()
+	assert.NoError(t, err)
+	assert.Empty(t, remain)
+	_, fileAssigned := ctx.Flags().GetValue(OIDCTokenFileFlagName)
+	assert.False(t, fileAssigned)
+
+	ctx.SetInConfigureMode(true)
+	profile, err := LoadProfileWithContext(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "header.payload.sig", profile.OIDCToken)
+	assert.Empty(t, profile.OIDCTokenFile)
+
+	credential, err := profile.GetCredential(ctx, nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, credential)
+	assert.Equal(t, "oidc_role_arn", *credential.GetType())
+}
+
 func TestGetCredentialWithRamRoleArnStsEndpoint(t *testing.T) {
 	actual := newProfile()
 	actual.Mode = RamRoleArn
