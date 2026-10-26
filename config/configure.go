@@ -926,8 +926,14 @@ func configureCredentialsURI(w io.Writer, cp *Profile) error {
 func configureOIDC(w io.Writer, cp *Profile) error {
 	cli.Printf(w, "OIDC Provider ARN [%s]: ", cp.OIDCProviderARN)
 	cp.OIDCProviderARN = ReadInput(cp.OIDCProviderARN)
-	cli.Printf(w, "OIDC Token File [%s]: ", cp.OIDCTokenFile)
-	cp.OIDCTokenFile = ReadInput(cp.OIDCTokenFile)
+	previousFile := cp.OIDCTokenFile
+	cli.Printf(w, "OIDC Token File [%s]: ", previousFile)
+	cp.OIDCTokenFile = ReadInput(previousFile)
+	// Enter keeps the saved file and token. Typing a file replaces a saved
+	// token, so that file is the source that gets used.
+	if cp.OIDCTokenFile != previousFile {
+		cp.OIDCToken = ""
+	}
 	cli.Printf(w, "RAM Role ARN [%s]: ", cp.RamRoleArn)
 	cp.RamRoleArn = ReadInput(cp.RamRoleArn)
 	cli.Printf(w, "Role Session Name [%s]: ", cp.RoleSessionName)

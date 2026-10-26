@@ -108,7 +108,8 @@ func doConfigureSet(ctx *cli.Context) error {
 		profile.ProcessCommand = ProcessCommandFlag(flags).GetStringOrDefault(profile.ProcessCommand)
 	case OIDC:
 		profile.OIDCProviderARN = OIDCProviderARNFlag(flags).GetStringOrDefault(profile.OIDCProviderARN)
-		profile.OIDCTokenFile = OIDCTokenFileFlag(flags).GetStringOrDefault(profile.OIDCTokenFile)
+		profile.OIDCToken, profile.OIDCTokenFile = applyExclusiveOIDCTokenSource(
+			OIDCTokenFlag(flags), OIDCTokenFileFlag(flags), profile.OIDCToken, profile.OIDCTokenFile)
 		profile.RamRoleArn = RamRoleArnFlag(flags).GetStringOrDefault(profile.RamRoleArn)
 		profile.RoleSessionName = RoleSessionNameFlag(flags).GetStringOrDefault(profile.RoleSessionName)
 		profile.ExpiredSeconds = ExpiredSecondsFlag(flags).GetIntegerOrDefault(profile.ExpiredSeconds)

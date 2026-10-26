@@ -117,6 +117,7 @@ type Profile struct {
 	ProcessCommand             string           `json:"process_command,omitempty"`
 	CredentialsURI             string           `json:"credentials_uri,omitempty"`
 	OIDCProviderARN            string           `json:"oidc_provider_arn,omitempty"`
+	OIDCToken                  string           `json:"oidc_token,omitempty"`
 	OIDCTokenFile              string           `json:"oidc_token_file,omitempty"`
 	SSOSession                 string           `json:"sso_session,omitempty"`
 	CloudSSOSignInUrl          string           `json:"cloud_sso_sign_in_url,omitempty"`
@@ -231,8 +232,8 @@ func (cp *Profile) Validate() error {
 			return fmt.Errorf("oidc_provider_arn is not configured for profile '%s'. Run `aliyun configure --profile %s --mode OIDC` to set it",
 				cp.Name, cp.Name)
 		}
-		if cp.OIDCTokenFile == "" {
-			return fmt.Errorf("oidc_token_file is not configured for profile '%s'. Run `aliyun configure --profile %s --mode OIDC` to set it",
+		if cp.OIDCToken == "" && cp.OIDCTokenFile == "" {
+			return fmt.Errorf("oidc_token or oidc_token_file is not configured for profile '%s'. Run `aliyun configure --profile %s --mode OIDC` to set it",
 				cp.Name, cp.Name)
 		}
 		if cp.RamRoleArn == "" {
@@ -291,6 +292,27 @@ func (cp *Profile) GetParent() *Configuration {
 	return cp.parent
 }
 
+// applyExclusiveOIDCTokenSource keeps a saved token and token file unless this
+// command explicitly sets one of them. Setting one clears the other, so a stale
+// saved token cannot outrank a newly selected token file.
+func applyExclusiveOIDCTokenSource(tokenFlag, fileFlag *cli.Flag, token, file string) (string, string) {
+	tokenAssigned := tokenFlag != nil && tokenFlag.IsAssigned()
+	fileAssigned := fileFlag != nil && fileFlag.IsAssigned()
+	if tokenAssigned {
+		token = tokenFlag.GetStringOrDefault("")
+	}
+	if fileAssigned {
+		file = fileFlag.GetStringOrDefault("")
+	}
+	if tokenAssigned && !fileAssigned {
+		file = ""
+	}
+	if fileAssigned && !tokenAssigned {
+		token = ""
+	}
+	return token, file
+}
+
 func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	modeFlag := ModeFlag(ctx.Flags())
 	if modeFlag != nil && modeFlag.IsAssigned() {
@@ -318,7 +340,8 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.ExpiredSeconds = ExpiredSecondsFlag(ctx.Flags()).GetIntegerOrDefault(cp.ExpiredSeconds)
 	cp.ProcessCommand = ProcessCommandFlag(ctx.Flags()).GetStringOrDefault(cp.ProcessCommand)
 	cp.OIDCProviderARN = OIDCProviderARNFlag(ctx.Flags()).GetStringOrDefault(cp.OIDCProviderARN)
-	cp.OIDCTokenFile = OIDCTokenFileFlag(ctx.Flags()).GetStringOrDefault(cp.OIDCTokenFile)
+	cp.OIDCToken, cp.OIDCTokenFile = applyExclusiveOIDCTokenSource(
+		OIDCTokenFlag(ctx.Flags()), OIDCTokenFileFlag(ctx.Flags()), cp.OIDCToken, cp.OIDCTokenFile)
 	oldTarget := cloudSSOTarget(cp)
 	if f := SSOSessionFlag(ctx.Flags()); f != nil {
 		cp.SSOSession = f.GetStringOrDefault(cp.SSOSession)
@@ -383,6 +406,10 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 		cp.OIDCProviderARN = util.GetFromEnv("ALIBABACLOUD_OIDC_PROVIDER_ARN", "ALIBABA_CLOUD_OIDC_PROVIDER_ARN")
 	}
 
+	if cp.OIDCToken == "" {
+		cp.OIDCToken = os.Getenv("ALIBABA_CLOUD_OIDC_TOKEN")
+	}
+
 	if cp.OIDCTokenFile == "" {
 		cp.OIDCTokenFile = util.GetFromEnv("ALIBABACLOUD_OIDC_TOKEN_FILE", "ALIBABA_CLOUD_OIDC_TOKEN_FILE")
 	}
@@ -429,7 +456,7 @@ func AutoModeRecognition(cp *Profile) {
 		cp.Mode = EcsRamRole
 	} else if cp.ProcessCommand != "" {
 		cp.Mode = External
-	} else if cp.OIDCProviderARN != "" && cp.OIDCTokenFile != "" && cp.RamRoleArn != "" {
+	} else if cp.OIDCProviderARN != "" && (cp.OIDCToken != "" || cp.OIDCTokenFile != "") && cp.RamRoleArn != "" {
 		cp.Mode = OIDC
 	} else if cp.CloudSSOSignInUrl != "" || cp.SSOSession != "" {
 		cp.Mode = CloudSSO
@@ -695,6 +722,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 	case OIDC:
 		config.SetType("oidc_role_arn").
 			SetOIDCProviderArn(cp.OIDCProviderARN).
+			SetOIDCToken(cp.OIDCToken).
 			SetOIDCTokenFilePath(cp.OIDCTokenFile).
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).

@@ -45,6 +45,7 @@ const (
 	ExpiredSecondsFlagName             = "expired-seconds"
 	ProcessCommandFlagName             = "process-command"
 	OIDCProviderARNFlagName            = "oidc-provider-arn"
+	OIDCTokenFlagName                  = "oidc-token-value"
 	OIDCTokenFileFlagName              = "oidc-token-file"
 	SSOSessionFlagName                 = "sso-session"
 	CloudSSOSignInUrlFlagName          = "cloud-sso-sign-in-url"
@@ -86,6 +87,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewExpiredSecondsFlag())
 	fs.Add(NewProcessCommandFlag())
 	fs.Add(NewOIDCProviderARNFlag())
+	fs.Add(NewOIDCTokenFlag())
 	fs.Add(NewOIDCTokenFileFlag())
 	fs.Add(NewSSOSessionFlag())
 	fs.Add(NewCloudSSOSignInUrlFlag())
@@ -199,6 +201,10 @@ func ProcessCommandFlag(fs *cli.FlagSet) *cli.Flag {
 
 func OIDCProviderARNFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(OIDCProviderARNFlagName)
+}
+
+func OIDCTokenFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(OIDCTokenFlagName)
 }
 
 func OIDCTokenFileFlag(fs *cli.FlagSet) *cli.Flag {
@@ -417,6 +423,17 @@ func NewOIDCProviderARNFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--oidc-provider-arn <OIDCProviderARN>` to assign OIDC provider ARN",
 			"使用 `--oidc-provider-arn <OIDCProviderARN>` 来指定 OIDC 提供者 ARN"),
+	}
+}
+
+func NewOIDCTokenFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         OIDCTokenFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--oidc-token-value <OIDCToken>` to assign the OIDC token string",
+			"使用 `--oidc-token-value <OIDCToken>` 直接指定 OIDC Token 内容"),
 	}
 }
 
