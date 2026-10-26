@@ -335,7 +335,7 @@ func TestConfigureOIDC(t *testing.T) {
 		RegionId:        "cn-hangzhou",
 		OutputFormat:    "json",
 	})
-	assert.Equal(t, "OIDC Provider ARN [oidcproviderarn]: OIDC Token []: OIDC Token File [/path/to/oidc/token/file]: RAM Role ARN [rra]: Role Session Name [rsn]: ", w.String())
+	assert.Equal(t, "OIDC Provider ARN [oidcproviderarn]: OIDC Token File [/path/to/oidc/token/file]: RAM Role ARN [rra]: Role Session Name [rsn]: ", w.String())
 	assert.Nil(t, err)
 }
 
@@ -374,30 +374,15 @@ func TestConfigureOIDCReplacesConflictingSource(t *testing.T) {
 		RoleSessionName: "rsn",
 	}
 	w := new(bytes.Buffer)
-	stdin = &promptReader{lines: []string{"\n", "\n", "/new/token/file\n", "\n", "\n"}}
+	stdin = &promptReader{lines: []string{"\n", "/new/token/file\n", "\n", "\n"}}
 	assert.NoError(t, configureOIDC(w, profile))
 	assert.Empty(t, profile.OIDCToken)
 	assert.Equal(t, "/new/token/file", profile.OIDCTokenFile)
-	assert.Contains(t, w.String(), "OIDC Token [*******oken]: ")
+	assert.NotContains(t, w.String(), "OIDC Token [")
 
 	profile.OIDCToken = "saved-token"
 	profile.OIDCTokenFile = "/old/file"
-	w.Reset()
-	stdin = &promptReader{lines: []string{"\n", "fresh-token\n", "\n", "\n", "\n"}}
-	assert.NoError(t, configureOIDC(w, profile))
-	assert.Equal(t, "fresh-token", profile.OIDCToken)
-	assert.Empty(t, profile.OIDCTokenFile)
-
-	profile.OIDCToken = "saved-token"
-	profile.OIDCTokenFile = "/old/file"
-	stdin = &promptReader{lines: []string{"\n", "fresh-token\n", "/new/file\n", "\n", "\n"}}
-	assert.NoError(t, configureOIDC(w, profile))
-	assert.Equal(t, "fresh-token", profile.OIDCToken)
-	assert.Equal(t, "/new/file", profile.OIDCTokenFile)
-
-	profile.OIDCToken = "saved-token"
-	profile.OIDCTokenFile = "/old/file"
-	stdin = &promptReader{lines: []string{"\n", "\n", "\n", "\n", "\n"}}
+	stdin = &promptReader{lines: []string{"\n", "\n", "\n", "\n"}}
 	assert.NoError(t, configureOIDC(w, profile))
 	assert.Equal(t, "saved-token", profile.OIDCToken)
 	assert.Equal(t, "/old/file", profile.OIDCTokenFile)
