@@ -81,6 +81,13 @@ func CompletePluginManagement(event *PluginManagementEvent) {
 	}
 }
 
+func RemoveUnvalidatedPluginNames(event *PluginManagementEvent) {
+	if event == nil {
+		return
+	}
+	event.PluginNames = nil
+}
+
 func pluginFlagValues(args []string, names ...string) []string {
 	allowed := make(map[string]struct{}, len(names))
 	for _, name := range names {

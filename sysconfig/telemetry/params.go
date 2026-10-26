@@ -16,6 +16,14 @@ package telemetry
 
 import "strings"
 
+// Commands in this map accept positional business values. Limit their
+// telemetry command to the declared depth so paths and resource names are
+// never included in Command.
+var fixedCommandDepthByToken = map[string]int{
+	"oss":     2,
+	"ossutil": 2,
+}
+
 func ExtractParamNames(args []string) []string {
 	seen := make(map[string]struct{})
 	var names []string
@@ -45,6 +53,8 @@ func ExtractParamNames(args []string) []string {
 }
 
 func positionalParts(args []string) []string {
+	// Plugin commands treat every non-flag token as a command segment.
+	// Plugin business inputs must be passed as flag values, not positional values.
 	var parts []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -61,6 +71,15 @@ func positionalParts(args []string) []string {
 		parts = append(parts, arg)
 	}
 	return parts
+}
+
+func commandParts(args []string, commandToken string) []string {
+	parts := positionalParts(args)
+	depth, ok := fixedCommandDepthByToken[strings.ToLower(strings.TrimSpace(commandToken))]
+	if !ok || len(parts) <= depth {
+		return parts
+	}
+	return parts[:depth]
 }
 
 func normalizeCommand(parts []string) string {

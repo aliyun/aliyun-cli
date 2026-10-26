@@ -122,9 +122,7 @@ func newUploadEvent(event Event) uploadEvent {
 	}
 	addAttribute(attributes, "errorType", event.ErrorType)
 	addAttribute(attributes, "plugin", event.Plugin)
-	addAttribute(attributes, "regionId", event.RegionID)
 	addAttribute(attributes, "agentName", event.AgentName)
-	addAttribute(attributes, "vendor", event.Vendor)
 	if action := event.PluginAction; action != nil {
 		attributes["operation"] = action.Operation
 		if len(action.PluginNames) > 0 {
