@@ -83,6 +83,7 @@ func TestPrepareArgsStripsOnlyHostFlags(t *testing.T) {
 	}
 	want := []string{
 		"help",
+		"--mode=RamRoleArn",
 		"--access-key-id", "bl-ak",
 		"--access-key-secret=bl-sk",
 		"--security-token", "bl-token",
@@ -104,8 +105,8 @@ func TestPrepareArgsStripsOnlyHostFlags(t *testing.T) {
 	if got, _ := ctx.Flags().Get(config.ProfileFlagName).GetValue(); got != "prod" {
 		t.Fatalf("profile = %q", got)
 	}
-	if got, _ := ctx.Flags().Get(config.ModeFlagName).GetValue(); got != "RamRoleArn" {
-		t.Fatalf("mode = %q", got)
+	if ctx.Flags().Get(config.ModeFlagName).IsAssigned() {
+		t.Fatal("child mode assigned as host authentication mode")
 	}
 }
 
@@ -211,8 +212,11 @@ func TestBuildExecEnvPreservesUserEnvForUnconfiguredProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildExecEnv: %v", err)
 	}
-	if !reflect.DeepEqual(got, base) {
-		t.Fatalf("env changed\nwant: %#v\n got: %#v", base, got)
+	for _, entry := range base {
+		key, value, _ := strings.Cut(entry, "=")
+		if envMap(got)[key] != value {
+			t.Fatalf("inherited %s changed", key)
+		}
 	}
 }
 
@@ -747,8 +751,9 @@ func TestBuildExecEnvAdditionalModes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("BuildExecEnv: %v", err)
 		}
-		if !reflect.DeepEqual(env, []string{"KEEP=value"}) {
-			t.Fatalf("env = %#v", env)
+		got := envMap(env)
+		if got["KEEP"] != "value" || got["ALIBABA_CLOUD_ACCESS_KEY_ID"] != "" || got["ALIBABA_CLOUD_ACCESS_KEY_SECRET"] != "" || got["ALIBABA_CLOUD_SECURITY_TOKEN"] != "" {
+			t.Fatal("anonymous environment retained credentials or lost unrelated values")
 		}
 	})
 
@@ -829,6 +834,205 @@ func TestNewBlCommandRun(t *testing.T) {
 	defer cli.EnableExitCode()
 	if err := cmd.Run(ctx, []string{"-test.run=^TestHelperProcess$", "--", "7"}); err != nil {
 		t.Fatalf("Run exit: %v", err)
+	}
+}
+
+func TestPrepareArgsPreservesChildOwnedFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"chat", "--mode", "stream", "--language", "python", "--profile", "demo"},
+		{"--mode=stream", "chat", "--language=python", "--profile=demo"},
+		{"chat", "--mode=", "--language", "", "--profile", "demo"},
+		{"chat", "--mode", "--profile", "demo"},
+		{"chat", "--language", "--profile", "demo"},
+		{"chat", "--mode=first", "--mode=second", "--read-timeout", "30", "--profile", "demo"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			ctx, _, _ := newTestContext()
+			before := append([]string(nil), args...)
+			got, err := NewContext(ctx).PrepareArgs(args)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := args[:len(args)-2]
+			if strings.HasPrefix(args[len(args)-1], "--profile=") {
+				want = args[:len(args)-1]
+			}
+			if !reflect.DeepEqual(got, want) || !reflect.DeepEqual(args, before) {
+				t.Fatalf("want %q, got %q; input changed: %v", want, got, !reflect.DeepEqual(args, before))
+			}
+			if ctx.Flags().Get(config.ModeFlagName).IsAssigned() || ctx.Flags().Get(config.LanguageFlagName).IsAssigned() {
+				t.Fatal("child mode/language assigned as host flags")
+			}
+		})
+	}
+}
+
+func TestLoadBlProfileIgnoresPersistentProfile(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content string
+		flags   map[string]string
+		mode    config.AuthenticateMode
+	}{
+		{name: "wrong stored account", content: `{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":"wrong-ak","access_key_secret":"wrong-sk"}]}`},
+		{name: "broken selected file", content: `not json`, flags: map[string]string{config.ProfileFlagName: "missing"}},
+		{name: "explicit AK", content: `not json`, flags: map[string]string{config.AccessKeyIdFlagName: "explicit-ak", config.AccessKeySecretFlagName: "explicit-sk"}, mode: config.AK},
+		{name: "explicit STS", content: `not json`, flags: map[string]string{config.AccessKeyIdFlagName: "explicit-ak", config.AccessKeySecretFlagName: "explicit-sk", config.StsTokenFlagName: "explicit-token"}, mode: config.StsToken},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("USERPROFILE", home)
+			t.Setenv("HOMEDRIVE", "")
+			t.Setenv("HOMEPATH", "")
+			t.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
+			path := filepath.Join(home, "selected.json")
+			if err := os.WriteFile(path, []byte(tc.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			ctx, _, _ := newTestContext()
+			bridge := NewContext(ctx)
+			if err := bridge.assignFlag(config.ConfigurePathFlagName, path); err != nil {
+				t.Fatal(err)
+			}
+			for name, value := range tc.flags {
+				if err := bridge.assignFlag(name, value); err != nil {
+					t.Fatal(err)
+				}
+			}
+			profile, err := loadBlProfile(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if profile.Mode != tc.mode || profile.AccessKeyId != tc.flags[config.AccessKeyIdFlagName] || profile.AccessKeySecret != tc.flags[config.AccessKeySecretFlagName] || profile.StsToken != tc.flags[config.StsTokenFlagName] {
+				t.Fatal("profile did not contain only explicit credentials")
+			}
+			base := []string{"KEEP=value", "ALIBABA_CLOUD_ACCESS_KEY_ID=inherited-ak", "ALIBABA_CLOUD_ACCESS_KEY_SECRET=inherited-sk", "ALIBABA_CLOUD_SECURITY_TOKEN=inherited-token"}
+			bridge.environ = func() []string { return base }
+			env, err := bridge.BuildExecEnv()
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := envMap(env)
+			if tc.mode == "" {
+				for _, entry := range base {
+					key, value, _ := strings.Cut(entry, "=")
+					if got[key] != value {
+						t.Fatalf("inherited %s changed", key)
+					}
+				}
+			} else if got["ALIBABA_CLOUD_ACCESS_KEY_ID"] != "explicit-ak" || got["ALIBABA_CLOUD_ACCESS_KEY_SECRET"] != "explicit-sk" || got["ALIBABA_CLOUD_SECURITY_TOKEN"] != tc.flags[config.StsTokenFlagName] {
+				t.Fatal("explicit credentials not mapped")
+			}
+		})
+	}
+}
+
+func TestBuildExecEnvManagedEnvironment(t *testing.T) {
+	for _, goos := range []string{"linux", "windows"} {
+		for _, mode := range []config.AuthenticateMode{"", config.AK} {
+			t.Run(goos+"/"+string(mode), func(t *testing.T) {
+				ctx, _, _ := newTestContext()
+				bridge := NewContext(ctx)
+				bridge.prefixPath = filepath.Join(t.TempDir(), "managed prefix")
+				bridge.goos = func() string { return goos }
+				base := []string{"KEEP=value", "npm_config_prefix=old-lower", "NPM_CONFIG_PREFIX=old-upper", "PATH=old-bin", "BAILIAN_INSTALL_METHOD=other", "ALIBABA_CLOUD_BL_COMPAT_MODE=bl"}
+				if goos == "windows" {
+					base[3] = "Path=old-bin"
+				}
+				bridge.environ = func() []string { return base }
+				bridge.loadProfile = func(*cli.Context) (config.Profile, error) {
+					if mode == "" {
+						return config.Profile{}, nil
+					}
+					return config.Profile{Mode: mode, AccessKeyId: "ak", AccessKeySecret: "sk"}, nil
+				}
+				env, err := bridge.BuildExecEnv()
+				if err != nil {
+					t.Fatal(err)
+				}
+				got := envMap(env)
+				binDir, separator := filepath.Join(bridge.prefixPath, "bin"), ":"
+				if goos == "windows" {
+					binDir, separator = bridge.prefixPath, ";"
+				}
+				if got["npm_config_prefix"] != bridge.prefixPath || got["PATH"] != binDir+separator+"old-bin" || got["BAILIAN_INSTALL_METHOD"] != "npm" || got["ALIBABA_CLOUD_BL_COMPAT_MODE"] != "aliyun bl" || got["KEEP"] != "value" {
+					t.Fatalf("managed environment missing: %v", got)
+				}
+				if _, ok := got["NPM_CONFIG_PREFIX"]; ok {
+					t.Fatal("uppercase npm prefix remains")
+				}
+				counts := make(map[string]int)
+				for _, entry := range env {
+					key, _, _ := strings.Cut(entry, "=")
+					counts[strings.ToLower(key)]++
+				}
+				for _, key := range []string{"npm_config_prefix", "path", "bailian_install_method", "alibaba_cloud_bl_compat_mode"} {
+					if counts[key] != 1 {
+						t.Fatalf("%s count = %d", key, counts[key])
+					}
+				}
+				if base[1] != "npm_config_prefix=old-lower" {
+					t.Fatal("input environment changed")
+				}
+			})
+		}
+	}
+}
+
+func TestBuildExecEnvUpdateNotifier(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  string
+	}{
+		{value: "1", want: "1"},
+		{value: "0", want: "user-setting"},
+		{value: "", want: "user-setting"},
+	} {
+		t.Run(tc.value, func(t *testing.T) {
+			ctx, _, _ := newTestContext()
+			bridge := NewContext(ctx)
+			bridge.environ = func() []string {
+				return []string{"ALIBABA_CLOUD_BL_NO_UPDATE_CHECK=" + tc.value, "NO_UPDATE_NOTIFIER=user-setting"}
+			}
+			bridge.loadProfile = func(*cli.Context) (config.Profile, error) { return config.Profile{}, nil }
+			env, err := bridge.BuildExecEnv()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if envMap(env)["NO_UPDATE_NOTIFIER"] != tc.want {
+				t.Fatal("update notifier not mapped")
+			}
+		})
+	}
+}
+
+func TestBuildExecEnvWindowsCaseInsensitiveControls(t *testing.T) {
+	ctx, _, _ := newTestContext()
+	bridge := NewContext(ctx)
+	bridge.goos = func() string { return "windows" }
+	bridge.prefixPath = "managed"
+	bridge.environ = func() []string {
+		return []string{"alibaba_cloud_bl_no_update_check=1", "No_Update_Notifier=0", "bailian_install_method=other", "alibaba_cloud_bl_compat_mode=bl", "pAtH=old"}
+	}
+	bridge.loadProfile = func(*cli.Context) (config.Profile, error) { return config.Profile{}, nil }
+	env, err := bridge.BuildExecEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := envMap(env)
+	if got["NO_UPDATE_NOTIFIER"] != "1" || got["BAILIAN_INSTALL_METHOD"] != "npm" || got["ALIBABA_CLOUD_BL_COMPAT_MODE"] != "aliyun bl" || got["PATH"] != "managed;old" {
+		t.Fatalf("windows controls not replaced: %v", got)
+	}
+	counts := make(map[string]int)
+	for _, entry := range env {
+		key, _, _ := strings.Cut(entry, "=")
+		counts[strings.ToLower(key)]++
+	}
+	for _, key := range []string{"no_update_notifier", "bailian_install_method", "alibaba_cloud_bl_compat_mode", "path"} {
+		if counts[key] != 1 {
+			t.Fatalf("duplicate %s", key)
+		}
 	}
 }
 

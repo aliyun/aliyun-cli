@@ -29,11 +29,29 @@ const (
 	registryEnv = "ALIBABA_CLOUD_BL_NPM_REGISTRY"
 )
 
-var sharedBailianFlags = map[string]bool{
-	config.AccessKeyIdFlagName:     true,
-	config.AccessKeySecretFlagName: true,
-	config.RegionFlagName:          true,
-	config.EndpointFlagName:        true,
+var hostProfileFlags = []string{
+	config.ProfileFlagName,
+	config.ConfigurePathFlagName,
+	config.StsTokenFlagName,
+	config.StsRegionFlagName,
+	config.StsEndpointFlagName,
+	config.RamRoleNameFlagName,
+	config.RamRoleArnFlagName,
+	config.RoleSessionNameFlagName,
+	config.ExternalIdFlagName,
+	config.SourceProfileFlagName,
+	config.PrivateKeyFlagName,
+	config.KeyPairNameFlagName,
+	config.ProcessCommandFlagName,
+	config.OIDCProviderARNFlagName,
+	config.OIDCTokenFileFlagName,
+	config.SSOSessionFlagName,
+	config.CloudSSOSignInUrlFlagName,
+	config.CloudSSOAccessConfigFlagName,
+	config.CloudSSOAccountIdFlagName,
+	config.ExternalAccountTypeFlagName,
+	config.BearerTokenFlagName,
+	config.BearerTokenHeaderKeyFlagName,
 }
 
 type Context struct {
@@ -163,11 +181,9 @@ func hostFlagDefinitions() (map[string]*cli.Flag, map[rune]*cli.Flag) {
 	config.AddFlags(flags)
 	longFlags := make(map[string]*cli.Flag)
 	shortFlags := make(map[rune]*cli.Flag)
-	for _, flag := range flags.Flags() {
-		if flag.Category != "config" || sharedBailianFlags[flag.Name] {
-			continue
-		}
-		longFlags[flag.Name] = flag
+	for _, name := range hostProfileFlags {
+		flag := flags.Get(name)
+		longFlags[name] = flag
 		if flag.Shorthand != 0 {
 			shortFlags[flag.Shorthand] = flag
 		}
@@ -287,7 +303,7 @@ func (c *Context) BuildExecEnv() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	base := c.environ()
+	base := c.buildRuntimeEnv(c.environ())
 	if profile.Mode == "" && profile.AccessKeyId == "" && profile.AccessKeySecret == "" && profile.StsToken == "" {
 		return base, nil
 	}
@@ -330,6 +346,59 @@ func (c *Context) BuildExecEnv() ([]string, error) {
 		}
 	}
 	return mergeCredentialEnv(base, accessKeyID, accessKeySecret, securityToken), nil
+}
+
+func (c *Context) buildRuntimeEnv(base []string) []string {
+	windows := c.goos() == "windows"
+	noUpdate := false
+	for _, entry := range base {
+		key, value, _ := strings.Cut(entry, "=")
+		if windows {
+			key = strings.ToUpper(key)
+		}
+		if key == "ALIBABA_CLOUD_BL_NO_UPDATE_CHECK" {
+			noUpdate = value == "1"
+		}
+	}
+	result := make([]string, 0, len(base)+5)
+	pathValue := ""
+	for _, entry := range base {
+		key, value, _ := strings.Cut(entry, "=")
+		if windows {
+			key = strings.ToUpper(key)
+		}
+		switch {
+		case strings.EqualFold(key, "npm_config_prefix"):
+			continue
+		case key == "PATH":
+			pathValue = value
+			continue
+		case key == "BAILIAN_INSTALL_METHOD" || key == "ALIBABA_CLOUD_BL_COMPAT_MODE":
+			continue
+		case noUpdate && key == "NO_UPDATE_NOTIFIER":
+			continue
+		}
+		result = append(result, entry)
+	}
+	binDir := filepath.Join(c.prefixPath, "bin")
+	separator := string(os.PathListSeparator)
+	if windows {
+		binDir = c.prefixPath
+		separator = ";"
+	}
+	if pathValue != "" {
+		binDir += separator + pathValue
+	}
+	result = append(result,
+		"npm_config_prefix="+c.prefixPath,
+		"PATH="+binDir,
+		"BAILIAN_INSTALL_METHOD=npm",
+		"ALIBABA_CLOUD_BL_COMPAT_MODE=aliyun bl",
+	)
+	if noUpdate {
+		result = append(result, "NO_UPDATE_NOTIFIER=1")
+	}
+	return result
 }
 
 func mergeCredentialEnv(base []string, accessKeyID, accessKeySecret, securityToken string) []string {
@@ -427,20 +496,24 @@ func getNodeVersion(nodeBin string) (int, int, int, error) {
 }
 
 func loadBlProfile(ctx *cli.Context) (config.Profile, error) {
-	configPath := filepath.Join(config.GetConfigPath(), "config.json")
-	if value, ok := assignedFlagValue(ctx, config.ConfigurePathFlagName); ok && strings.TrimSpace(value) != "" {
-		configPath = value
-	}
-	profileName := ""
-	if value, ok := assignedFlagValue(ctx, config.ProfileFlagName); ok {
-		profileName = strings.TrimSpace(value)
-	}
-	if profileName == "" {
-		profileName = util.GetFromEnv("ALIBABACLOUD_PROFILE", "ALIBABA_CLOUD_PROFILE", "ALICLOUD_PROFILE")
-	}
-	profile, err := config.LoadProfile(configPath, profileName)
-	if err != nil {
-		return profile, err
+	var profile config.Profile
+	if util.GetFromEnv("ALIBABA_CLOUD_IGNORE_PROFILE", "ALIBABACLOUD_IGNORE_PROFILE") != "TRUE" {
+		configPath := filepath.Join(config.GetConfigPath(), "config.json")
+		if value, ok := assignedFlagValue(ctx, config.ConfigurePathFlagName); ok && strings.TrimSpace(value) != "" {
+			configPath = value
+		}
+		profileName := ""
+		if value, ok := assignedFlagValue(ctx, config.ProfileFlagName); ok {
+			profileName = strings.TrimSpace(value)
+		}
+		if profileName == "" {
+			profileName = util.GetFromEnv("ALIBABACLOUD_PROFILE", "ALIBABA_CLOUD_PROFILE", "ALICLOUD_PROFILE")
+		}
+		var err error
+		profile, err = config.LoadProfile(configPath, profileName)
+		if err != nil {
+			return profile, err
+		}
 	}
 	applyExplicitProfileFlags(ctx, &profile)
 	config.AutoModeRecognition(&profile)
