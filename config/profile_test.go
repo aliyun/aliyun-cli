@@ -411,6 +411,35 @@ func TestOverwriteWithFlagsOIDCTokenBeatsFile(t *testing.T) {
 	assert.Equal(t, "/env/token", fileOnly.OIDCTokenFile)
 }
 
+func TestOverwriteWithFlagsExplicitOIDCSourceClearsTheOther(t *testing.T) {
+	resetEnv()
+	t.Setenv("ALIBABA_CLOUD_OIDC_TOKEN", "")
+	t.Setenv("ALIBABA_CLOUD_OIDC_TOKEN_FILE", "")
+
+	ctx := newCtx()
+	saved := newProfile()
+	saved.OIDCToken = "expired-saved-token"
+	saved.OIDCTokenFile = "/saved/token"
+
+	fileFlag := OIDCTokenFileFlag(ctx.Flags())
+	fileFlag.SetAssigned(true)
+	fileFlag.SetValue("/path/to/fresh-token")
+	saved.OverwriteWithFlags(ctx)
+	assert.Empty(t, saved.OIDCToken)
+	assert.Equal(t, "/path/to/fresh-token", saved.OIDCTokenFile)
+
+	ctx = newCtx()
+	saved = newProfile()
+	saved.OIDCToken = "expired-saved-token"
+	saved.OIDCTokenFile = "/saved/token"
+	tokenFlag := OIDCTokenFlag(ctx.Flags())
+	tokenFlag.SetAssigned(true)
+	tokenFlag.SetValue("fresh-token-value")
+	saved.OverwriteWithFlags(ctx)
+	assert.Equal(t, "fresh-token-value", saved.OIDCToken)
+	assert.Empty(t, saved.OIDCTokenFile)
+}
+
 func TestOverwriteWithFlagsWithStsTokenEnv(t *testing.T) {
 	resetEnv()
 	buf := new(bytes.Buffer)

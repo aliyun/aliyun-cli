@@ -292,6 +292,27 @@ func (cp *Profile) GetParent() *Configuration {
 	return cp.parent
 }
 
+// applyExclusiveOIDCTokenSource keeps a saved token and token file unless this
+// command explicitly sets one of them. Setting one clears the other, so a stale
+// saved token cannot outrank a newly selected token file.
+func applyExclusiveOIDCTokenSource(tokenFlag, fileFlag *cli.Flag, token, file string) (string, string) {
+	tokenAssigned := tokenFlag != nil && tokenFlag.IsAssigned()
+	fileAssigned := fileFlag != nil && fileFlag.IsAssigned()
+	if tokenAssigned {
+		token = tokenFlag.GetStringOrDefault("")
+	}
+	if fileAssigned {
+		file = fileFlag.GetStringOrDefault("")
+	}
+	if tokenAssigned && !fileAssigned {
+		file = ""
+	}
+	if fileAssigned && !tokenAssigned {
+		token = ""
+	}
+	return token, file
+}
+
 func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	modeFlag := ModeFlag(ctx.Flags())
 	if modeFlag != nil && modeFlag.IsAssigned() {
@@ -319,8 +340,8 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.ExpiredSeconds = ExpiredSecondsFlag(ctx.Flags()).GetIntegerOrDefault(cp.ExpiredSeconds)
 	cp.ProcessCommand = ProcessCommandFlag(ctx.Flags()).GetStringOrDefault(cp.ProcessCommand)
 	cp.OIDCProviderARN = OIDCProviderARNFlag(ctx.Flags()).GetStringOrDefault(cp.OIDCProviderARN)
-	cp.OIDCToken = OIDCTokenFlag(ctx.Flags()).GetStringOrDefault(cp.OIDCToken)
-	cp.OIDCTokenFile = OIDCTokenFileFlag(ctx.Flags()).GetStringOrDefault(cp.OIDCTokenFile)
+	cp.OIDCToken, cp.OIDCTokenFile = applyExclusiveOIDCTokenSource(
+		OIDCTokenFlag(ctx.Flags()), OIDCTokenFileFlag(ctx.Flags()), cp.OIDCToken, cp.OIDCTokenFile)
 	oldTarget := cloudSSOTarget(cp)
 	if f := SSOSessionFlag(ctx.Flags()); f != nil {
 		cp.SSOSession = f.GetStringOrDefault(cp.SSOSession)
