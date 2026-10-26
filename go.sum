@@ -43,8 +43,9 @@ github.com/alibabacloud-go/tea v1.1.17/go.mod h1:nXxjm6CIFkBhwW4FQkNrolwbfon8Svy
 github.com/alibabacloud-go/tea v1.1.20/go.mod h1:nXxjm6CIFkBhwW4FQkNrolwbfon8Svy6cujmKFUq98A=
 github.com/alibabacloud-go/tea v1.2.2/go.mod h1:CF3vOzEMAG+bR4WOql8gc2G9H3EkH3ZLAQdpmpXMgwk=
 github.com/alibabacloud-go/tea v1.2.3-0.20240605082020-e6e537a31150/go.mod h1:SP/4ugxOFdctgZvPRC0Anqbq1Q1VmuPXoUVyncO5azs=
-github.com/alibabacloud-go/tea v1.5.2 h1:DUzV/cRTbJC++rmADfqVu//GuWbaD64ZJ3yW3v2ukNU=
 github.com/alibabacloud-go/tea v1.5.2/go.mod h1:hgSs82CkOiehSQMoiFN79dL6zsGX7pVGvnn9SIEs8/0=
+github.com/alibabacloud-go/tea v1.5.3 h1:UMJTBcO48w7Zz1nlFe9bmRsHwgB7AjF8DBQzcvHhIp8=
+github.com/alibabacloud-go/tea v1.5.3/go.mod h1:hgSs82CkOiehSQMoiFN79dL6zsGX7pVGvnn9SIEs8/0=
 github.com/alibabacloud-go/tea-utils v1.3.1 h1:iWQeRzRheqCMuiF3+XkfybB3kTgUXkXX+JMrqfLeB2I=
 github.com/alibabacloud-go/tea-utils v1.3.1/go.mod h1:EI/o33aBfj3hETm4RLiAxF/ThQdSngxrpF8rKUDJjPE=
 github.com/alibabacloud-go/tea-utils/v2 v2.0.1/go.mod h1:U5MTY10WwlquGPS34DOeomUGBB0gXbLueiq5Trwu0C4=
@@ -60,8 +61,8 @@ github.com/aliyun/credentials-go v1.1.2/go.mod h1:ozcZaMR5kLM7pwtCMEpVmQ242suV6q
 github.com/aliyun/credentials-go v1.3.1/go.mod h1:8jKYhQuDawt8x2+fusqa1Y6mPxemTsBEN04dgcAcYz0=
 github.com/aliyun/credentials-go v1.3.6/go.mod h1:1LxUuX7L5YrZUWzBrRyk0SwSdH4OmPrib8NVePL3fxM=
 github.com/aliyun/credentials-go v1.4.5/go.mod h1:Jm6d+xIgwJVLVWT561vy67ZRP4lPTQxMbEYRuT2Ti1U=
-github.com/aliyun/credentials-go v1.4.14-0.20261022032224-509d766bf38c h1:QK4OAtyTEPULDaBXWDYYZNprDxqxDuliY8rjZWTwtEE=
-github.com/aliyun/credentials-go v1.4.14-0.20261022032224-509d766bf38c/go.mod h1:Jm6d+xIgwJVLVWT561vy67ZRP4lPTQxMbEYRuT2Ti1U=
+github.com/aliyun/credentials-go v1.4.14 h1:1gyVmYSCUjiAhB8xKZVFCwztx2l7iHAJmdHR+U+C0ZU=
+github.com/aliyun/credentials-go v1.4.14/go.mod h1:G8iT166kPGHQUmO86LyIC+Qeb7Wak9SzTNO9isIHZbs=
 github.com/alyu/configparser v0.0.0-20191103060215-744e9a66e7bc h1:eN2FUvn4J1A31pICABioDYukoh1Tmlei6L3ImZUin/I=
 github.com/alyu/configparser v0.0.0-20191103060215-744e9a66e7bc/go.mod h1:BYq/NZTroWuzkvsTPJgRBqSHGxKMHCz06gtlfY/W5RU=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=

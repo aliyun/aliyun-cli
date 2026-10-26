@@ -6,12 +6,12 @@ require (
 	github.com/alibabacloud-go/alibabacloud-gateway-sls v0.3.0
 	github.com/alibabacloud-go/alibabacloud-gateway-spi v0.0.5
 	github.com/alibabacloud-go/darabonba-openapi/v2 v2.2.4
-	github.com/alibabacloud-go/tea v1.5.2
+	github.com/alibabacloud-go/tea v1.5.3
 	github.com/alibabacloud-go/tea-utils/v2 v2.0.9
 	github.com/aliyun/alibaba-cloud-sdk-go v1.63.107
 	github.com/aliyun/aliyun-openapi-runtime v0.0.0-00010101000000-000000000000
 	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible
-	github.com/aliyun/credentials-go v1.4.14-0.20261022032224-509d766bf38c
+	github.com/aliyun/credentials-go v1.4.14
 	github.com/alyu/configparser v0.0.0-20191103060215-744e9a66e7bc
 	github.com/droundy/goopt v0.0.0-20220217183150-48d6390ad4d1
 	github.com/gogo/protobuf v1.3.2
