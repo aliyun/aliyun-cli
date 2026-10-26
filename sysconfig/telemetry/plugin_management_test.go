@@ -89,6 +89,21 @@ func TestDetectPluginManagementIgnoresReadOnlyCommands(t *testing.T) {
 	}
 }
 
+func TestRemoveUnvalidatedPluginNames(t *testing.T) {
+	event := &PluginManagementEvent{
+		Operation:   "install",
+		PluginNames: []string{"user-controlled-name"},
+		SourceType:  "catalog",
+	}
+	RemoveUnvalidatedPluginNames(event)
+	if len(event.PluginNames) != 0 {
+		t.Fatalf("unvalidated plugin names must be removed: %+v", event)
+	}
+	if event.Operation != "install" || event.SourceType != "catalog" {
+		t.Fatalf("non-name metadata must be preserved: %+v", event)
+	}
+}
+
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

@@ -22,7 +22,6 @@ import (
 type activeCommandExecution struct {
 	configDir    string
 	scope        Scope
-	profile      ProfileSnapshot
 	rootArgs     []string
 	start        time.Time
 	aiMode       bool
@@ -46,7 +45,6 @@ func resetExecutionState() {
 func beginCommandExecution(
 	configDir string,
 	scope Scope,
-	profile ProfileSnapshot,
 	rootArgs []string,
 	aiMode bool,
 	cfg *Config,
@@ -56,7 +54,6 @@ func beginCommandExecution(
 	activeExecution = &activeCommandExecution{
 		configDir:    configDir,
 		scope:        scope,
-		profile:      profile,
 		rootArgs:     append([]string(nil), rootArgs...),
 		start:        time.Now(),
 		aiMode:       aiMode,

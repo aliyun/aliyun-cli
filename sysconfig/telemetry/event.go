@@ -16,11 +16,8 @@ package telemetry
 
 import (
 	"errors"
-	"fmt"
-	"os"
 	"reflect"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -37,21 +34,17 @@ type Event struct {
 	Pipeline     string                 `json:"pipeline"`
 	InnerTrigger string                 `json:"inner_trigger,omitempty"`
 	Command      string                 `json:"command"`
-	RawCommand   string                 `json:"raw_command"`
 	Params       []string               `json:"params,omitempty"`
 	Result       string                 `json:"result"`
 	ErrorType    string                 `json:"error_type,omitempty"`
-	ErrorSummary string                 `json:"error_summary,omitempty"`
 	DurationMs   int64                  `json:"duration_ms"`
 	Plugin       string                 `json:"plugin,omitempty"`
 	CLIVersion   string                 `json:"cli_version"`
 	OS           string                 `json:"os"`
 	Arch         string                 `json:"arch"`
 	GoVersion    string                 `json:"go_version"`
-	RegionID     string                 `json:"region_id,omitempty"`
 	Mode         string                 `json:"mode"`
 	AgentName    string                 `json:"agent_name,omitempty"`
-	Vendor       string                 `json:"vendor,omitempty"`
 	InstanceID   string                 `json:"instance_id"`
 	PluginAction *PluginManagementEvent `json:"plugin_action,omitempty"`
 }
@@ -59,7 +52,6 @@ type Event struct {
 type BuildInput struct {
 	Scope        Scope
 	RootArgs     []string
-	Profile      ProfileSnapshot
 	InstanceID   string
 	DurationMs   int64
 	Err          error
@@ -95,25 +87,14 @@ func errorTypeName(err error, exitCode *int) string {
 	return ""
 }
 
-func errorSummary(err error, exitCode *int) string {
-	if err != nil {
-		return SanitizeSummary(err.Error())
-	}
-	if exitCode != nil && *exitCode != 0 {
-		return SanitizeSummary(fmt.Sprintf("exit status %d", *exitCode))
-	}
-	return ""
-}
-
 func BuildEvent(in BuildInput) (Event, error) {
 	eventID, err := newUUID()
 	if err != nil {
 		return Event{}, err
 	}
 
-	pos := positionalParts(in.RootArgs)
+	pos := commandParts(in.RootArgs, in.Scope.CommandToken)
 	command := normalizeCommand(pos)
-	raw := strings.Join(pos, " ")
 
 	mode := "default"
 	if in.AIMode {
@@ -145,30 +126,18 @@ func BuildEvent(in BuildInput) (Event, error) {
 		Pipeline:     in.Scope.Pipeline,
 		InnerTrigger: innerTrigger,
 		Command:      command,
-		RawCommand:   raw,
 		Params:       ExtractParamNames(in.RootArgs),
 		Result:       classifyResult(in.Err, in.ExitCode),
 		ErrorType:    errorTypeName(in.Err, in.ExitCode),
-		ErrorSummary: errorSummary(in.Err, in.ExitCode),
 		DurationMs:   in.DurationMs,
 		Plugin:       pluginField,
 		CLIVersion:   cli.GetVersion(),
 		OS:           runtime.GOOS,
 		Arch:         runtime.GOARCH,
 		GoVersion:    runtime.Version(),
-		RegionID:     strings.TrimSpace(in.Profile.RegionID),
 		Mode:         mode,
 		AgentName:    util.DetectAgentName(),
-		Vendor:       sanitizeVendor(os.Getenv("ALIBABA_CLOUD_VENDOR")),
 		InstanceID:   in.InstanceID,
 		PluginAction: in.PluginAction,
 	}, nil
-}
-
-func sanitizeVendor(v string) string {
-	v = util.SanitizeUserAgent(strings.TrimSpace(v))
-	if len(v) > 64 {
-		v = v[:64]
-	}
-	return v
 }

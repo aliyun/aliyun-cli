@@ -139,10 +139,6 @@ func Main(args []string) {
 		ConfigDir:    configDir,
 		CommandArgs:  commandArgs,
 		CommandToken: commandToken,
-		Profile: telemetry.ProfileFromRegionEndpoint(
-			profile.RegionId,
-			profile.Endpoint,
-		),
 	})
 
 	if os.Getenv("GENERATE_METADATA") == "YES" {

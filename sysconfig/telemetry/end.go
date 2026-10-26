@@ -27,7 +27,6 @@ type BeginInput struct {
 	ConfigDir    string
 	CommandArgs  []string
 	CommandToken string
-	Profile      ProfileSnapshot
 }
 
 func Begin(in BeginInput) {
@@ -36,13 +35,13 @@ func Begin(in BeginInput) {
 	if err != nil {
 		return
 	}
-	ok, scope := SelectScope(in.CommandToken, in.Profile, cfg)
+	ok, scope := SelectScope(in.CommandToken, cfg)
 	if !ok {
 		return
 	}
 	aiCfg, _ := aimode.Load(in.ConfigDir)
 	aiOn := aiCfg != nil && aiCfg.Enabled
-	beginCommandExecution(in.ConfigDir, scope, in.Profile, in.CommandArgs, aiOn, cfg)
+	beginCommandExecution(in.ConfigDir, scope, in.CommandArgs, aiOn, cfg)
 }
 
 func End(err error) {
@@ -68,11 +67,12 @@ func flush(exitCode *int, err error) {
 	}
 	if classifyResult(err, exitCode) == "Success" {
 		CompletePluginManagement(execution.pluginAction)
+	} else {
+		RemoveUnvalidatedPluginNames(execution.pluginAction)
 	}
 	ev, buildErr := BuildEvent(BuildInput{
 		Scope:        execution.scope,
 		RootArgs:     execution.rootArgs,
-		Profile:      execution.profile,
 		InstanceID:   instanceID,
 		DurationMs:   commandExecutionDurationMs(execution),
 		Err:          err,
@@ -150,13 +150,6 @@ func RunUploadCommand(args []string) int {
 	}
 	_ = UploadFile(configDir, pipeline, cacheFile)
 	return 0
-}
-
-func ProfileFromRegionEndpoint(regionID, endpoint string) ProfileSnapshot {
-	return ProfileSnapshot{
-		RegionID: regionID,
-		Endpoint: endpoint,
-	}
 }
 
 // HookEnd is suitable for the root command's AfterExecute callback.

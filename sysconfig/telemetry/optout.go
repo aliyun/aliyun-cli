@@ -16,16 +16,8 @@ package telemetry
 
 import (
 	"os"
-	"regexp"
 	"strings"
 )
-
-var financeRegions = map[string]struct{}{
-	"cn-shanghai-finance-1": {},
-	"cn-shenzhen-finance-1": {},
-}
-
-var privateCloudEndpointPattern = regexp.MustCompile(`(?i)(apsara|private[-_]?cloud|专有云)`)
 
 func envTruthy(key string) bool {
 	v := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
@@ -40,27 +32,7 @@ func InnerOptOut() bool {
 	return envTruthy("ALIYUN_CLI_TELEMETRY_INNER_OPTOUT")
 }
 
-type ProfileSnapshot struct {
-	RegionID string
-	Endpoint string
-}
-
-func L1HardDisabled(p ProfileSnapshot) bool {
-	if p.RegionID != "" {
-		if _, ok := financeRegions[strings.ToLower(p.RegionID)]; ok {
-			return true
-		}
-	}
-	if p.Endpoint != "" && privateCloudEndpointPattern.MatchString(p.Endpoint) {
-		return true
-	}
-	return false
-}
-
-func InnerPipelineDisabled(p ProfileSnapshot, cfg *Config) bool {
-	if L1HardDisabled(p) {
-		return true
-	}
+func InnerPipelineDisabled(cfg *Config) bool {
 	if GlobalOptOut() || InnerOptOut() {
 		return true
 	}
@@ -70,8 +42,8 @@ func InnerPipelineDisabled(p ProfileSnapshot, cfg *Config) bool {
 	return false
 }
 
-func PublicPipelineDisabled(p ProfileSnapshot, cfg *Config) bool {
-	if L1HardDisabled(p) || GlobalOptOut() {
+func PublicPipelineDisabled(cfg *Config) bool {
+	if GlobalOptOut() {
 		return true
 	}
 	return cfg == nil || !cfg.Enabled

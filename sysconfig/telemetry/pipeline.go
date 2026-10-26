@@ -51,18 +51,18 @@ func DetectInnerScope(commandToken string) Scope {
 	}
 }
 
-func SelectScope(commandToken string, p ProfileSnapshot, cfg *Config) (bool, Scope) {
+func SelectScope(commandToken string, cfg *Config) (bool, Scope) {
 	if commandToken == "" {
 		return false, Scope{}
 	}
 	inner := DetectInnerScope(commandToken)
 	if inner.Active {
-		if InnerPipelineDisabled(p, cfg) {
+		if InnerPipelineDisabled(cfg) {
 			return false, Scope{}
 		}
 		return true, inner
 	}
-	if PublicPipelineDisabled(p, cfg) {
+	if PublicPipelineDisabled(cfg) {
 		return false, Scope{}
 	}
 	scope := Scope{
@@ -80,8 +80,8 @@ func SelectScope(commandToken string, p ProfileSnapshot, cfg *Config) (bool, Sco
 	return true, scope
 }
 
-func ShouldCollectInner(commandToken string, p ProfileSnapshot, cfg *Config) (bool, Scope) {
-	if InnerPipelineDisabled(p, cfg) {
+func ShouldCollectInner(commandToken string, cfg *Config) (bool, Scope) {
+	if InnerPipelineDisabled(cfg) {
 		return false, Scope{}
 	}
 	scope := DetectInnerScope(commandToken)

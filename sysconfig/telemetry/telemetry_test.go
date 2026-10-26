@@ -24,18 +24,6 @@ func TestGlobalAndInnerOptOut(t *testing.T) {
 	}
 }
 
-func TestL1HardDisabled(t *testing.T) {
-	if !L1HardDisabled(ProfileSnapshot{RegionID: "cn-shanghai-finance-1"}) {
-		t.Fatal("finance region should disable")
-	}
-	if !L1HardDisabled(ProfileSnapshot{Endpoint: "https://ecs.apsara.local"}) {
-		t.Fatal("apsara endpoint should disable")
-	}
-	if L1HardDisabled(ProfileSnapshot{RegionID: "cn-hangzhou"}) {
-		t.Fatal("public region should not disable")
-	}
-}
-
 func TestExtractParamNames(t *testing.T) {
 	got := ExtractParamNames([]string{"rdc", "list", "--region-id", "x", "--output=json", "-q"})
 	want := []string{"region-id", "output", "q"}
@@ -60,20 +48,34 @@ func TestBuildEventKeepsDeepPluginCommandHierarchy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if event.Command != "custom-plugin-resource-policy-list" ||
-		event.RawCommand != "custom-plugin resource policy list" {
-		t.Fatalf("unexpected command fields: command=%q raw=%q", event.Command, event.RawCommand)
+	if event.Command != "custom-plugin-resource-policy-list" {
+		t.Fatalf("unexpected command field: %q", event.Command)
 	}
 }
 
-func TestSanitizeSummary(t *testing.T) {
-	in := "failed for /Users/alice/proj secret LTAIabcdefghijklmnop012345"
-	out := SanitizeSummary(in)
-	if out == in {
-		t.Fatal("expected sanitization")
-	}
-	if contains(out, "alice") || contains(out, "LTAI") {
-		t.Fatalf("leaked sensitive data: %q", out)
+func TestBuildEventLimitsOssCommandsToFixedDepth(t *testing.T) {
+	for _, commandToken := range []string{"oss", "ossutil"} {
+		event, err := BuildEvent(BuildInput{
+			Scope: Scope{
+				Pipeline:     PipelinePublic,
+				CommandToken: commandToken,
+			},
+			RootArgs: []string{
+				commandToken,
+				"ls",
+				"oss://customer-bucket/private/path/",
+				"--region",
+				"cn-hangzhou",
+			},
+			InstanceID: "instance-id",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := commandToken + "-ls"
+		if event.Command != want {
+			t.Fatalf("%s command leaked positional values: %q", commandToken, event.Command)
+		}
 	}
 }
 
@@ -91,7 +93,7 @@ func indexOf(s, sub string) int {
 }
 
 func TestShouldCollectInnerBuiltInCommand(t *testing.T) {
-	ok, _ := ShouldCollectInner("configure", ProfileSnapshot{}, DefaultConfig())
+	ok, _ := ShouldCollectInner("configure", DefaultConfig())
 	if ok {
 		t.Fatal("configure should not trigger inner telemetry")
 	}
@@ -139,17 +141,17 @@ func TestPublicTelemetryDefaultAndExplicitDisablePersistence(t *testing.T) {
 
 func TestSelectScopeUsesPublicPipelineByDefaultAndAllowsOptOut(t *testing.T) {
 	cfg := DefaultConfig()
-	ok, scope := SelectScope("configure", ProfileSnapshot{}, cfg)
+	ok, scope := SelectScope("configure", cfg)
 	if !ok || scope.Pipeline != PipelinePublic {
 		t.Fatalf("public telemetry must default to enabled: ok=%v scope=%+v", ok, scope)
 	}
 	cfg.Enabled = false
-	if ok, _ := SelectScope("configure", ProfileSnapshot{}, cfg); ok {
+	if ok, _ := SelectScope("configure", cfg); ok {
 		t.Fatal("explicitly disabled public telemetry must not collect")
 	}
 	cfg.Enabled = true
 	t.Setenv("ALIYUN_CLI_TELEMETRY_OPTOUT", "true")
-	if ok, _ := SelectScope("configure", ProfileSnapshot{}, cfg); ok {
+	if ok, _ := SelectScope("configure", cfg); ok {
 		t.Fatal("global opt out must disable public telemetry")
 	}
 }
@@ -176,16 +178,16 @@ func TestSelectScopeKeepsInnerAndPublicPluginsSeparated(t *testing.T) {
 
 	cfg := DefaultConfig()
 	cfg.Enabled = true
-	ok, scope := SelectScope("inner-test", ProfileSnapshot{}, cfg)
+	ok, scope := SelectScope("inner-test", cfg)
 	if !ok || scope.Pipeline != PipelineInner {
 		t.Fatalf("inner plugin did not use inner pipeline: ok=%v scope=%+v", ok, scope)
 	}
 	off := false
 	cfg.InnerAutoOn = &off
-	if ok, _ := SelectScope("inner-test", ProfileSnapshot{}, cfg); ok {
+	if ok, _ := SelectScope("inner-test", cfg); ok {
 		t.Fatal("disabled inner plugin must not fall through to public telemetry")
 	}
-	ok, scope = SelectScope("public-test", ProfileSnapshot{}, cfg)
+	ok, scope = SelectScope("public-test", cfg)
 	if !ok ||
 		scope.Pipeline != PipelinePublic ||
 		scope.PluginName != "aliyun-cli-public-test" ||
@@ -249,7 +251,6 @@ func TestWriteEvent(t *testing.T) {
 			PluginName: "p", PluginVer: "1",
 		},
 		RootArgs:   []string{"rdc", "list"},
-		Profile:    ProfileSnapshot{RegionID: "cn-hangzhou"},
 		InstanceID: "test-id",
 	})
 	if err != nil {
@@ -370,17 +371,14 @@ func TestUploadFileUsesVersionedExtensibleContract(t *testing.T) {
 		Pipeline:     "inner",
 		InnerTrigger: "plugin_manifest",
 		Command:      "rdc list",
-		RawCommand:   "rdc list secret-position-value",
 		Params:       []string{"region-id", "output"},
 		Result:       "Success",
-		ErrorSummary: "must not be uploaded",
 		DurationMs:   42,
 		Plugin:       "aliyun-cli-rdc@1.0.0",
 		CLIVersion:   "3.0.300",
 		OS:           "darwin",
 		Arch:         "arm64",
 		GoVersion:    "go1.25.1",
-		RegionID:     "cn-hangzhou",
 		Mode:         "default",
 		InstanceID:   "d69b3a04-b81c-47e7-a882-504e5865352d",
 	}
