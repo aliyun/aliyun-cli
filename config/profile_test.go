@@ -438,6 +438,28 @@ func TestOverwriteWithFlagsExplicitOIDCSourceClearsTheOther(t *testing.T) {
 	saved.OverwriteWithFlags(ctx)
 	assert.Equal(t, "fresh-token-value", saved.OIDCToken)
 	assert.Empty(t, saved.OIDCTokenFile)
+
+	keptToken, keptFile := applyExclusiveOIDCTokenSource(nil, nil, "saved-token", "/saved/file")
+	assert.Equal(t, "saved-token", keptToken)
+	assert.Equal(t, "/saved/file", keptFile)
+
+	ctx = newCtx()
+	tokenFlag = OIDCTokenFlag(ctx.Flags())
+	fileFlag = OIDCTokenFileFlag(ctx.Flags())
+	tokenFlag.SetAssigned(true)
+	tokenFlag.SetValue("both-token")
+	fileFlag.SetAssigned(true)
+	fileFlag.SetValue("/both/file")
+	bothToken, bothFile := applyExclusiveOIDCTokenSource(tokenFlag, fileFlag, "saved-token", "/saved/file")
+	assert.Equal(t, "both-token", bothToken)
+	assert.Equal(t, "/both/file", bothFile)
+
+	clearedFileToken, clearedFile := applyExclusiveOIDCTokenSource(tokenFlag, nil, "saved-token", "/saved/file")
+	assert.Equal(t, "both-token", clearedFileToken)
+	assert.Empty(t, clearedFile)
+	clearedToken, keptExplicitFile := applyExclusiveOIDCTokenSource(nil, fileFlag, "saved-token", "/saved/file")
+	assert.Empty(t, clearedToken)
+	assert.Equal(t, "/both/file", keptExplicitFile)
 }
 
 func TestOverwriteWithFlagsWithStsTokenEnv(t *testing.T) {
