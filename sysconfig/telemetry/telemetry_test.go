@@ -327,6 +327,20 @@ func TestCacheRetentionUsesSafeDefaultForInvalidValues(t *testing.T) {
 	}
 }
 
+func TestTelemetryUploadEndpointDefaultAndOverride(t *testing.T) {
+	t.Setenv("ALIYUN_CLI_TELEMETRY_ENDPOINT", "")
+	const productionEndpoint = "https://openapi-acore.aliyuncs.com/v1/telemetry/events"
+	if got := telemetryUploadEndpoint(); got != productionEndpoint {
+		t.Fatalf("default endpoint = %q, want %q", got, productionEndpoint)
+	}
+
+	const override = "http://127.0.0.1:18080/v1/telemetry/events"
+	t.Setenv("ALIYUN_CLI_TELEMETRY_ENDPOINT", override)
+	if got := telemetryUploadEndpoint(); got != override {
+		t.Fatalf("override endpoint = %q, want %q", got, override)
+	}
+}
+
 func TestUploadFileUsesVersionedExtensibleContract(t *testing.T) {
 	var batches [][]map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
