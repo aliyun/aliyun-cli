@@ -292,8 +292,11 @@ func TestDownloadBinary_ContextCancel(t *testing.T) {
 
 func TestBaseStripFlagsIncludesOIDCToken(t *testing.T) {
 	flags := BaseStripFlags()
-	if !flags["oidc-token"] {
-		t.Fatal("oidc-token should be stripped from child commands")
+	if !flags["oidc-token-value"] {
+		t.Fatal("oidc-token-value should be stripped from child commands")
+	}
+	if flags["oidc-token"] {
+		t.Fatal("oidc-token belongs to the STS API and must be forwarded")
 	}
 	if !flags["oidc-token-file"] {
 		t.Fatal("oidc-token-file should be stripped from child commands")

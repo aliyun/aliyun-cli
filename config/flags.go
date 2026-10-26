@@ -45,7 +45,7 @@ const (
 	ExpiredSecondsFlagName             = "expired-seconds"
 	ProcessCommandFlagName             = "process-command"
 	OIDCProviderARNFlagName            = "oidc-provider-arn"
-	OIDCTokenFlagName                  = "oidc-token"
+	OIDCTokenFlagName                  = "oidc-token-value"
 	OIDCTokenFileFlagName              = "oidc-token-file"
 	SSOSessionFlagName                 = "sso-session"
 	CloudSSOSignInUrlFlagName          = "cloud-sso-sign-in-url"
@@ -432,8 +432,8 @@ func NewOIDCTokenFlag() *cli.Flag {
 		Name:         OIDCTokenFlagName,
 		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
-			"use `--oidc-token <OIDCToken>` to assign an OIDC token directly",
-			"使用 `--oidc-token <OIDCToken>` 直接指定 OIDC Token"),
+			"use `--oidc-token-value <OIDCToken>` to assign the OIDC token string",
+			"使用 `--oidc-token-value <OIDCToken>` 直接指定 OIDC Token 内容"),
 	}
 }
 

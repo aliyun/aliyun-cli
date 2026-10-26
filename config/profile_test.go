@@ -754,7 +754,7 @@ func TestCommandOIDCTokenWithoutTokenFile(t *testing.T) {
 		"--mode", "OIDC",
 		"--region", "cn-hangzhou",
 		"--oidc-provider-arn", "acs:ram::123456789:oidc-provider/test",
-		"--oidc-token", "header.payload.sig",
+		"--oidc-token-value", "header.payload.sig",
 		"--ram-role-arn", "acs:ram::123456789:role/test",
 		"--role-session-name", "ack-session",
 	}, ctx)
