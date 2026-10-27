@@ -1,8 +1,6 @@
 package plugin
 
 import (
-	"errors"
-	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -43,23 +41,16 @@ func TestPluginSourceOverrideRejectsInvalidScheme(t *testing.T) {
 	require.ErrorContains(t, command.Run(ctx, nil), "plugin URL must use https://")
 }
 
-type failingIndexTransport struct{}
-
-func (failingIndexTransport) RoundTrip(*http.Request) (*http.Response, error) {
-	return nil, errors.New("index unavailable")
-}
-
 func TestHiddenInstallCommandsPropagateIndexErrors(t *testing.T) {
 	for _, command := range []*cli.Command{newInstallAllCommand(), newInstallCustomCommand()} {
 		t.Run(command.Name, func(t *testing.T) {
 			t.Setenv(EnvPluginsDir, t.TempDir())
-			previous := http.DefaultTransport
-			http.DefaultTransport = failingIndexTransport{}
-			t.Cleanup(func() { http.DefaultTransport = previous })
 			ctx := newTestContext()
 			ctx.EnterCommand(command)
 			ctx.Flags().Get("enable-pre").SetAssigned(true)
-			require.ErrorContains(t, command.Run(ctx, nil), "index unavailable")
+			// Official source always verifies signatures first. Test binaries
+			// do not embed a trust root, so install fails closed before HTTP.
+			require.ErrorContains(t, command.Run(ctx, nil), "artifact trust bootstrap root is not configured")
 		})
 	}
 }

@@ -299,10 +299,7 @@ func (m *Manager) fetchWithCache(url, cacheFile string, result interface{}) erro
 }
 
 func (m *Manager) GetIndex() (*Index, error) {
-	if m.indexURL == "" {
-		if m.trustClient == nil {
-			return nil, fmt.Errorf("plugin index trust client is not configured")
-		}
+	if m.indexURL == "" && m.trustClient != nil {
 		artifact, err := m.trustClient.FetchArtifact(context.Background(), trust.PurposePluginIndex, "plugins")
 		if err == nil {
 			var index Index
