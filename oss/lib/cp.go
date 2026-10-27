@@ -2422,10 +2422,7 @@ func (cc *CopyCommand) downloadFiles(srcURL CloudURL, destURL FileURL) error {
 			relativeKey = srcURL.object[index+1:]
 		}
 
-		var workers sync.WaitGroup
-		workers.Go(func() { cc.objectStatistic(bucket, srcURL) })
 		err := cc.downloadSingleFileWithReport(bucket, objectInfoType{prefix, relativeKey, -1, time.Now()}, filePath)
-		workers.Wait()
 		return cc.formatResultPrompt(err)
 	}
 	return cc.batchDownloadFiles(bucket, srcURL, filePath)
@@ -2535,6 +2532,10 @@ func (cc *CopyCommand) downloadSingleFile(bucket *oss.Bucket, objectInfo objectI
 	}
 
 	rsize := cc.getRangeSize(size)
+	if !cc.cpOption.recursive {
+		cc.monitor.updateScanSizeNum(rsize, 1)
+		cc.monitor.setScanEnd()
+	}
 	if cc.skipDownload(fileName, srct, CloudURLToString(bucket.BucketName, object)) {
 		return true, nil, rsize, msg
 	}
@@ -2955,10 +2956,7 @@ func (cc *CopyCommand) copyFiles(srcURL, destURL CloudURL) error {
 			relativeKey = srcURL.object[index+1:]
 		}
 
-		var workers sync.WaitGroup
-		workers.Go(func() { cc.objectStatistic(bucket, srcURL) })
 		err := cc.copySingleFileWithReport(bucket, objectInfoType{prefix, relativeKey, -1, time.Now()}, srcURL, destURL)
-		workers.Wait()
 		return cc.formatResultPrompt(err)
 	}
 
@@ -3029,6 +3027,10 @@ func (cc *CopyCommand) copySingleFile(bucket *oss.Bucket, objectInfo objectInfoT
 		}
 	}
 
+	if !cc.cpOption.recursive {
+		cc.monitor.updateScanSizeNum(size, 1)
+		cc.monitor.setScanEnd()
+	}
 	if skip, err := cc.skipCopy(destURL, destObject, srct); err != nil || skip {
 		return skip, err, size, msg
 	}
