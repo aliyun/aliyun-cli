@@ -2422,8 +2422,10 @@ func (cc *CopyCommand) downloadFiles(srcURL CloudURL, destURL FileURL) error {
 			relativeKey = srcURL.object[index+1:]
 		}
 
-		go cc.objectStatistic(bucket, srcURL)
+		var workers sync.WaitGroup
+		workers.Go(func() { cc.objectStatistic(bucket, srcURL) })
 		err := cc.downloadSingleFileWithReport(bucket, objectInfoType{prefix, relativeKey, -1, time.Now()}, filePath)
+		workers.Wait()
 		return cc.formatResultPrompt(err)
 	}
 	return cc.batchDownloadFiles(bucket, srcURL, filePath)
@@ -2953,8 +2955,10 @@ func (cc *CopyCommand) copyFiles(srcURL, destURL CloudURL) error {
 			relativeKey = srcURL.object[index+1:]
 		}
 
-		go cc.objectStatistic(bucket, srcURL)
+		var workers sync.WaitGroup
+		workers.Go(func() { cc.objectStatistic(bucket, srcURL) })
 		err := cc.copySingleFileWithReport(bucket, objectInfoType{prefix, relativeKey, -1, time.Now()}, srcURL, destURL)
+		workers.Wait()
 		return cc.formatResultPrompt(err)
 	}
 
