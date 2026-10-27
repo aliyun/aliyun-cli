@@ -19,32 +19,17 @@ import (
 	"strings"
 )
 
+const TelemetryOptOutEnv = "ALIBABA_CLOUD_CLI_TELEMETRY_OPTOUT"
+
 func envTruthy(key string) bool {
 	v := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
 	return v == "1" || v == "true" || v == "yes"
 }
 
-func GlobalOptOut() bool {
-	return envTruthy("ALIYUN_CLI_TELEMETRY_OPTOUT")
+func OptOut() bool {
+	return envTruthy(TelemetryOptOutEnv)
 }
 
-func InnerOptOut() bool {
-	return envTruthy("ALIYUN_CLI_TELEMETRY_INNER_OPTOUT")
-}
-
-func InnerPipelineDisabled(cfg *Config) bool {
-	if GlobalOptOut() || InnerOptOut() {
-		return true
-	}
-	if !InnerAutoOnEnabled(cfg) {
-		return true
-	}
-	return false
-}
-
-func PublicPipelineDisabled(cfg *Config) bool {
-	if GlobalOptOut() {
-		return true
-	}
-	return cfg == nil || !cfg.Enabled
+func Disabled(cfg *Config) bool {
+	return OptOut() || cfg == nil || !cfg.Enabled
 }

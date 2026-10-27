@@ -15,6 +15,7 @@
 package telemetry
 
 import (
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -38,21 +39,21 @@ func DetectPluginManagement(args []string) *PluginManagementEvent {
 		return nil
 	}
 	operation := strings.ToLower(strings.TrimSpace(args[1]))
+	event := &PluginManagementEvent{Operation: operation}
 	switch operation {
-	case "install", "uninstall", "update":
-	case "install-all", "install-custom":
-		operation = strings.ReplaceAll(operation, "-", "_")
+	case "list", "list-remote", "search", "show":
+		return event
+	case "install", "uninstall", "update", "install-all", "install-custom":
 	default:
 		return nil
 	}
 
-	event := &PluginManagementEvent{Operation: operation}
 	event.PluginNames = pluginFlagValues(args[2:], "name", "names")
 	if value := firstFlagValue(args[2:], "version"); value != "" {
 		event.ToVersion = sanitizeVersion(value)
 	}
 	if hasFlag(args[2:], "package") {
-		event.SourceType = "package"
+		event.SourceType = packageSourceType(firstFlagValue(args[2:], "package"))
 	} else if operation != "uninstall" {
 		event.SourceType = "catalog"
 	}
@@ -66,6 +67,19 @@ func DetectPluginManagement(args []string) *PluginManagementEvent {
 		}
 	}
 	return event
+}
+
+func packageSourceType(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if parsed, err := url.Parse(value); err == nil &&
+		strings.EqualFold(parsed.Scheme, "https") &&
+		parsed.Host != "" {
+		return "remote_package"
+	}
+	return "local_package"
 }
 
 func CompletePluginManagement(event *PluginManagementEvent) {

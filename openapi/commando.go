@@ -251,7 +251,8 @@ func (e *kebabProfileFlagCaseError) Error() string {
 
 func (e *kebabProfileFlagCaseError) Unwrap() error { return e.cause }
 
-func (*kebabProfileFlagCaseError) AIRecoveryEligible() {}
+func (*kebabProfileFlagCaseError) AIRecoveryEligible()    {}
+func (*kebabProfileFlagCaseError) LocalErrorCode() string { return "INVALID_FLAG" }
 
 // suggestKebabProfileFlagCase preserves case-sensitive rejection while adding
 // the one host-flag correction approved for kebab OpenAPI commands.
@@ -274,9 +275,10 @@ type sectionHelpAllRecoveryError struct {
 	command string
 }
 
-func (e *sectionHelpAllRecoveryError) Error() string     { return e.cause.Error() }
-func (e *sectionHelpAllRecoveryError) Unwrap() error     { return e.cause }
-func (*sectionHelpAllRecoveryError) AIRecoveryEligible() {}
+func (e *sectionHelpAllRecoveryError) Error() string        { return e.cause.Error() }
+func (e *sectionHelpAllRecoveryError) Unwrap() error        { return e.cause }
+func (*sectionHelpAllRecoveryError) AIRecoveryEligible()    {}
+func (*sectionHelpAllRecoveryError) LocalErrorCode() string { return "HELP_OPTION_ERROR" }
 
 func (e *sectionHelpAllRecoveryError) GetTip(language string) string {
 	message := "Search this Help:"

@@ -50,7 +50,8 @@ func (e *ExternalFlagRejectError) Error() string {
 	return e.Message
 }
 
-func (*ExternalFlagRejectError) AIRecoveryEligible() {}
+func (*ExternalFlagRejectError) AIRecoveryEligible()    {}
+func (*ExternalFlagRejectError) LocalErrorCode() string { return "INVALID_FLAG" }
 
 // ParseOptions carries host-specific parser extensions for one invocation.
 type ParseOptions struct {

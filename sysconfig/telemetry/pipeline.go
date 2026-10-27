@@ -24,7 +24,6 @@ const (
 type Scope struct {
 	Active       bool
 	Pipeline     string
-	Trigger      string
 	PluginName   string
 	PluginVer    string
 	CommandToken string
@@ -44,7 +43,6 @@ func DetectInnerScope(commandToken string) Scope {
 	return Scope{
 		Active:       true,
 		Pipeline:     PipelineInner,
-		Trigger:      "plugin_manifest",
 		PluginName:   lp.Name,
 		PluginVer:    lp.Version,
 		CommandToken: commandToken,
@@ -52,23 +50,16 @@ func DetectInnerScope(commandToken string) Scope {
 }
 
 func SelectScope(commandToken string, cfg *Config) (bool, Scope) {
-	if commandToken == "" {
+	if commandToken == "" || Disabled(cfg) {
 		return false, Scope{}
 	}
 	inner := DetectInnerScope(commandToken)
 	if inner.Active {
-		if InnerPipelineDisabled(cfg) {
-			return false, Scope{}
-		}
 		return true, inner
-	}
-	if PublicPipelineDisabled(cfg) {
-		return false, Scope{}
 	}
 	scope := Scope{
 		Active:       true,
 		Pipeline:     PipelinePublic,
-		Trigger:      "public_default",
 		CommandToken: commandToken,
 	}
 	if !plugin.IsReservedTopLevelCommand(commandToken) {
@@ -81,7 +72,7 @@ func SelectScope(commandToken string, cfg *Config) (bool, Scope) {
 }
 
 func ShouldCollectInner(commandToken string, cfg *Config) (bool, Scope) {
-	if InnerPipelineDisabled(cfg) {
+	if Disabled(cfg) {
 		return false, Scope{}
 	}
 	scope := DetectInnerScope(commandToken)

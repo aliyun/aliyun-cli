@@ -25,25 +25,15 @@ const ConfigFileName = "telemetry.json"
 
 type Config struct {
 	Enabled             bool   `json:"enabled"`
-	InnerAutoOn         *bool  `json:"inner_auto_on,omitempty"`
 	InstanceID          string `json:"instance_id,omitempty"`
 	LastUploadedAtInner string `json:"last_uploaded_at_inner,omitempty"`
 	LastUploadedAt      string `json:"last_uploaded_at,omitempty"`
 }
 
 func DefaultConfig() *Config {
-	on := true
 	return &Config{
-		Enabled:     true,
-		InnerAutoOn: &on,
+		Enabled: true,
 	}
-}
-
-func InnerAutoOnEnabled(c *Config) bool {
-	if c == nil || c.InnerAutoOn == nil {
-		return true
-	}
-	return *c.InnerAutoOn
 }
 
 func GetConfigFilePath(configDir string) string {
@@ -77,10 +67,6 @@ func Load(configDir string) (*Config, error) {
 	var c Config
 	if err := json.Unmarshal(data, &c); err != nil {
 		return DefaultConfig(), nil
-	}
-	if c.InnerAutoOn == nil {
-		on := true
-		c.InnerAutoOn = &on
 	}
 	return &c, nil
 }

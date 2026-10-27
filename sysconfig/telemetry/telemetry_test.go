@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,24 +10,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alibabacloud-go/tea/tea"
+	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
+	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 )
 
-func TestGlobalAndInnerOptOut(t *testing.T) {
-	t.Setenv("ALIYUN_CLI_TELEMETRY_OPTOUT", "1")
-	if !GlobalOptOut() {
-		t.Fatal("expected global opt out")
-	}
-	t.Setenv("ALIYUN_CLI_TELEMETRY_OPTOUT", "")
-	t.Setenv("ALIYUN_CLI_TELEMETRY_INNER_OPTOUT", "yes")
-	if !InnerOptOut() {
-		t.Fatal("expected inner opt out")
+func TestTelemetryOptOut(t *testing.T) {
+	t.Setenv(TelemetryOptOutEnv, "1")
+	if !OptOut() {
+		t.Fatal("expected telemetry opt out")
 	}
 }
 
 func TestExtractParamNames(t *testing.T) {
 	got := ExtractParamNames([]string{"rdc", "list", "--region-id", "x", "--output=json", "-q"})
-	want := []string{"region-id", "output", "q"}
+	want := []string{"--region-id", "--output", "-q"}
 	if len(got) != len(want) {
 		t.Fatalf("got %v want %v", got, want)
 	}
@@ -48,8 +47,94 @@ func TestBuildEventKeepsDeepPluginCommandHierarchy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if event.Command != "custom-plugin-resource-policy-list" {
+	if event.Command != "custom-plugin resource policy list" {
 		t.Fatalf("unexpected command field: %q", event.Command)
+	}
+}
+
+func TestBuildEventTimestampUsesUTC(t *testing.T) {
+	event, err := BuildEvent(BuildInput{
+		Scope:      Scope{Active: true, Pipeline: PipelinePublic},
+		RootArgs:   []string{"version"},
+		InstanceID: "instance-id",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	timestamp, err := time.Parse(time.RFC3339, event.Timestamp)
+	if err != nil {
+		t.Fatalf("invalid timestamp %q: %v", event.Timestamp, err)
+	}
+	_, offset := timestamp.Zone()
+	if offset != 0 {
+		t.Fatalf("timestamp must use UTC: %q", event.Timestamp)
+	}
+}
+
+func TestBuildEventClassifiesConfigurationCommands(t *testing.T) {
+	event, err := BuildEvent(BuildInput{
+		Scope:      Scope{Active: true, Pipeline: PipelinePublic, CommandToken: "configure"},
+		RootArgs:   []string{"configure", "telemetry", "show"},
+		InstanceID: "instance-id",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.EventType != EventTypeConfigurationCompleted {
+		t.Fatalf("unexpected event type: %q", event.EventType)
+	}
+	if event.CommandType != CommandTypeCore {
+		t.Fatalf("unexpected command type: %q", event.CommandType)
+	}
+}
+
+func TestBuildEventClassifiesLocalAndAPIErrors(t *testing.T) {
+	build := func(err error) Event {
+		t.Helper()
+		event, buildErr := BuildEvent(BuildInput{
+			Scope:      Scope{Active: true, Pipeline: PipelinePublic, CommandToken: "ecs"},
+			RootArgs:   []string{"ecs", "describe-instances"},
+			InstanceID: "instance-id",
+			Err:        err,
+		})
+		if buildErr != nil {
+			t.Fatal(buildErr)
+		}
+		return event
+	}
+
+	local := build(cli.NewInvalidFlagError("--bad", nil))
+	if local.Result != "UserFault" ||
+		local.LocalErrorCode != LocalErrorInvalidFlag ||
+		local.APIErrorCode != "" ||
+		local.HTTPStatusCode != 0 {
+		t.Fatalf("unexpected local error event: %+v", local)
+	}
+
+	teaEvent := build(fmt.Errorf("runtime call failed: %w", tea.NewSDKError(map[string]any{
+		"statusCode": 400,
+		"code":       "InvalidParameter.Tags",
+		"message":    "must-not-be-collected",
+	})))
+	if teaEvent.Result != "Failure" ||
+		teaEvent.LocalErrorCode != "" ||
+		teaEvent.APIErrorCode != "InvalidParameter.Tags" ||
+		teaEvent.HTTPStatusCode != 400 {
+		t.Fatalf("unexpected Tea API error event: %+v", teaEvent)
+	}
+	uploaded := newUploadEvent(teaEvent)
+	if uploaded.Attributes["apiErrorCode"] != "InvalidParameter.Tags" ||
+		uploaded.Attributes["httpStatusCode"] != 400 {
+		t.Fatalf("unexpected uploaded API error attributes: %+v", uploaded.Attributes)
+	}
+
+	serverEvent := build(sdkerrors.NewServerError(
+		429,
+		`{"RequestId":"must-not-be-collected","Code":"Throttling.User","Message":"must-not-be-collected"}`,
+		"",
+	))
+	if serverEvent.APIErrorCode != "Throttling.User" || serverEvent.HTTPStatusCode != 429 {
+		t.Fatalf("unexpected legacy API error event: %+v", serverEvent)
 	}
 }
 
@@ -72,7 +157,7 @@ func TestBuildEventLimitsOssCommandsToFixedDepth(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := commandToken + "-ls"
+		want := commandToken + " ls"
 		if event.Command != want {
 			t.Fatalf("%s command leaked positional values: %q", commandToken, event.Command)
 		}
@@ -107,13 +192,10 @@ func TestDetectInnerScopeUsesDynamicReservedCommands(t *testing.T) {
 	}
 }
 
-func TestInnerAutoOnDefault(t *testing.T) {
+func TestTelemetryEnabledByDefault(t *testing.T) {
 	cfg := DefaultConfig()
-	if !InnerAutoOnEnabled(cfg) {
-		t.Fatal("inner auto on should default true")
-	}
 	if !cfg.Enabled {
-		t.Fatal("public telemetry should default to enabled")
+		t.Fatal("telemetry should default to enabled")
 	}
 }
 
@@ -150,9 +232,9 @@ func TestSelectScopeUsesPublicPipelineByDefaultAndAllowsOptOut(t *testing.T) {
 		t.Fatal("explicitly disabled public telemetry must not collect")
 	}
 	cfg.Enabled = true
-	t.Setenv("ALIYUN_CLI_TELEMETRY_OPTOUT", "true")
+	t.Setenv(TelemetryOptOutEnv, "true")
 	if ok, _ := SelectScope("configure", cfg); ok {
-		t.Fatal("global opt out must disable public telemetry")
+		t.Fatal("environment opt out must disable telemetry")
 	}
 }
 
@@ -182,11 +264,11 @@ func TestSelectScopeKeepsInnerAndPublicPluginsSeparated(t *testing.T) {
 	if !ok || scope.Pipeline != PipelineInner {
 		t.Fatalf("inner plugin did not use inner pipeline: ok=%v scope=%+v", ok, scope)
 	}
-	off := false
-	cfg.InnerAutoOn = &off
+	cfg.Enabled = false
 	if ok, _ := SelectScope("inner-test", cfg); ok {
-		t.Fatal("disabled inner plugin must not fall through to public telemetry")
+		t.Fatal("disabled telemetry must not collect inner plugin events")
 	}
+	cfg.Enabled = true
 	ok, scope = SelectScope("public-test", cfg)
 	if !ok ||
 		scope.Pipeline != PipelinePublic ||
@@ -199,7 +281,7 @@ func TestSelectScopeKeepsInnerAndPublicPluginsSeparated(t *testing.T) {
 func TestBuildPluginManagementEvent(t *testing.T) {
 	event, err := BuildEvent(BuildInput{
 		Scope: Scope{
-			Active: true, Pipeline: PipelinePublic, Trigger: "public_default",
+			Active: true, Pipeline: PipelinePublic,
 		},
 		RootArgs: []string{
 			"plugin", "install",
@@ -220,9 +302,6 @@ func TestBuildPluginManagementEvent(t *testing.T) {
 	}
 	if event.EventType != "cli.plugin.management.completed" {
 		t.Fatalf("unexpected event type: %s", event.EventType)
-	}
-	if event.InnerTrigger != "" {
-		t.Fatalf("public event must not have inner trigger: %q", event.InnerTrigger)
 	}
 	action := event.PluginAction
 	if action == nil ||
@@ -247,7 +326,7 @@ func TestWriteEvent(t *testing.T) {
 	cache := GetInnerCacheDir(dir)
 	ev, err := BuildEvent(BuildInput{
 		Scope: Scope{
-			Active: true, Pipeline: PipelineInner, Trigger: "plugin_manifest",
+			Active: true, Pipeline: PipelineInner,
 			PluginName: "p", PluginVer: "1",
 		},
 		RootArgs:   []string{"rdc", "list"},
@@ -365,22 +444,22 @@ func TestUploadFileUsesVersionedExtensibleContract(t *testing.T) {
 	configDir := t.TempDir()
 	cacheDir := GetInnerCacheDir(configDir)
 	event := Event{
-		Schema:       "1",
-		EventID:      "44f505ad-0b0d-4ae8-bbd0-8db24b288fa2",
-		Timestamp:    "2026-10-09T12:20:30Z",
-		Pipeline:     "inner",
-		InnerTrigger: "plugin_manifest",
-		Command:      "rdc list",
-		Params:       []string{"region-id", "output"},
-		Result:       "Success",
-		DurationMs:   42,
-		Plugin:       "aliyun-cli-rdc@1.0.0",
-		CLIVersion:   "3.0.300",
-		OS:           "darwin",
-		Arch:         "arm64",
-		GoVersion:    "go1.25.1",
-		Mode:         "default",
-		InstanceID:   "d69b3a04-b81c-47e7-a882-504e5865352d",
+		Schema:      "1",
+		EventID:     "44f505ad-0b0d-4ae8-bbd0-8db24b288fa2",
+		Timestamp:   "2026-10-09T12:20:30Z",
+		Pipeline:    "inner",
+		CommandType: CommandTypePluginGo,
+		Command:     "rdc list",
+		Params:      []string{"--region-id", "--output"},
+		Result:      "Success",
+		DurationMs:  42,
+		Plugin:      "aliyun-cli-rdc@1.0.0",
+		CLIVersion:  "3.0.300",
+		OS:          "darwin",
+		Arch:        "arm64",
+		GoVersion:   "go1.25.1",
+		Mode:        "default",
+		InstanceID:  "d69b3a04-b81c-47e7-a882-504e5865352d",
 	}
 	cacheFile, err := WriteEvent(cacheDir, event)
 	if err != nil {
@@ -408,6 +487,12 @@ func TestUploadFileUsesVersionedExtensibleContract(t *testing.T) {
 	}
 	if attributes["command"] != event.Command {
 		t.Fatalf("unexpected attributes: %#v", attributes)
+	}
+	if attributes["pipeline"] != PipelineInner {
+		t.Fatalf("inner upload must include pipeline=inner: %#v", attributes)
+	}
+	if attributes["commandType"] != CommandTypePluginGo {
+		t.Fatalf("unexpected command type: %#v", attributes)
 	}
 	if _, exists := got["rawCommand"]; exists {
 		t.Fatal("raw command must not be uploaded")
@@ -472,13 +557,11 @@ func TestUploadPublicPluginManagementEventUsesSharedEndpoint(t *testing.T) {
 		t.Fatalf("unexpected upload: %#v", got)
 	}
 	attributes, ok := got["attributes"].(map[string]any)
-	if !ok ||
-		attributes["pipeline"] != PipelinePublic ||
-		attributes["operation"] != "install" {
+	if !ok || attributes["operation"] != "install" {
 		t.Fatalf("unexpected attributes: %#v", got["attributes"])
 	}
-	if _, exists := attributes["innerTrigger"]; exists {
-		t.Fatalf("public event must not include innerTrigger: %#v", attributes)
+	if _, exists := attributes["pipeline"]; exists {
+		t.Fatalf("public event must omit pipeline: %#v", attributes)
 	}
 	cfg, err := Load(configDir)
 	if err != nil {

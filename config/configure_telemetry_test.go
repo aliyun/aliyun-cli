@@ -49,6 +49,17 @@ func enterTelemetrySubcommand(t *testing.T, ctx *cli.Context, name string) *cli.
 	return sub
 }
 
+func TestConfigureTelemetryDoesNotInheritPersistentFlags(t *testing.T) {
+	ctx, _, _ := testTelemetryContext(t)
+	cmd := NewConfigureTelemetryCommand()
+	require.True(t, cmd.DisablePersistentFlags)
+
+	ctx.EnterCommand(cmd)
+	for _, flag := range ctx.Flags().Flags() {
+		require.Equal(t, "help", flag.Name)
+	}
+}
+
 func TestConfigureTelemetryEnableAndDisable(t *testing.T) {
 	ctx, _, configDir := testTelemetryContext(t)
 	enable := enterTelemetrySubcommand(t, ctx, "enable")
@@ -66,13 +77,14 @@ func TestConfigureTelemetryEnableAndDisable(t *testing.T) {
 	require.False(t, cfg.Enabled)
 }
 
-func TestConfigureTelemetryShowIncludesPublicState(t *testing.T) {
+func TestConfigureTelemetryShowIncludesState(t *testing.T) {
 	ctx, stdout, configDir := testTelemetryContext(t)
 	require.NoError(t, telemetry.Save(configDir, &telemetry.Config{
 		Enabled: true,
 	}))
 	show := enterTelemetrySubcommand(t, ctx, "show")
 	require.NoError(t, show.Run(ctx, nil))
-	require.Contains(t, stdout.String(), `"public_enabled": true`)
+	require.Contains(t, stdout.String(), `"enabled": true`)
+	require.Contains(t, stdout.String(), `"environment_opt_out": false`)
 	require.Contains(t, stdout.String(), `"public_cache_files": 0`)
 }
