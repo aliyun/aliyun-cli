@@ -444,22 +444,26 @@ func TestUploadFileUsesVersionedExtensibleContract(t *testing.T) {
 	configDir := t.TempDir()
 	cacheDir := GetInnerCacheDir(configDir)
 	event := Event{
-		Schema:      "1",
-		EventID:     "44f505ad-0b0d-4ae8-bbd0-8db24b288fa2",
-		Timestamp:   "2026-10-09T12:20:30Z",
-		Pipeline:    "inner",
-		CommandType: CommandTypePluginGo,
-		Command:     "rdc list",
-		Params:      []string{"--region-id", "--output"},
-		Result:      "Success",
-		DurationMs:  42,
-		Plugin:      "aliyun-cli-rdc@1.0.0",
-		CLIVersion:  "3.0.300",
-		OS:          "darwin",
-		Arch:        "arm64",
-		GoVersion:   "go1.25.1",
-		Mode:        "default",
-		InstanceID:  "d69b3a04-b81c-47e7-a882-504e5865352d",
+		Schema:             "1",
+		EventID:            "44f505ad-0b0d-4ae8-bbd0-8db24b288fa2",
+		Timestamp:          "2026-10-09T12:20:30Z",
+		Pipeline:           "inner",
+		CommandType:        CommandTypePluginGo,
+		Command:            "rdc list",
+		Params:             []string{"--region-id", "--output"},
+		Result:             "Success",
+		DurationMs:         42,
+		Plugin:             "aliyun-cli-rdc@1.0.0",
+		CLIVersion:         "3.0.300",
+		OS:                 "darwin",
+		Arch:               "arm64",
+		GoVersion:          "go1.25.1",
+		LinuxDistroName:    "Alibaba Cloud Linux",
+		LinuxDistroID:      "alinux",
+		LinuxDistroVersion: "3.2104",
+		EnvironmentNames:   []string{"ALIBABA_CLOUD_REGION_ID"},
+		Mode:               "default",
+		InstanceID:         "d69b3a04-b81c-47e7-a882-504e5865352d",
 	}
 	cacheFile, err := WriteEvent(cacheDir, event)
 	if err != nil {
@@ -493,6 +497,15 @@ func TestUploadFileUsesVersionedExtensibleContract(t *testing.T) {
 	}
 	if attributes["commandType"] != CommandTypePluginGo {
 		t.Fatalf("unexpected command type: %#v", attributes)
+	}
+	if attributes["linuxDistroName"] != "Alibaba Cloud Linux" ||
+		attributes["linuxDistroId"] != "alinux" ||
+		attributes["linuxDistroVersion"] != "3.2104" {
+		t.Fatalf("unexpected Linux distro attributes: %#v", attributes)
+	}
+	environmentNames, ok := attributes["environmentVariableNames"].([]any)
+	if !ok || len(environmentNames) != 1 || environmentNames[0] != "ALIBABA_CLOUD_REGION_ID" {
+		t.Fatalf("unexpected environment variable names: %#v", attributes)
 	}
 	if _, exists := got["rawCommand"]; exists {
 		t.Fatal("raw command must not be uploaded")

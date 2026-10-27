@@ -51,28 +51,32 @@ const (
 var safeAPIErrorCodePattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
 
 type Event struct {
-	Schema         string                 `json:"schema"`
-	EventID        string                 `json:"event_id"`
-	EventType      string                 `json:"event_type"`
-	Timestamp      string                 `json:"timestamp"`
-	Pipeline       string                 `json:"pipeline"`
-	CommandType    string                 `json:"command_type,omitempty"`
-	Command        string                 `json:"command"`
-	Params         []string               `json:"params,omitempty"`
-	Result         string                 `json:"result"`
-	LocalErrorCode string                 `json:"local_error_code,omitempty"`
-	APIErrorCode   string                 `json:"api_error_code,omitempty"`
-	HTTPStatusCode int                    `json:"http_status_code,omitempty"`
-	DurationMs     int64                  `json:"duration_ms"`
-	Plugin         string                 `json:"plugin,omitempty"`
-	CLIVersion     string                 `json:"cli_version"`
-	OS             string                 `json:"os"`
-	Arch           string                 `json:"arch"`
-	GoVersion      string                 `json:"go_version"`
-	Mode           string                 `json:"mode"`
-	AgentName      string                 `json:"agent_name,omitempty"`
-	InstanceID     string                 `json:"instance_id"`
-	PluginAction   *PluginManagementEvent `json:"plugin_action,omitempty"`
+	Schema             string                 `json:"schema"`
+	EventID            string                 `json:"event_id"`
+	EventType          string                 `json:"event_type"`
+	Timestamp          string                 `json:"timestamp"`
+	Pipeline           string                 `json:"pipeline"`
+	CommandType        string                 `json:"command_type,omitempty"`
+	Command            string                 `json:"command"`
+	Params             []string               `json:"params,omitempty"`
+	Result             string                 `json:"result"`
+	LocalErrorCode     string                 `json:"local_error_code,omitempty"`
+	APIErrorCode       string                 `json:"api_error_code,omitempty"`
+	HTTPStatusCode     int                    `json:"http_status_code,omitempty"`
+	DurationMs         int64                  `json:"duration_ms"`
+	Plugin             string                 `json:"plugin,omitempty"`
+	CLIVersion         string                 `json:"cli_version"`
+	OS                 string                 `json:"os"`
+	Arch               string                 `json:"arch"`
+	GoVersion          string                 `json:"go_version"`
+	LinuxDistroName    string                 `json:"linux_distro_name,omitempty"`
+	LinuxDistroID      string                 `json:"linux_distro_id,omitempty"`
+	LinuxDistroVersion string                 `json:"linux_distro_version,omitempty"`
+	EnvironmentNames   []string               `json:"environment_names,omitempty"`
+	Mode               string                 `json:"mode"`
+	AgentName          string                 `json:"agent_name,omitempty"`
+	InstanceID         string                 `json:"instance_id"`
+	PluginAction       *PluginManagementEvent `json:"plugin_action,omitempty"`
 }
 
 type BuildInput struct {
@@ -190,29 +194,34 @@ func BuildEvent(in BuildInput) (Event, error) {
 	}
 	localErrorCode := normalizedLocalErrorCode(in.Err)
 	apiErrorCode, httpStatusCode := apiErrorDetails(in.Err)
+	linuxDistroName, linuxDistroID, linuxDistroVersion := detectLinuxDistro()
 
 	return Event{
-		Schema:         schemaVersion,
-		EventID:        eventID,
-		EventType:      eventType,
-		Timestamp:      time.Now().UTC().Format(time.RFC3339),
-		Pipeline:       in.Scope.Pipeline,
-		CommandType:    DetectCommandType(in.RootArgs),
-		Command:        command,
-		Params:         ExtractParamNames(in.RootArgs),
-		Result:         classifyResult(in.Err, in.ExitCode),
-		LocalErrorCode: localErrorCode,
-		APIErrorCode:   apiErrorCode,
-		HTTPStatusCode: httpStatusCode,
-		DurationMs:     in.DurationMs,
-		Plugin:         pluginField,
-		CLIVersion:     cli.GetVersion(),
-		OS:             runtime.GOOS,
-		Arch:           runtime.GOARCH,
-		GoVersion:      runtime.Version(),
-		Mode:           mode,
-		AgentName:      util.DetectAgentName(),
-		InstanceID:     in.InstanceID,
-		PluginAction:   in.PluginAction,
+		Schema:             schemaVersion,
+		EventID:            eventID,
+		EventType:          eventType,
+		Timestamp:          time.Now().UTC().Format(time.RFC3339),
+		Pipeline:           in.Scope.Pipeline,
+		CommandType:        DetectCommandType(in.RootArgs),
+		Command:            command,
+		Params:             ExtractParamNames(in.RootArgs),
+		Result:             classifyResult(in.Err, in.ExitCode),
+		LocalErrorCode:     localErrorCode,
+		APIErrorCode:       apiErrorCode,
+		HTTPStatusCode:     httpStatusCode,
+		DurationMs:         in.DurationMs,
+		Plugin:             pluginField,
+		CLIVersion:         cli.GetVersion(),
+		OS:                 runtime.GOOS,
+		Arch:               runtime.GOARCH,
+		GoVersion:          runtime.Version(),
+		LinuxDistroName:    linuxDistroName,
+		LinuxDistroID:      linuxDistroID,
+		LinuxDistroVersion: linuxDistroVersion,
+		EnvironmentNames:   alibabaCloudEnvironmentNames(),
+		Mode:               mode,
+		AgentName:          util.DetectAgentName(),
+		InstanceID:         in.InstanceID,
+		PluginAction:       in.PluginAction,
 	}, nil
 }
