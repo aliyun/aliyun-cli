@@ -141,6 +141,17 @@ aliyun plugin update --name <plugin-name>
 
 See [command usage](./docs/en/usage.md) and [plugin management](./docs/en/plugins.md) for the complete workflows.
 
+### Reuse a preinstalled ossutil
+
+Point `aliyun ossutil` at an existing ossutil v2 executable:
+
+```sh
+export ALIBABA_CLOUD_OSSUTIL_EXEC_PATH=/usr/local/bin/ossutil
+aliyun ossutil ls --region cn-hangzhou
+```
+
+With this variable set, the CLI skips ossutil downloads, installation, and remote version checks. Manage the binary's version through your image or package installation; it must support the CLI's `alicli` compatibility mode. Credentials, arguments, and input/output continue through the existing CLI integration. An invalid or non-executable path fails explicitly without falling back to installation. When the variable is unset or empty, the existing automatic installation and update behavior applies.
+
 ## Troubleshoot
 
 [OpenAPI Troubleshoot](https://api.aliyun.com/troubleshoot?source=github_sdk) helps diagnose OpenAPI request failures by `RequestId` or error message.
