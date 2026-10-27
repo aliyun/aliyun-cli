@@ -523,17 +523,29 @@ func TestInnerSourceStaysOffPublicDiscovery(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, got, "cli.aliyun-inc.com")
 	assert.Contains(t, got, "source_base=https%3A%2F%2Faliyuncli.alicdn.com%2Fplugins-v2")
-	assert.Equal(t,
-		"https://cli.aliyun-inc.com/registry_id/2/env/pre/plugins-v2/trust/timestamp.json",
-		client.repositoryTimestampURL(),
-	)
+	base := "https://cli.aliyun-inc.com/registry_id/2/env/pre/plugins-v2/trust/"
+	discovery := Discovery{}
+	client.useRepositoryMetadata(&discovery)
+	assert.Equal(t, base+"roots/", discovery.RootMetadataURI)
+	assert.Equal(t, base+"artifact-keys.json", discovery.ArtifactKeysURI)
+	assert.Equal(t, base+"timestamp.json", discovery.TimestampURI)
+	assert.Equal(t, base+"recovery/current.json", discovery.RecoveryPatchURI)
 	assert.Contains(t, client.cfg.MetadataHosts, "cli.aliyun-inc.com")
-	assert.NotContains(t, client.cfg.RecoveryHosts, "cli.aliyun-inc.com")
-	assert.NoError(t, client.validateURL(client.repositoryTimestampURL(), client.cfg.MetadataHosts))
+	assert.Contains(t, client.cfg.RecoveryHosts, "cli.aliyun-inc.com")
+	assert.NoError(t, client.validateURL(got, client.cfg.MetadataHosts))
+	assert.NoError(t, client.validateURL(discovery.ArtifactKeysURI, client.cfg.MetadataHosts))
+	assert.NoError(t, client.validateURL(discovery.RecoveryPatchURI, client.cfg.RecoveryHosts))
 	assert.Error(t, client.validateURL(
 		"https://evil.example/trust/timestamp.json",
 		client.cfg.MetadataHosts,
 	))
+}
+
+func TestDiscoveryURLOverrideAddsPreHost(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_CLI_TRUST_DISCOVERY_URL", "https://pre-api-workbench.aliyun.com/.well-known/aliyun-cli-trust.json")
+	client := New(Config{SourceBase: "https://aliyuncli.alicdn.com/plugins-v2"})
+	assert.Equal(t, "https://pre-api-workbench.aliyun.com/.well-known/aliyun-cli-trust.json", client.cfg.DiscoveryURL)
+	assert.Contains(t, client.cfg.MetadataHosts, "pre-api-workbench.aliyun.com")
 }
 
 func TestNewUsesConfiguredPluginSite(t *testing.T) {
