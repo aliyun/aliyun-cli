@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -59,6 +61,33 @@ func TestOfficialIndexUsesTrustClientWithoutUnsignedFallback(t *testing.T) {
 	fetcher.err = fmt.Errorf("bad signature")
 	_, err = manager.GetIndex()
 	assert.ErrorContains(t, err, "bad signature")
+	assert.Nil(t, manager.indexTrustVerification)
+}
+
+func TestUnsignedFallbackDoesNotInheritEarlierVerification(t *testing.T) {
+	index := &Index{Plugins: []PluginInfo{{Name: "aliyun-cli-fc"}}}
+	fetcher := usePluginTrustIndex(t, index)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"plugins":[{"name":"aliyun-cli-fc"}]}`))
+	}))
+	t.Cleanup(server.Close)
+	manager := &Manager{
+		rootDir:                    t.TempDir(),
+		trustClient:                fetcher,
+		sourceBase:                 server.URL,
+		skipSignatureVerify:        true,
+		skipPluginIndexCacheForCLI: true,
+		httpTransport:              server.Client().Transport,
+	}
+
+	_, err := manager.GetIndex()
+	require.NoError(t, err)
+	require.NotNil(t, manager.indexTrustVerification)
+
+	fetcher.err = fmt.Errorf("bad signature")
+	_, err = manager.GetIndex()
+	require.NoError(t, err)
+	assert.Nil(t, manager.indexTrustVerification)
 }
 
 func TestSourceBaseReconfiguresRepositoryTrustClient(t *testing.T) {

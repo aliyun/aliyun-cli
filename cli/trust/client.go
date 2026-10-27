@@ -139,13 +139,12 @@ func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*
 	if err != nil {
 		return nil, err
 	}
-	authority, err := checkedOrigin(discovery.Authority, c.cfg.AllowTestHTTP)
-	if err != nil {
-		return nil, fmt.Errorf("invalid discovery authority: %w", err)
-	}
 	if c.directRepositoryTrust() {
 		c.useRepositoryMetadata(&discovery)
 	}
+	// Recovery is checked at a fixed repository path. Unsigned Discovery must
+	// not be able to hide a published recovery patch.
+	recoveryURI := c.repositoryMetadataURL("recovery/current.json")
 	if err := c.validateURL(discovery.RootMetadataURI, c.cfg.MetadataHosts); err != nil {
 		return nil, err
 	}
@@ -155,51 +154,52 @@ func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*
 	if err := c.validateURL(discovery.TimestampURI, c.cfg.MetadataHosts); err != nil {
 		return nil, err
 	}
+	if err := c.validateURL(recoveryURI, c.cfg.RecoveryHosts); err != nil {
+		return nil, err
+	}
+	if !c.directRepositoryTrust() {
+		valid := false
+		for _, candidate := range discovery.OfficialArtifactOrigins {
+			if _, e := checkedOrigin(candidate, c.cfg.AllowTestHTTP); e == nil {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return nil, fmt.Errorf("discovery has no valid official artifact origin")
+		}
+	}
 
-	root, err := c.bootstrapRoot(now)
+	anchor, err := c.bootstrapRoot(now)
 	if err != nil {
 		return nil, err
 	}
-	origin := ""
-	for _, candidate := range discovery.OfficialArtifactOrigins {
-		if _, e := checkedOrigin(candidate, c.cfg.AllowTestHTTP); e == nil {
-			origin = candidate
-			break
-		}
+	// Rollback state is keyed by signed identity only. Discovery authority and
+	// origin order are unsigned and must not select a fresh state directory.
+	cacheDir := filepath.Join(c.cfg.CacheDir, digest(anchor.Authority), digest(c.cfg.SourceBase))
+	if err := atomicWrite(filepath.Join(cacheDir, sourceBaseFile), []byte(c.cfg.SourceBase), 0600); err != nil {
+		return nil, err
 	}
-	if origin == "" {
-		return nil, fmt.Errorf("discovery has no valid official artifact origin")
-	}
-	cacheDir := filepath.Join(
-		c.cfg.CacheDir, digest(authority), digest(c.cfg.SourceBase), digest(origin),
-	)
 	state := c.readState(cacheDir)
-	deny := make(map[string]bool)
-	for _, id := range state.DenyKeyIDs {
-		deny[id] = true
-	}
-	if state.RootVersion > root.Version {
-		root, err = c.loadPersistedRoot(cacheDir, root, state, now, deny)
+	deny := denySet(state.DenyKeyIDs)
+	root := anchor
+	if state.RecoveryEpoch > 0 || state.RootVersion > anchor.Version {
+		root, err = c.loadPersistedRoot(cacheDir, anchor, state, now, deny)
 		if err != nil {
 			return nil, fmt.Errorf("load persisted root: %w", err)
 		}
 	}
-	if discovery.RecoveryPatchURI != "" {
-		if err := c.validateURL(discovery.RecoveryPatchURI, c.cfg.RecoveryHosts); err != nil {
-			return nil, err
-		}
-		root, err = c.CheckAndApplyRecovery(ctx, discovery.RecoveryPatchURI, cacheDir, root, &state)
-		if err != nil {
-			return nil, fmt.Errorf("apply recovery: %w", err)
-		}
-		deny = make(map[string]bool)
-		for _, id := range state.DenyKeyIDs {
-			deny[id] = true
-		}
+	root, err = c.CheckAndApplyRecovery(ctx, recoveryURI, cacheDir, root, &state)
+	if err != nil {
+		return nil, fmt.Errorf("apply recovery: %w", err)
 	}
+	deny = denySet(state.DenyKeyIDs)
 	root, err = c.updateRoots(ctx, discovery.RootMetadataURI, cacheDir, root, now, deny)
 	if err != nil {
 		return nil, err
+	}
+	if !now.Before(root.ExpiresAt) {
+		return nil, fmt.Errorf("trusted root version %d is expired", root.Version)
 	}
 	state.RootVersion = root.Version
 
@@ -411,49 +411,99 @@ func sourceOrigin(raw string) (string, error) {
 	return u.Scheme + "://" + u.Host, nil
 }
 
-func (c *Client) loadPersistedRoot(cacheDir string, root Root, state State, now time.Time, deny map[string]bool) (Root, error) {
+// loadPersistedRoot rebuilds the locally accepted Root chain. After a recovery
+// the chain restarts at the recovery replacement root. Intermediate roots may
+// have expired; only the final root is checked for expiry by the caller, so an
+// expired chain never blocks the independent recovery channel.
+func (c *Client) loadPersistedRoot(cacheDir string, anchor Root, state State, now time.Time, deny map[string]bool) (Root, error) {
+	root := anchor
 	if state.RecoveryEpoch > 0 {
 		data, err := os.ReadFile(filepath.Join(cacheDir, "recovery-patch.json"))
 		if err != nil {
-			return root, err
+			return anchor, err
 		}
 		if len(c.cfg.RecoveryKeys) == 0 || c.cfg.RecoveryRole.Threshold == 0 {
-			return root, fmt.Errorf("recovery trust anchor is not configured")
+			return anchor, fmt.Errorf("recovery trust anchor is not configured")
 		}
 		payload, _, err := VerifyEnvelope(data, c.cfg.RecoveryKeys, c.cfg.RecoveryRole, "recovery", now, nil)
 		if err != nil {
-			return root, err
+			return anchor, err
 		}
 		var patch RecoveryPatch
 		if err := strictJSON(payload, &patch); err != nil {
-			return root, err
+			return anchor, err
 		}
 		if patch.Type != "recovery" || patch.SchemaVersion != SchemaVersion ||
 			patch.RecoveryEpoch != state.RecoveryEpoch {
-			return root, fmt.Errorf("persisted recovery patch does not match trust state")
+			return anchor, fmt.Errorf("persisted recovery patch does not match trust state")
 		}
-		replacement, err := c.parseTrustedRoot([]byte(patch.NewBootstrapRoot), now, deny)
+		replacement, err := verifySelfSignedRoot([]byte(patch.NewBootstrapRoot), now, deny)
 		if err != nil {
-			return root, err
+			return anchor, err
 		}
-		if replacement.Authority != root.Authority || replacement.Version != state.RootVersion {
-			return root, fmt.Errorf("persisted recovery root does not match trust state")
+		if replacement.Authority != anchor.Authority || replacement.Version > state.RootVersion {
+			return anchor, fmt.Errorf("persisted recovery root does not match trust state")
 		}
-		return replacement, nil
+		root = replacement
 	}
 
 	for version := root.Version + 1; version <= state.RootVersion; version++ {
 		data, err := os.ReadFile(filepath.Join(cacheDir, fmt.Sprintf("%d.root.json", version)))
 		if err != nil {
-			return root, err
+			return anchor, err
 		}
-		next, err := VerifyRootUpdate(data, root, now, deny)
+		next, err := verifyRootTransition(data, root, now, deny)
 		if err != nil {
-			return root, err
+			return anchor, err
 		}
 		root = next
 	}
 	return root, nil
+}
+
+const sourceBaseFile = "source-base"
+
+// clearSourceCaches removes sibling source-base caches whose recorded source
+// origin is listed by a recovery patch. The current cache is cleared by the
+// caller file by file because it receives the new recovery state.
+func clearSourceCaches(cacheDir string, origins map[string]bool) error {
+	if len(origins) == 0 {
+		return nil
+	}
+	authorityDir := filepath.Dir(cacheDir)
+	entries, err := os.ReadDir(authorityDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		dir := filepath.Join(authorityDir, entry.Name())
+		if !entry.IsDir() || dir == cacheDir {
+			continue
+		}
+		source, err := os.ReadFile(filepath.Join(dir, sourceBaseFile))
+		if err != nil {
+			continue
+		}
+		origin, err := sourceOrigin(strings.TrimSpace(string(source)))
+		if err != nil || !origins[origin] {
+			continue
+		}
+		if err := os.RemoveAll(dir); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func denySet(ids []string) map[string]bool {
+	deny := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		deny[id] = true
+	}
+	return deny
 }
 
 func (c *Client) verifyArtifactEnvelope(data []byte, keys ArtifactKeys, roleName, purpose string, now time.Time, deny map[string]bool) ([]byte, []string, error) {
@@ -480,13 +530,26 @@ func (c *Client) bootstrapRoot(now time.Time) (Root, error) {
 	if _, _, err := VerifyEnvelope(mustJSON(envelope), root.Keys, role, "", now, nil); err != nil {
 		return root, fmt.Errorf("bootstrap root self-signature: %w", err)
 	}
-	if root.Type != "root" || root.SchemaVersion != SchemaVersion || root.Version == 0 || !now.Before(root.ExpiresAt) {
-		return root, fmt.Errorf("invalid or expired bootstrap root")
+	// An expired builtin root still anchors the update and recovery chains.
+	// FetchArtifact rejects the final root if it is expired.
+	if root.Type != "root" || root.SchemaVersion != SchemaVersion || root.Version == 0 {
+		return root, fmt.Errorf("invalid bootstrap root")
 	}
 	return root, nil
 }
 
 func (c *Client) parseTrustedRoot(data []byte, now time.Time, deny map[string]bool) (Root, error) {
+	root, err := verifySelfSignedRoot(data, now, deny)
+	if err != nil {
+		return root, err
+	}
+	if !now.Before(root.ExpiresAt) {
+		return root, fmt.Errorf("invalid or expired trusted root")
+	}
+	return root, nil
+}
+
+func verifySelfSignedRoot(data []byte, now time.Time, deny map[string]bool) (Root, error) {
 	_, payload, err := DecodeEnvelope(data)
 	if err != nil {
 		return Root{}, err
@@ -499,8 +562,8 @@ func (c *Client) parseTrustedRoot(data []byte, now time.Time, deny map[string]bo
 	if _, _, err := VerifyEnvelope(data, root.Keys, role, "", now, deny); err != nil {
 		return root, err
 	}
-	if root.Type != "root" || root.SchemaVersion != SchemaVersion || root.Version == 0 || !now.Before(root.ExpiresAt) {
-		return root, fmt.Errorf("invalid or expired trusted root")
+	if root.Type != "root" || root.SchemaVersion != SchemaVersion || root.Version == 0 {
+		return root, fmt.Errorf("invalid trusted root")
 	}
 	return root, nil
 }
@@ -518,7 +581,7 @@ func (c *Client) updateRoots(ctx context.Context, base, cacheDir string, root Ro
 		if status != http.StatusOK {
 			return root, nil
 		}
-		next, err := VerifyRootUpdate(data, root, now, deny)
+		next, err := verifyRootTransition(data, root, now, deny)
 		if err != nil {
 			return root, nil
 		}
@@ -600,15 +663,16 @@ func (c *Client) CheckAndApplyRecovery(ctx context.Context, recoveryURL, cacheDi
 	state.IndexVersion = 0
 	state.ArtifactVersions = nil
 
-	authorityCacheDir := filepath.Dir(cacheDir)
+	clear := make(map[string]bool, len(patch.ClearOrigins))
 	for _, rawOrigin := range patch.ClearOrigins {
 		origin, err := checkedOrigin(rawOrigin, c.cfg.AllowTestHTTP)
 		if err != nil {
 			return root, fmt.Errorf("invalid recovery clear origin: %w", err)
 		}
-		if err := os.RemoveAll(filepath.Join(authorityCacheDir, digest(origin))); err != nil {
-			return root, err
-		}
+		clear[origin] = true
+	}
+	if err := clearSourceCaches(cacheDir, clear); err != nil {
+		return root, err
 	}
 	for _, name := range []string{
 		"artifact-keys.json", "timestamp.json",

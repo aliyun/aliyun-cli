@@ -432,7 +432,6 @@ func TestInvalidRemoteMetadataDoesNotReplaceLKGAndExpiredLKGFails(t *testing.T) 
 		f.cacheDir,
 		digest(f.server.URL),
 		digest(f.server.URL+"/plugins-v2"),
-		digest(f.server.URL),
 	)
 	keysPath := filepath.Join(cacheDir, "artifact-keys.json")
 	before, err := os.ReadFile(keysPath)
@@ -476,8 +475,9 @@ func TestRecoveryReplacementAndDualAnchorMismatch(t *testing.T) {
 	state := State{RootVersion: 1, KeysVersion: 4, TimestampVersion: 5, IndexVersion: 6}
 	cache := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(cache, "artifact-keys.json"), []byte("old"), 0600))
-	clearedOrigin := filepath.Join(filepath.Dir(cache), digest(f.server.URL))
+	clearedOrigin := filepath.Join(filepath.Dir(cache), digest(f.server.URL+"/plugins"))
 	require.NoError(t, os.MkdirAll(clearedOrigin, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(clearedOrigin, sourceBaseFile), []byte(f.server.URL+"/plugins"), 0600))
 	require.NoError(t, os.WriteFile(filepath.Join(clearedOrigin, "old"), []byte("old"), 0600))
 
 	got, err := f.client.CheckAndApplyRecovery(context.Background(), f.server.URL+"/recovery", cache, f.root, &state)
@@ -504,6 +504,143 @@ func TestRecoveryReplacementAndDualAnchorMismatch(t *testing.T) {
 	f.responses["/recovery"] = signedJSON(t, patch, recovery)
 	_, err = f.client.CheckAndApplyRecovery(context.Background(), f.server.URL+"/recovery", cache, f.root, &state)
 	assert.ErrorContains(t, err, "contains denied key")
+}
+
+func (f *trustFixture) signerRoot(version uint64, signer testSigner, expires time.Time) Root {
+	return Root{
+		Type: "root", SchemaVersion: SchemaVersion, Version: version,
+		ExpiresAt: expires, Authority: f.root.Authority,
+		Keys: []Key{signer.key},
+		Roles: map[string]Role{
+			"root":          {KeyIDs: []string{signer.key.KeyID}, Threshold: 1},
+			"artifact-keys": {KeyIDs: []string{signer.key.KeyID}, Threshold: 1},
+		},
+	}
+}
+
+const fixtureRecoveryPath = "/plugins-v2/trust/recovery/current.json"
+
+func (f *trustFixture) publishRecovery(recovery testSigner, epoch uint64, replacement Root, replacementSigner testSigner, deny ...string) {
+	f.t.Helper()
+	patch := RecoveryPatch{
+		Type: "recovery", SchemaVersion: SchemaVersion,
+		RecoveryEpoch: epoch, PatchEpoch: epoch,
+		NotBefore: f.now.Add(-time.Minute), ExpiresAt: f.now.Add(time.Hour),
+		AffectedRootMin: 1, AffectedRootMax: 100,
+		NewBootstrapRoot: signedJSON(f.t, replacement, replacementSigner),
+		DenyKeyIDs:       deny,
+	}
+	f.responses[fixtureRecoveryPath] = signedJSON(f.t, patch, recovery)
+	f.client.cfg.RecoveryKeys = []Key{recovery.key}
+	f.client.cfg.RecoveryRole = Role{KeyIDs: []string{recovery.key.KeyID}, Threshold: 1}
+}
+
+func TestUnsignedDiscoveryFieldsDoNotResetRollbackState(t *testing.T) {
+	f := newTrustFixture(t)
+	_, err := f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
+	require.NoError(t, err)
+	oldKeys, oldTimestamp, oldIndex := f.responses["/keys"], f.responses["/timestamp"], f.responses["/index"]
+
+	f.publish([]byte(`{"plugins":[{"name":"next"}]}`), 2, 2, f.plugin)
+	second, err := f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), second.Descriptor.Version)
+
+	for name, mutate := range map[string]func(*Discovery){
+		"authority": func(d *Discovery) { d.Authority = "https://api.alibabacloud.com" },
+		"origins": func(d *Discovery) {
+			d.OfficialArtifactOrigins = append([]string{"https://mirror.example"}, d.OfficialArtifactOrigins...)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f.responses["/keys"], f.responses["/timestamp"], f.responses["/index"] = oldKeys, oldTimestamp, oldIndex
+			var discovery Discovery
+			require.NoError(t, json.Unmarshal(f.responses["/discovery"], &discovery))
+			mutate(&discovery)
+			data, err := json.Marshal(discovery)
+			require.NoError(t, err)
+			f.responses["/discovery"] = data
+
+			got, err := f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
+			if err == nil {
+				assert.Equal(t, uint64(2), got.Descriptor.Version, "replayed v1 must not be accepted")
+			}
+		})
+	}
+}
+
+func TestRecoveryIsCheckedEvenWhenDiscoveryOmitsIt(t *testing.T) {
+	f := newTrustFixture(t)
+	recovery := newTestSigner(t, "recovery", "recovery")
+	replacementSigner := newTestSigner(t, "replacement")
+	replacement := f.signerRoot(1, replacementSigner, f.now.Add(24*time.Hour))
+	f.publishRecovery(recovery, 1, replacement, replacementSigner, "root")
+
+	_, err := f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
+	assert.ErrorContains(t, err, "signature threshold not met")
+
+	f.rootSigner = replacementSigner
+	f.publish([]byte(`{"plugins":[]}`), 1, 1, f.plugin)
+	_, err = f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
+	require.NoError(t, err)
+}
+
+func TestRecoveryReplacesSameVersionRootAcrossRuns(t *testing.T) {
+	f := newTrustFixture(t)
+	recovery := newTestSigner(t, "recovery", "recovery")
+	replacementSigner := newTestSigner(t, "replacement")
+	f.publishRecovery(recovery, 1, f.signerRoot(1, replacementSigner, f.now.Add(24*time.Hour)), replacementSigner, "root")
+	f.rootSigner = replacementSigner
+	f.publish([]byte(`{"plugins":[]}`), 1, 1, f.plugin)
+
+	for run := 0; run < 2; run++ {
+		_, err := f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
+		require.NoError(t, err, "run %d", run)
+	}
+}
+
+func TestRecoveryRootContinuesThroughLaterRotation(t *testing.T) {
+	f := newTrustFixture(t)
+	recovery := newTestSigner(t, "recovery", "recovery")
+	v10Signer := newTestSigner(t, "root-v10")
+	f.publishRecovery(recovery, 1, f.signerRoot(10, v10Signer, f.now.Add(24*time.Hour)), v10Signer, "root")
+	f.rootSigner = v10Signer
+	f.publish([]byte(`{"plugins":[]}`), 1, 1, f.plugin)
+	_, err := f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
+	require.NoError(t, err)
+
+	v11Signer := newTestSigner(t, "root-v11")
+	f.responses["/roots/11.root.json"] = signedJSON(t, f.signerRoot(11, v11Signer, f.now.Add(24*time.Hour)), v10Signer, v11Signer)
+	f.rootSigner = v11Signer
+	f.publish([]byte(`{"plugins":[]}`), 2, 2, f.plugin)
+	for run := 0; run < 2; run++ {
+		_, err = f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
+		require.NoError(t, err, "run %d", run)
+	}
+}
+
+func TestExpiredPersistedRootDoesNotBlockRecovery(t *testing.T) {
+	f := newTrustFixture(t)
+	nextSigner := newTestSigner(t, "root-next")
+	delete(f.statuses, "/roots/2.root.json")
+	f.responses["/roots/2.root.json"] = signedJSON(t, f.signerRoot(2, nextSigner, f.now.Add(time.Minute)), f.rootSigner, nextSigner)
+	f.rootSigner = nextSigner
+	f.publish([]byte(`{"plugins":[]}`), 1, 1, f.plugin)
+	_, err := f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
+	require.NoError(t, err)
+
+	f.now = f.now.Add(2 * time.Minute)
+	f.publish([]byte(`{"plugins":[]}`), 2, 2, f.plugin)
+	_, err = f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
+	assert.ErrorContains(t, err, "expired")
+
+	recovery := newTestSigner(t, "recovery", "recovery")
+	replacementSigner := newTestSigner(t, "replacement")
+	f.publishRecovery(recovery, 1, f.signerRoot(3, replacementSigner, f.now.Add(24*time.Hour)), replacementSigner, "root-next")
+	f.rootSigner = replacementSigner
+	f.publish([]byte(`{"plugins":[]}`), 3, 3, f.plugin)
+	_, err = f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
+	require.NoError(t, err)
 }
 
 func TestDiscoveryURLForSite(t *testing.T) {
@@ -562,4 +699,20 @@ func TestBuiltinMaterialPrefersLinkerInjectedBase64(t *testing.T) {
 	))
 	assert.Nil(t, builtinMaterial("plain", "not-base64"))
 	assert.Equal(t, []byte("plain"), builtinMaterial("plain", ""))
+}
+
+// The release platform (portal-cluster-v2 _validate_recovery_payload) publishes
+// exactly these fields; keep both sides in sync.
+func TestRecoveryPatchContractWithPublisher(t *testing.T) {
+	published := []byte(`{"type":"recovery","schema_version":1,"recovery_epoch":1,` +
+		`"patch_epoch":1,"not_before":"2026-01-01T00:00:00Z","expires_at":"2027-01-01T00:00:00Z",` +
+		`"affected_root_min":1,"affected_root_max":3,"new_bootstrap_root":{"schema_version":1,` +
+		`"payload":"e30=","signatures":[]},"deny_key_ids":["leaked-root"],` +
+		`"clear_origins":["https://mirror.example"]}`)
+	var patch RecoveryPatch
+	require.NoError(t, strictJSON(published, &patch))
+	assert.Equal(t, uint64(3), patch.AffectedRootMax)
+
+	withAuthority := []byte(`{"type":"recovery","authority":"https://api.aliyun.com"}`)
+	assert.Error(t, strictJSON(withAuthority, &RecoveryPatch{}))
 }

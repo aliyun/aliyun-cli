@@ -105,6 +105,19 @@ func VerifyEnvelope(data []byte, keys []Key, role Role, purpose string, now time
 }
 
 func VerifyRootUpdate(data []byte, old Root, now time.Time, deny map[string]bool) (Root, error) {
+	next, err := verifyRootTransition(data, old, now, deny)
+	if err != nil {
+		return next, err
+	}
+	if !now.Before(next.ExpiresAt) {
+		return Root{}, fmt.Errorf("invalid or non-contiguous root update")
+	}
+	return next, nil
+}
+
+// verifyRootTransition checks the N to N+1 thresholds without expiry. Clients
+// walk expired intermediate roots and only require the final root to be valid.
+func verifyRootTransition(data []byte, old Root, now time.Time, deny map[string]bool) (Root, error) {
 	oldRole, ok := old.Roles["root"]
 	if !ok {
 		return Root{}, fmt.Errorf("old root role is missing")
@@ -118,7 +131,7 @@ func VerifyRootUpdate(data []byte, old Root, now time.Time, deny map[string]bool
 		return Root{}, err
 	}
 	if next.Type != "root" || next.SchemaVersion != SchemaVersion || next.Version != old.Version+1 ||
-		next.Authority != old.Authority || !now.Before(next.ExpiresAt) {
+		next.Authority != old.Authority {
 		return Root{}, fmt.Errorf("invalid or non-contiguous root update")
 	}
 	newRole, ok := next.Roles["root"]
