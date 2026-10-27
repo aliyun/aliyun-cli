@@ -15,7 +15,6 @@
 package telemetry
 
 import (
-	"sync"
 	"time"
 )
 
@@ -29,17 +28,12 @@ type activeCommandExecution struct {
 	pluginAction *PluginManagementEvent
 }
 
-var (
-	executionMu     sync.Mutex
-	activeExecution *activeCommandExecution
-	executionEnded  bool
-)
+var activeExecution *activeCommandExecution
+var executionEnded bool
 
 func resetExecutionState() {
-	executionMu.Lock()
 	activeExecution = nil
 	executionEnded = false
-	executionMu.Unlock()
 }
 
 func beginCommandExecution(
@@ -49,8 +43,6 @@ func beginCommandExecution(
 	aiMode bool,
 	cfg *Config,
 ) {
-	executionMu.Lock()
-	defer executionMu.Unlock()
 	activeExecution = &activeCommandExecution{
 		configDir:    configDir,
 		scope:        scope,
@@ -64,8 +56,6 @@ func beginCommandExecution(
 }
 
 func takeCommandExecutionForEnd() (*activeCommandExecution, bool) {
-	executionMu.Lock()
-	defer executionMu.Unlock()
 	if activeExecution == nil || executionEnded {
 		return nil, false
 	}

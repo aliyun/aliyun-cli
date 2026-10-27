@@ -27,6 +27,27 @@ func (e *UsageError) Error() string { return e.Err.Error() }
 
 func (e *UsageError) Unwrap() error { return e.Err }
 
+func (e *UsageError) LocalErrorCode() string {
+	switch e.Code {
+	case "MISSING_COMMAND":
+		return "INVALID_COMMAND"
+	case "UNKNOWN_FLAG":
+		return "INVALID_FLAG"
+	case "MISSING_REQUIRED_PARAMETER":
+		return "MISSING_REQUIRED_PARAMETER"
+	case "INVALID_ARGUMENT", "INVALID_PARAMETER_VALUE":
+		return "INVALID_ARGUMENT"
+	case "INVALID_OPTION_COMBINATION":
+		return "INVALID_OPTION_COMBINATION"
+	case "INVALID_HEADER":
+		return "INVALID_HEADER"
+	case "INVALID_BODY_FILE":
+		return "INVALID_BODY_FILE"
+	default:
+		return ""
+	}
+}
+
 // UnknownCommandError identifies a command that does not exist in the
 // product's command index, so the host can render agent guidance (did you
 // mean, recovery) instead of an opaque text error.
@@ -41,7 +62,8 @@ func (e *UnknownCommandError) Error() string {
 		e.Command, e.Product, e.Product)
 }
 
-func (*UnknownCommandError) AIRecoveryEligible() {}
+func (*UnknownCommandError) AIRecoveryEligible()    {}
+func (*UnknownCommandError) LocalErrorCode() string { return "INVALID_COMMAND" }
 
 // CredentialError identifies failures that occur before an API call while
 // resolving the credential source configured by the embedding host.
@@ -66,6 +88,9 @@ func (e *InvalidOptionCombinationError) Error() string {
 func (e *InvalidOptionCombinationError) Unwrap() error { return e.Err }
 
 func (*InvalidOptionCombinationError) AIRecoveryEligible() {}
+func (*InvalidOptionCombinationError) LocalErrorCode() string {
+	return "INVALID_OPTION_COMBINATION"
+}
 
 // InvalidHeaderError preserves the input and expected format without exposing
 // either field in recovery commands.
@@ -79,7 +104,8 @@ func (e *InvalidHeaderError) Error() string { return localErrorText(e.Err, "inva
 
 func (e *InvalidHeaderError) Unwrap() error { return e.Err }
 
-func (*InvalidHeaderError) AIRecoveryEligible() {}
+func (*InvalidHeaderError) AIRecoveryEligible()    {}
+func (*InvalidHeaderError) LocalErrorCode() string { return "INVALID_HEADER" }
 
 // InvalidBodyFileError identifies a local body file read failure.
 type InvalidBodyFileError struct {
@@ -91,7 +117,8 @@ func (e *InvalidBodyFileError) Error() string { return localErrorText(e.Err, "in
 
 func (e *InvalidBodyFileError) Unwrap() error { return e.Err }
 
-func (*InvalidBodyFileError) AIRecoveryEligible() {}
+func (*InvalidBodyFileError) AIRecoveryEligible()    {}
+func (*InvalidBodyFileError) LocalErrorCode() string { return "INVALID_BODY_FILE" }
 
 // QueryFilterError reports a --cli-query JMESPath failure with one wording in
 // both command styles, so the host can render a unified AI envelope.
@@ -106,7 +133,8 @@ func (e *QueryFilterError) Error() string {
 
 func (e *QueryFilterError) Unwrap() error { return e.Err }
 
-func (*QueryFilterError) AIRecoveryEligible() {}
+func (*QueryFilterError) AIRecoveryEligible()    {}
+func (*QueryFilterError) LocalErrorCode() string { return "QUERY_FILTER_ERROR" }
 
 func localErrorText(err error, fallback string) string {
 	if err == nil {

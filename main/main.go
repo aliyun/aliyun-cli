@@ -267,6 +267,7 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(mock.NewMockCommand(config.GetConfigPath))
 	commando.SetRootHelpSpecs(rootCommandHelpSpecs, rootFlagHelpSpecs)
 
+	telemetry.RegisterCLIExtensions(extensions)
 	cliext.AttachSafetyPolicy(rootCmd, extensions)
 
 	plugin.RegisterReservedTopLevelCommands(rootCmd.SubCommandNames())

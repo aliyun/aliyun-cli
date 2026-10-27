@@ -40,6 +40,9 @@ func (e *LegacyDocRequiredError) Error() string {
 }
 
 func (*LegacyDocRequiredError) AIRecoveryEligible() {}
+func (*LegacyDocRequiredError) LocalErrorCode() string {
+	return "MISSING_REQUIRED_PARAMETER"
+}
 
 func (e *ConstraintViolationError) Error() string {
 	switch e.Constraint {
@@ -59,6 +62,8 @@ func (e *ConstraintViolationError) Error() string {
 		return fmt.Sprintf("--%s value %q violates its schema constraint", e.Flag, e.Value)
 	}
 }
+
+func (*ConstraintViolationError) LocalErrorCode() string { return "INVALID_ARGUMENT" }
 
 func legacyAIModeEnabled(ctx *cli.Context) bool {
 	if ctx == nil {

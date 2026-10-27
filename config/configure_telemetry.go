@@ -25,7 +25,8 @@ import (
 
 func NewConfigureTelemetryCommand() *cli.Command {
 	cmd := &cli.Command{
-		Name: "telemetry",
+		Name:                   "telemetry",
+		DisablePersistentFlags: true,
 		Short: i18n.T(
 			"manage CLI telemetry",
 			"管理 CLI 遥测"),
@@ -44,7 +45,6 @@ func NewConfigureTelemetryCommand() *cli.Command {
 	cmd.AddSubCommand(newConfigureTelemetryShowCommand())
 	cmd.AddSubCommand(newConfigureTelemetryEnableCommand())
 	cmd.AddSubCommand(newConfigureTelemetryDisableCommand())
-	cmd.AddSubCommand(newConfigureTelemetryInnerAutoCommand())
 	cmd.AddSubCommand(newConfigureTelemetryPurgeCommand())
 	return cmd
 }
@@ -54,8 +54,8 @@ func newConfigureTelemetryEnableCommand() *cli.Command {
 		Name:  "enable",
 		Usage: "enable",
 		Short: i18n.T(
-			"enable public CLI telemetry",
-			"启用公网 CLI 遥测"),
+			"enable CLI telemetry",
+			"启用 CLI 遥测"),
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
@@ -75,8 +75,8 @@ func newConfigureTelemetryDisableCommand() *cli.Command {
 		Name:  "disable",
 		Usage: "disable",
 		Short: i18n.T(
-			"disable public CLI telemetry",
-			"关闭公网 CLI 遥测"),
+			"disable CLI telemetry",
+			"关闭 CLI 遥测"),
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
@@ -118,49 +118,6 @@ func newConfigureTelemetryShowCommand() *cli.Command {
 	}
 }
 
-func newConfigureTelemetryInnerAutoCommand() *cli.Command {
-	cmd := &cli.Command{
-		Name:  "inner-auto",
-		Short: i18n.T("enable or disable inner plugin auto telemetry", "开启或关闭 inner 插件自动遥测"),
-		Usage: "inner-auto enable|disable",
-	}
-	cmd.AddSubCommand(&cli.Command{
-		Name:  "enable",
-		Usage: "enable",
-		Short: i18n.T("turn on inner plugin auto telemetry", "开启 inner 插件自动遥测"),
-		Run: func(ctx *cli.Context, args []string) error {
-			if len(args) > 0 {
-				return cli.NewInvalidCommandError(args[0], ctx)
-			}
-			configDir, cfg, err := loadTelemetryConfig()
-			if err != nil {
-				return err
-			}
-			on := true
-			cfg.InnerAutoOn = &on
-			return telemetry.Save(configDir, cfg)
-		},
-	})
-	cmd.AddSubCommand(&cli.Command{
-		Name:  "disable",
-		Usage: "disable",
-		Short: i18n.T("turn off inner plugin auto telemetry", "关闭 inner 插件自动遥测"),
-		Run: func(ctx *cli.Context, args []string) error {
-			if len(args) > 0 {
-				return cli.NewInvalidCommandError(args[0], ctx)
-			}
-			configDir, cfg, err := loadTelemetryConfig()
-			if err != nil {
-				return err
-			}
-			off := false
-			cfg.InnerAutoOn = &off
-			return telemetry.Save(configDir, cfg)
-		},
-	})
-	return cmd
-}
-
 func newConfigureTelemetryPurgeCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "purge",
@@ -187,10 +144,8 @@ func doTelemetryShow(ctx *cli.Context, configDir string, cfg *telemetry.Config) 
 		instancePrefix = instancePrefix[:8] + "..."
 	}
 	out := struct {
-		PublicEnabled     bool   `json:"public_enabled"`
-		InnerAutoOn       bool   `json:"inner_auto_on"`
-		GlobalOptOut      bool   `json:"global_opt_out"`
-		InnerOptOut       bool   `json:"inner_opt_out"`
+		Enabled           bool   `json:"enabled"`
+		EnvironmentOptOut bool   `json:"environment_opt_out"`
 		InstanceIDPrefix  string `json:"instance_id_prefix,omitempty"`
 		InnerCacheFiles   int    `json:"inner_cache_files"`
 		InnerCacheBytes   int64  `json:"inner_cache_bytes"`
@@ -200,10 +155,8 @@ func doTelemetryShow(ctx *cli.Context, configDir string, cfg *telemetry.Config) 
 		LastUploadedInner string `json:"last_uploaded_at_inner,omitempty"`
 		ConfigFile        string `json:"config_file"`
 	}{
-		PublicEnabled:     cfg.Enabled,
-		InnerAutoOn:       telemetry.InnerAutoOnEnabled(cfg),
-		GlobalOptOut:      telemetry.GlobalOptOut(),
-		InnerOptOut:       telemetry.InnerOptOut(),
+		Enabled:           cfg.Enabled,
+		EnvironmentOptOut: telemetry.OptOut(),
 		InstanceIDPrefix:  instancePrefix,
 		InnerCacheFiles:   innerStats.Files,
 		InnerCacheBytes:   innerStats.TotalBytes,

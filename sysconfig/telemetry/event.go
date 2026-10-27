@@ -16,37 +16,63 @@ package telemetry
 
 import (
 	"errors"
-	"reflect"
+	"regexp"
 	"runtime"
+	"strings"
 	"time"
 
+	"github.com/alibabacloud-go/tea/tea"
+	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
-const schemaVersion = "1"
+const (
+	schemaVersion                      = "1"
+	EventTypeCommandCompleted          = "cli.command.completed"
+	EventTypeConfigurationCompleted    = "cli.configuration.completed"
+	EventTypePluginManagementCompleted = "cli.plugin.management.completed"
+)
+
+const (
+	LocalErrorInvalidCommand           = "INVALID_COMMAND"
+	LocalErrorInvalidFlag              = "INVALID_FLAG"
+	LocalErrorMissingRequiredParameter = "MISSING_REQUIRED_PARAMETER"
+	LocalErrorInvalidArgument          = "INVALID_ARGUMENT"
+	LocalErrorInvalidOptionCombination = "INVALID_OPTION_COMBINATION"
+	LocalErrorHelpOption               = "HELP_OPTION_ERROR"
+	LocalErrorInvalidHeader            = "INVALID_HEADER"
+	LocalErrorInvalidBodyFile          = "INVALID_BODY_FILE"
+	LocalErrorQueryFilter              = "QUERY_FILTER_ERROR"
+	LocalErrorEndpointNotResolved      = "ENDPOINT_NOT_RESOLVED"
+	LocalErrorOther                    = "OTHER_LOCAL_ERROR"
+)
+
+var safeAPIErrorCodePattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
 
 type Event struct {
-	Schema       string                 `json:"schema"`
-	EventID      string                 `json:"event_id"`
-	EventType    string                 `json:"event_type"`
-	Timestamp    string                 `json:"timestamp"`
-	Pipeline     string                 `json:"pipeline"`
-	InnerTrigger string                 `json:"inner_trigger,omitempty"`
-	Command      string                 `json:"command"`
-	Params       []string               `json:"params,omitempty"`
-	Result       string                 `json:"result"`
-	ErrorType    string                 `json:"error_type,omitempty"`
-	DurationMs   int64                  `json:"duration_ms"`
-	Plugin       string                 `json:"plugin,omitempty"`
-	CLIVersion   string                 `json:"cli_version"`
-	OS           string                 `json:"os"`
-	Arch         string                 `json:"arch"`
-	GoVersion    string                 `json:"go_version"`
-	Mode         string                 `json:"mode"`
-	AgentName    string                 `json:"agent_name,omitempty"`
-	InstanceID   string                 `json:"instance_id"`
-	PluginAction *PluginManagementEvent `json:"plugin_action,omitempty"`
+	Schema         string                 `json:"schema"`
+	EventID        string                 `json:"event_id"`
+	EventType      string                 `json:"event_type"`
+	Timestamp      string                 `json:"timestamp"`
+	Pipeline       string                 `json:"pipeline"`
+	CommandType    string                 `json:"command_type,omitempty"`
+	Command        string                 `json:"command"`
+	Params         []string               `json:"params,omitempty"`
+	Result         string                 `json:"result"`
+	LocalErrorCode string                 `json:"local_error_code,omitempty"`
+	APIErrorCode   string                 `json:"api_error_code,omitempty"`
+	HTTPStatusCode int                    `json:"http_status_code,omitempty"`
+	DurationMs     int64                  `json:"duration_ms"`
+	Plugin         string                 `json:"plugin,omitempty"`
+	CLIVersion     string                 `json:"cli_version"`
+	OS             string                 `json:"os"`
+	Arch           string                 `json:"arch"`
+	GoVersion      string                 `json:"go_version"`
+	Mode           string                 `json:"mode"`
+	AgentName      string                 `json:"agent_name,omitempty"`
+	InstanceID     string                 `json:"instance_id"`
+	PluginAction   *PluginManagementEvent `json:"plugin_action,omitempty"`
 }
 
 type BuildInput struct {
@@ -60,6 +86,66 @@ type BuildInput struct {
 	PluginAction *PluginManagementEvent
 }
 
+type localErrorCoder interface {
+	LocalErrorCode() string
+}
+
+func normalizedLocalErrorCode(err error) string {
+	if err == nil {
+		return ""
+	}
+	var coded localErrorCoder
+	if errors.As(err, &coded) {
+		switch code := coded.LocalErrorCode(); code {
+		case LocalErrorInvalidCommand,
+			LocalErrorInvalidFlag,
+			LocalErrorMissingRequiredParameter,
+			LocalErrorInvalidArgument,
+			LocalErrorInvalidOptionCombination,
+			LocalErrorHelpOption,
+			LocalErrorInvalidHeader,
+			LocalErrorInvalidBodyFile,
+			LocalErrorQueryFilter,
+			LocalErrorEndpointNotResolved:
+			return code
+		}
+	}
+	if cli.IsAIRecoveryEligible(err) {
+		return LocalErrorOther
+	}
+	return ""
+}
+
+func apiErrorDetails(err error) (string, int) {
+	if err == nil {
+		return "", 0
+	}
+	var teaErr *tea.SDKError
+	if errors.As(err, &teaErr) {
+		return safeAPIErrorCode(tea.StringValue(teaErr.Code)), safeHTTPStatus(tea.IntValue(teaErr.StatusCode))
+	}
+	var serverErr *sdkerrors.ServerError
+	if errors.As(err, &serverErr) {
+		return safeAPIErrorCode(serverErr.ErrorCode()), safeHTTPStatus(serverErr.HttpStatus())
+	}
+	return "", 0
+}
+
+func safeAPIErrorCode(code string) string {
+	code = strings.TrimSpace(code)
+	if !safeAPIErrorCodePattern.MatchString(code) {
+		return ""
+	}
+	return code
+}
+
+func safeHTTPStatus(status int) int {
+	if status < 100 || status > 599 {
+		return 0
+	}
+	return status
+}
+
 func classifyResult(err error, exitCode *int) string {
 	if err == nil && (exitCode == nil || *exitCode == 0) {
 		return "Success"
@@ -67,24 +153,10 @@ func classifyResult(err error, exitCode *int) string {
 	if exitCode != nil && *exitCode != 0 {
 		return "Failure"
 	}
-	var suggest cli.SuggestibleError
-	if errors.As(err, &suggest) {
+	if normalizedLocalErrorCode(err) != "" {
 		return "UserFault"
 	}
 	return "Failure"
-}
-
-func errorTypeName(err error, exitCode *int) string {
-	if err != nil {
-		t := reflect.TypeOf(err)
-		if t != nil {
-			return t.String()
-		}
-	}
-	if exitCode != nil && *exitCode != 0 {
-		return "exec.ExitError"
-	}
-	return ""
 }
 
 func BuildEvent(in BuildInput) (Event, error) {
@@ -109,35 +181,38 @@ func BuildEvent(in BuildInput) (Event, error) {
 		}
 		pluginField = in.Scope.PluginName + "@" + ver
 	}
-	eventType := "cli.command.completed"
+	eventType := EventTypeCommandCompleted
+	if len(in.RootArgs) > 0 && strings.EqualFold(strings.TrimSpace(in.RootArgs[0]), "configure") {
+		eventType = EventTypeConfigurationCompleted
+	}
 	if in.PluginAction != nil {
-		eventType = "cli.plugin.management.completed"
+		eventType = EventTypePluginManagementCompleted
 	}
-	innerTrigger := ""
-	if in.Scope.Pipeline == PipelineInner {
-		innerTrigger = in.Scope.Trigger
-	}
+	localErrorCode := normalizedLocalErrorCode(in.Err)
+	apiErrorCode, httpStatusCode := apiErrorDetails(in.Err)
 
 	return Event{
-		Schema:       schemaVersion,
-		EventID:      eventID,
-		EventType:    eventType,
-		Timestamp:    time.Now().Format(time.RFC3339),
-		Pipeline:     in.Scope.Pipeline,
-		InnerTrigger: innerTrigger,
-		Command:      command,
-		Params:       ExtractParamNames(in.RootArgs),
-		Result:       classifyResult(in.Err, in.ExitCode),
-		ErrorType:    errorTypeName(in.Err, in.ExitCode),
-		DurationMs:   in.DurationMs,
-		Plugin:       pluginField,
-		CLIVersion:   cli.GetVersion(),
-		OS:           runtime.GOOS,
-		Arch:         runtime.GOARCH,
-		GoVersion:    runtime.Version(),
-		Mode:         mode,
-		AgentName:    util.DetectAgentName(),
-		InstanceID:   in.InstanceID,
-		PluginAction: in.PluginAction,
+		Schema:         schemaVersion,
+		EventID:        eventID,
+		EventType:      eventType,
+		Timestamp:      time.Now().UTC().Format(time.RFC3339),
+		Pipeline:       in.Scope.Pipeline,
+		CommandType:    DetectCommandType(in.RootArgs),
+		Command:        command,
+		Params:         ExtractParamNames(in.RootArgs),
+		Result:         classifyResult(in.Err, in.ExitCode),
+		LocalErrorCode: localErrorCode,
+		APIErrorCode:   apiErrorCode,
+		HTTPStatusCode: httpStatusCode,
+		DurationMs:     in.DurationMs,
+		Plugin:         pluginField,
+		CLIVersion:     cli.GetVersion(),
+		OS:             runtime.GOOS,
+		Arch:           runtime.GOARCH,
+		GoVersion:      runtime.Version(),
+		Mode:           mode,
+		AgentName:      util.DetectAgentName(),
+		InstanceID:     in.InstanceID,
+		PluginAction:   in.PluginAction,
 	}, nil
 }

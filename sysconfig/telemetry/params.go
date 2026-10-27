@@ -32,12 +32,13 @@ func ExtractParamNames(args []string) []string {
 		if !strings.HasPrefix(arg, "-") {
 			continue
 		}
-		name := strings.TrimLeft(arg, "-")
+		// Keep the original flag spelling, including leading "-" / "--".
+		name := arg
 		if eq := strings.Index(name, "="); eq >= 0 {
 			name = name[:eq]
 		}
 		name = strings.TrimSpace(name)
-		if name == "" {
+		if strings.TrimLeft(name, "-") == "" {
 			continue
 		}
 		if _, ok := seen[name]; ok {
@@ -86,19 +87,15 @@ func normalizeCommand(parts []string) string {
 	if len(parts) == 0 {
 		return ""
 	}
+	// Join argv tokens with spaces so product codes and subcommands that
+	// already contain "-" stay reversible, e.g. "ecs describe-instances".
 	var tokens []string
 	for _, p := range parts {
 		p = strings.ToLower(strings.TrimSpace(p))
 		if p == "" {
 			continue
 		}
-		for _, seg := range strings.FieldsFunc(p, func(r rune) bool {
-			return r == ' ' || r == ':' || r == '/'
-		}) {
-			if seg != "" {
-				tokens = append(tokens, seg)
-			}
-		}
+		tokens = append(tokens, p)
 	}
-	return strings.Join(tokens, "-")
+	return strings.Join(tokens, " ")
 }

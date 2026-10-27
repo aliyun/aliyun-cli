@@ -92,4 +92,5 @@ func (e *UnknownFlagError) Error() string {
 	return fmt.Sprintf("unknown flag --%s", e.Flag)
 }
 
-func (*UnknownFlagError) AIRecoveryEligible() {}
+func (*UnknownFlagError) AIRecoveryEligible()    {}
+func (*UnknownFlagError) LocalErrorCode() string { return "INVALID_FLAG" }

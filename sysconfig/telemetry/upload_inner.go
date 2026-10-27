@@ -109,18 +109,25 @@ func postTelemetryBatch(batch []uploadEvent) bool {
 
 func newUploadEvent(event Event) uploadEvent {
 	attributes := map[string]any{
-		"pipeline":  event.Pipeline,
 		"command":   event.Command,
 		"os":        event.OS,
 		"arch":      event.Arch,
 		"goVersion": event.GoVersion,
 		"mode":      event.Mode,
 	}
-	addAttribute(attributes, "innerTrigger", event.InnerTrigger)
+	// Only emit pipeline for inner events; public is the default and omitted.
+	if event.Pipeline == PipelineInner {
+		attributes["pipeline"] = PipelineInner
+	}
+	addAttribute(attributes, "commandType", event.CommandType)
 	if len(event.Params) > 0 {
 		attributes["parameterNames"] = event.Params
 	}
-	addAttribute(attributes, "errorType", event.ErrorType)
+	addAttribute(attributes, "localErrorCode", event.LocalErrorCode)
+	addAttribute(attributes, "apiErrorCode", event.APIErrorCode)
+	if event.HTTPStatusCode != 0 {
+		attributes["httpStatusCode"] = event.HTTPStatusCode
+	}
 	addAttribute(attributes, "plugin", event.Plugin)
 	addAttribute(attributes, "agentName", event.AgentName)
 	if action := event.PluginAction; action != nil {
@@ -138,7 +145,7 @@ func newUploadEvent(event Event) uploadEvent {
 	}
 	eventType := event.EventType
 	if eventType == "" {
-		eventType = "cli.command.completed"
+		eventType = EventTypeCommandCompleted
 	}
 	return uploadEvent{
 		SchemaVersion: event.Schema,

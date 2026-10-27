@@ -37,10 +37,16 @@ func TestDetectPluginManagement(t *testing.T) {
 			toVersion:  "1.2.3",
 		},
 		{
-			name:       "package install omits source",
-			args:       []string{"plugin", "install-custom", "--package", "/secret/path/plugin.zip"},
-			operation:  "install_custom",
-			sourceType: "package",
+			name:       "local package install omits source value",
+			args:       []string{"plugin", "install", "--package", "/secret/path/plugin.zip"},
+			operation:  "install",
+			sourceType: "local_package",
+		},
+		{
+			name:       "remote package install omits source value",
+			args:       []string{"plugin", "install", "--package", "https://must-not-be-collected.example/plugin.zip"},
+			operation:  "install",
+			sourceType: "remote_package",
 		},
 		{
 			name:       "update",
@@ -54,6 +60,26 @@ func TestDetectPluginManagement(t *testing.T) {
 			args:      []string{"plugin", "uninstall", "--name", "demo"},
 			operation: "uninstall",
 			names:     []string{"demo"},
+		},
+		{
+			name:      "list installed",
+			args:      []string{"plugin", "list"},
+			operation: "list",
+		},
+		{
+			name:      "list remote",
+			args:      []string{"plugin", "list-remote", "--source-base", "https://must-not-be-collected.example"},
+			operation: "list-remote",
+		},
+		{
+			name:      "search",
+			args:      []string{"plugin", "search", "user-controlled-query"},
+			operation: "search",
+		},
+		{
+			name:      "show",
+			args:      []string{"plugin", "show", "--name", "user-controlled-name"},
+			operation: "show",
 		},
 	}
 	for _, tt := range tests {
@@ -70,18 +96,18 @@ func TestDetectPluginManagement(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if contains(string(encoded), "/secret/") {
-				t.Fatalf("package path leaked into event: %s", encoded)
+			if contains(string(encoded), "/secret/") ||
+				contains(string(encoded), "must-not-be-collected.example") {
+				t.Fatalf("package source leaked into event: %s", encoded)
 			}
 		})
 	}
 }
 
-func TestDetectPluginManagementIgnoresReadOnlyCommands(t *testing.T) {
+func TestDetectPluginManagementIgnoresNonPluginManagementCommands(t *testing.T) {
 	for _, args := range [][]string{
-		{"plugin", "list"},
-		{"plugin", "show", "--name", "demo"},
 		{"ecs", "DescribeInstances"},
+		{"plugin", "unknown"},
 	} {
 		if got := DetectPluginManagement(args); got != nil {
 			t.Fatalf("%v unexpectedly produced %+v", args, got)
