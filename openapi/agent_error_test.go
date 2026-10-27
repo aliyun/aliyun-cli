@@ -70,6 +70,7 @@ func TestNormalizeMCPAuthenticationError(t *testing.T) {
 			var agentErr *cli.AgentError
 			require.ErrorAs(t, got, &agentErr)
 			require.ErrorIs(t, agentErr, cause)
+			require.ErrorIs(t, agentErr, tc.err)
 			require.Equal(t, 1, agentErr.ExitCode())
 			require.Equal(t, cli.AgentErrorEnvelope{
 				Message: "--skip-mcp-oauth must be true or false",
@@ -78,6 +79,18 @@ func TestNormalizeMCPAuthenticationError(t *testing.T) {
 					Hint:   "Pass --skip-mcp-oauth without a value, or set it to true or false. Use `aliyun utils mcp-proxy --help` to inspect the command options.",
 				},
 			}, agentErr.Envelope())
+		})
+	}
+}
+
+func TestNormalizeIncompleteMCPAuthenticationError(t *testing.T) {
+	for name, cause := range map[string]*mcpproxy.AuthenticationError{
+		"missing message": {Action: "check_configuration", Hint: "Check the profile."},
+		"missing action":  {Message: "authentication failed", Hint: "Check the profile."},
+		"missing hint":    {Message: "authentication failed", Action: "check_configuration"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.Same(t, cause, normalizeAgentError(cause, []string{"utils", "mcp-proxy"}))
 		})
 	}
 }

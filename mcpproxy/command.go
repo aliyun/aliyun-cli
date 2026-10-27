@@ -213,25 +213,21 @@ func runMCPProxy(ctx *cli.Context) error {
 	return startMCPProxy(ctx, proxyConfig)
 }
 
-type mcpAuthenticationError struct {
-	envelope cli.AgentErrorEnvelope
+// AuthenticationError carries the message and recovery guidance for MCP credential failures.
+type AuthenticationError struct {
+	Message string
+	Action  string
+	Hint    string
 }
 
-func (e *mcpAuthenticationError) Error() string { return e.envelope.Message }
-
-// Authentication failures retain the command's existing exit status.
-func (e *mcpAuthenticationError) AIError() *cli.AgentError {
-	return cli.NewAgentError(e.envelope, e).WithExitCode(1)
-}
+func (e *AuthenticationError) Error() string { return e.Message }
 
 func newMCPAuthenticationError(message, action, hint string) error {
-	return &mcpAuthenticationError{envelope: cli.AgentErrorEnvelope{
+	return &AuthenticationError{
 		Message: message,
-		Recovery: cli.AgentErrorRecovery{
-			Action: action,
-			Hint:   hint,
-		},
-	}}
+		Action:  action,
+		Hint:    hint,
+	}
 }
 
 func configureMCPAuthentication(ctx *cli.Context, proxyConfig *ProxyConfig) error {

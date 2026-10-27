@@ -29,6 +29,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/mcpproxy"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
@@ -72,10 +73,6 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 	var existing *cli.AgentError
 	if errors.As(err, &existing) {
 		return existing
-	}
-	var provider interface{ AIError() *cli.AgentError }
-	if errors.As(err, &provider) {
-		return provider.AIError()
 	}
 
 	context := newRecoveryContext(args)
@@ -255,6 +252,10 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 	if errors.As(err, &oauthErr) {
 		return oauthAgentError(err, oauthErr)
 	}
+	var mcpAuthErr *mcpproxy.AuthenticationError
+	if errors.As(err, &mcpAuthErr) {
+		return mcpAuthenticationAgentError(err, mcpAuthErr)
+	}
 
 	var configurationErr *credentialConfigurationError
 	var runtimeCredentialErr *engine.CredentialError
@@ -295,6 +296,20 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 	// UsageError, and untyped errors all retain their original rendering and
 	// identity.
 	return err
+}
+
+func mcpAuthenticationAgentError(cause error, mcpErr *mcpproxy.AuthenticationError) error {
+	agentErr := cli.NewAgentError(cli.AgentErrorEnvelope{
+		Message: mcpErr.Error(),
+		Recovery: cli.AgentErrorRecovery{
+			Action: mcpErr.Action,
+			Hint:   mcpErr.Hint,
+		},
+	}, cause)
+	if agentErr == nil {
+		return cause
+	}
+	return agentErr.WithExitCode(1)
 }
 
 func profileConfigurationAgentError(cause error) error {
