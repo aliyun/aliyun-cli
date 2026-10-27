@@ -462,6 +462,9 @@ func TestUploadFileUsesVersionedExtensibleContract(t *testing.T) {
 		LinuxDistroID:      "alinux",
 		LinuxDistroVersion: "3.2104",
 		EnvironmentNames:   []string{"ALIBABA_CLOUD_REGION_ID"},
+		ShellType:          "zsh",
+		StdinIsTTY:         true,
+		Locale:             "zh_CN.UTF-8",
 		Mode:               "default",
 		InstanceID:         "d69b3a04-b81c-47e7-a882-504e5865352d",
 	}
@@ -506,6 +509,11 @@ func TestUploadFileUsesVersionedExtensibleContract(t *testing.T) {
 	environmentNames, ok := attributes["environmentVariableNames"].([]any)
 	if !ok || len(environmentNames) != 1 || environmentNames[0] != "ALIBABA_CLOUD_REGION_ID" {
 		t.Fatalf("unexpected environment variable names: %#v", attributes)
+	}
+	if attributes["shellType"] != "zsh" ||
+		attributes["stdinIsTTY"] != true ||
+		attributes["locale"] != "zh_CN.UTF-8" {
+		t.Fatalf("unexpected terminal environment attributes: %#v", attributes)
 	}
 	if _, exists := got["rawCommand"]; exists {
 		t.Fatal("raw command must not be uploaded")

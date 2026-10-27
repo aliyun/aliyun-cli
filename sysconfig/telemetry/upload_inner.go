@@ -134,6 +134,9 @@ func newUploadEvent(event Event) uploadEvent {
 	if len(event.EnvironmentNames) > 0 {
 		attributes["environmentVariableNames"] = event.EnvironmentNames
 	}
+	addAttribute(attributes, "shellType", event.ShellType)
+	attributes["stdinIsTTY"] = event.StdinIsTTY
+	addAttribute(attributes, "locale", event.Locale)
 	addAttribute(attributes, "plugin", event.Plugin)
 	addAttribute(attributes, "agentName", event.AgentName)
 	if action := event.PluginAction; action != nil {

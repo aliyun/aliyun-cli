@@ -73,6 +73,9 @@ type Event struct {
 	LinuxDistroID      string                 `json:"linux_distro_id,omitempty"`
 	LinuxDistroVersion string                 `json:"linux_distro_version,omitempty"`
 	EnvironmentNames   []string               `json:"environment_names,omitempty"`
+	ShellType          string                 `json:"shell_type,omitempty"`
+	StdinIsTTY         bool                   `json:"stdin_is_tty"`
+	Locale             string                 `json:"locale,omitempty"`
 	Mode               string                 `json:"mode"`
 	AgentName          string                 `json:"agent_name,omitempty"`
 	InstanceID         string                 `json:"instance_id"`
@@ -219,6 +222,9 @@ func BuildEvent(in BuildInput) (Event, error) {
 		LinuxDistroID:      linuxDistroID,
 		LinuxDistroVersion: linuxDistroVersion,
 		EnvironmentNames:   alibabaCloudEnvironmentNames(),
+		ShellType:          detectShellType(),
+		StdinIsTTY:         detectStdinTTY(),
+		Locale:             detectLocale(),
 		Mode:               mode,
 		AgentName:          util.DetectAgentName(),
 		InstanceID:         in.InstanceID,
