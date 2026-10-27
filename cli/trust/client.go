@@ -40,11 +40,7 @@ type Client struct {
 
 func New(cfg Config) *Client {
 	if cfg.DiscoveryURL == "" {
-		if override := strings.TrimSpace(os.Getenv("ALIBABA_CLOUD_CLI_TRUST_DISCOVERY_URL")); override != "" {
-			cfg.DiscoveryURL = override
-		} else {
-			cfg.DiscoveryURL = defaultDiscoveryURL()
-		}
+		cfg.DiscoveryURL = defaultDiscoveryURL()
 	}
 	if strings.TrimSpace(cfg.SourceBase) == "" {
 		cfg.SourceBase = defaultSourceBase()
@@ -149,11 +145,6 @@ func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*
 	}
 	if c.directRepositoryTrust() {
 		c.useRepositoryMetadata(&discovery)
-		trustDebugf(
-			"repository metadata root=%s keys=%s timestamp=%s recovery=%s",
-			discovery.RootMetadataURI, discovery.ArtifactKeysURI,
-			discovery.TimestampURI, discovery.RecoveryPatchURI,
-		)
 	}
 	if err := c.validateURL(discovery.RootMetadataURI, c.cfg.MetadataHosts); err != nil {
 		return nil, err
@@ -169,7 +160,6 @@ func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*
 	if err != nil {
 		return nil, err
 	}
-	trustDebugf("builtin root %s", rootSummary(root))
 	origin := ""
 	for _, candidate := range discovery.OfficialArtifactOrigins {
 		if _, e := checkedOrigin(candidate, c.cfg.AllowTestHTTP); e == nil {
@@ -235,12 +225,6 @@ func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*
 		}
 	}
 	state.KeysVersion = keys.Version
-	trustDebugf(
-		"artifact-keys version=%d plugin_key_ids=%s timestamp_key_ids=%s",
-		keys.Version,
-		strings.Join(keys.Roles["plugins"].KeyIDs, ","),
-		strings.Join(keys.Roles["timestamp"].KeyIDs, ","),
-	)
 
 	timestampCache := filepath.Join(cacheDir, "timestamp.json")
 	timestampBytes, timestampRemote, err := c.fetchWithLKG(ctx, discovery.TimestampURI, timestampCache, c.cfg.MetadataHosts)
@@ -272,10 +256,6 @@ func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*
 	if !ok {
 		return nil, fmt.Errorf("timestamp has no %s descriptor", purpose)
 	}
-	trustDebugf(
-		"timestamp version=%d expires=%s url=%s",
-		timestamp.Version, timestamp.ExpiresAt.Format(time.RFC3339), descriptor.URL,
-	)
 	if state.ArtifactVersions == nil {
 		state.ArtifactVersions = make(map[string]uint64)
 	}
@@ -311,10 +291,6 @@ func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*
 	if err := VerifyDescriptor(payload, descriptor, now); err != nil {
 		return nil, err
 	}
-	trustDebugf(
-		"verified %s version=%d key_ids=%s url=%s",
-		purpose, descriptor.Version, strings.Join(ids, ","), descriptor.URL,
-	)
 	state.ArtifactVersions[purpose] = descriptor.Version
 	if purpose == PurposePluginIndex {
 		state.IndexVersion = descriptor.Version
@@ -336,7 +312,6 @@ func (c *Client) loadDiscovery(ctx context.Context, purpose string, now time.Tim
 	if err != nil {
 		return discovery, err
 	}
-	trustDebugf("fetch discovery %s", discoveryURL)
 	cache := filepath.Join(c.cfg.CacheDir, "discovery", digest(discoveryURL)+".json")
 	data, remote, err := c.fetchWithLKG(ctx, discoveryURL, cache, c.cfg.MetadataHosts)
 	if err != nil {
@@ -374,12 +349,6 @@ func (c *Client) loadDiscovery(ctx context.Context, purpose string, now time.Tim
 			return discovery, err
 		}
 	}
-	trustDebugf(
-		"discovery authority=%s source=%s direct=%t root=%s keys=%s timestamp=%s recovery=%s",
-		discovery.Authority, discovery.SourceBase, c.directRepositoryTrust(),
-		discovery.RootMetadataURI, discovery.ArtifactKeysURI,
-		discovery.TimestampURI, discovery.RecoveryPatchURI,
-	)
 	return discovery, nil
 }
 
@@ -539,26 +508,20 @@ func (c *Client) parseTrustedRoot(data []byte, now time.Time, deny map[string]bo
 func (c *Client) updateRoots(ctx context.Context, base, cacheDir string, root Root, now time.Time, deny map[string]bool) (Root, error) {
 	for {
 		nextURL := strings.TrimRight(base, "/") + fmt.Sprintf("/%d.root.json", root.Version+1)
-		trustDebugf("root update request %s", nextURL)
 		data, status, err := c.fetchStatus(ctx, nextURL, c.cfg.MetadataHosts)
 		if err != nil {
-			trustDebugf("root update stop: %s: %v", nextURL, err)
 			return root, nil
 		}
 		if status == http.StatusNotFound {
-			trustDebugf("root update stop: %s is absent, stay on version %d", nextURL, root.Version)
 			return root, nil
 		}
 		if status != http.StatusOK {
-			trustDebugf("root update stop: %s returned HTTP %d, stay on version %d", nextURL, status, root.Version)
 			return root, nil
 		}
 		next, err := VerifyRootUpdate(data, root, now, deny)
 		if err != nil {
-			trustDebugf("root update rejected %s: %v", nextURL, err)
 			return root, nil
 		}
-		trustDebugf("root update accepted %s", rootSummary(next))
 		if err := atomicWrite(filepath.Join(cacheDir, fmt.Sprintf("%d.root.json", next.Version)), data, 0600); err != nil {
 			return root, err
 		}
@@ -569,13 +532,11 @@ func (c *Client) updateRoots(ctx context.Context, base, cacheDir string, root Ro
 // CheckAndApplyRecovery checks the independently signed recovery channel before
 // a trust-changing operation. Root keys are deliberately not consulted here.
 func (c *Client) CheckAndApplyRecovery(ctx context.Context, recoveryURL, cacheDir string, root Root, state *State) (Root, error) {
-	trustDebugf("recovery request %s", recoveryURL)
 	data, status, err := c.fetchStatus(ctx, recoveryURL, c.cfg.RecoveryHosts)
 	if err != nil {
 		return root, err
 	}
 	if status == http.StatusNotFound || status == http.StatusNoContent {
-		trustDebugf("recovery absent: HTTP %d", status)
 		return root, nil
 	}
 	if status != http.StatusOK {
@@ -668,10 +629,6 @@ func (c *Client) CheckAndApplyRecovery(ctx context.Context, recoveryURL, cacheDi
 	if err := atomicWrite(filepath.Join(cacheDir, "trust-state.json"), mustJSON(state), 0600); err != nil {
 		return root, err
 	}
-	trustDebugf(
-		"recovery applied epoch=%d replacement=%s deny=%s",
-		patch.RecoveryEpoch, rootSummary(replacement), strings.Join(patch.DenyKeyIDs, ","),
-	)
 	return replacement, nil
 }
 

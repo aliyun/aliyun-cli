@@ -541,13 +541,6 @@ func TestInnerSourceStaysOffPublicDiscovery(t *testing.T) {
 	))
 }
 
-func TestDiscoveryURLOverrideAddsPreHost(t *testing.T) {
-	t.Setenv("ALIBABA_CLOUD_CLI_TRUST_DISCOVERY_URL", "https://pre-api-workbench.aliyun.com/.well-known/aliyun-cli-trust.json")
-	client := New(Config{SourceBase: "https://aliyuncli.alicdn.com/plugins-v2"})
-	assert.Equal(t, "https://pre-api-workbench.aliyun.com/.well-known/aliyun-cli-trust.json", client.cfg.DiscoveryURL)
-	assert.Contains(t, client.cfg.MetadataHosts, "pre-api-workbench.aliyun.com")
-}
-
 func TestNewUsesConfiguredPluginSite(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
