@@ -17,7 +17,6 @@ package mcpproxy
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/url"
 	"os"
@@ -220,17 +219,14 @@ type mcpAuthenticationError struct {
 
 func (e *mcpAuthenticationError) Error() string { return e.envelope.Message }
 
-func (e *mcpAuthenticationError) RenderError(w io.Writer) error {
-	return json.NewEncoder(w).Encode(e.envelope)
-}
-
 // Authentication failures retain the command's existing exit status.
-func (e *mcpAuthenticationError) ExitCode() int { return 1 }
+func (e *mcpAuthenticationError) AIError() *cli.AgentError {
+	return cli.NewAgentError(e.envelope, e).WithExitCode(1)
+}
 
 func newMCPAuthenticationError(message, action, hint string) error {
 	return &mcpAuthenticationError{envelope: cli.AgentErrorEnvelope{
-		SchemaVersion: cli.AgentErrorSchemaVersion,
-		Message:       message,
+		Message: message,
 		Recovery: cli.AgentErrorRecovery{
 			Action: action,
 			Hint:   hint,

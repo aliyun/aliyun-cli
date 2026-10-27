@@ -73,6 +73,10 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 	if errors.As(err, &existing) {
 		return existing
 	}
+	var provider interface{ AIError() *cli.AgentError }
+	if errors.As(err, &provider) {
+		return provider.AIError()
+	}
 
 	context := newRecoveryContext(args)
 
