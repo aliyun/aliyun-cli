@@ -128,6 +128,12 @@ func newUploadEvent(event Event) uploadEvent {
 	if event.HTTPStatusCode != 0 {
 		attributes["httpStatusCode"] = event.HTTPStatusCode
 	}
+	addAttribute(attributes, "linuxDistroName", event.LinuxDistroName)
+	addAttribute(attributes, "linuxDistroId", event.LinuxDistroID)
+	addAttribute(attributes, "linuxDistroVersion", event.LinuxDistroVersion)
+	if len(event.EnvironmentNames) > 0 {
+		attributes["environmentVariableNames"] = event.EnvironmentNames
+	}
 	addAttribute(attributes, "plugin", event.Plugin)
 	addAttribute(attributes, "agentName", event.AgentName)
 	if action := event.PluginAction; action != nil {
