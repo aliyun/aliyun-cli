@@ -18,18 +18,41 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/aliyun/aliyun-cli/v3/cli"
 )
 
 // EnvSignatureVersion selects the OpenAPI request signature version.
-// When set, it overrides profile signature_version.
+// When set, it overrides profile signature_version but loses to --cli-sign-version.
 const EnvSignatureVersion = "ALIBABA_CLOUD_SIGNATURE_VERSION"
 
 // SignatureVersionV4 is the only non-default signature version supported in phase 1.
 const SignatureVersionV4 = "v4"
 
+// CliSignVersionFromFlags returns the --cli-sign-version value for this invocation.
+// Empty means the flag was not set.
+func CliSignVersionFromFlags(fs *cli.FlagSet) string {
+	if fs == nil {
+		return ""
+	}
+	f := CliSignVersionFlag(fs)
+	if f == nil {
+		return ""
+	}
+	v, ok := f.GetValue()
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(v)
+}
+
 // EffectiveSignatureVersion returns the active signature version.
-// Environment variable ALIBABA_CLOUD_SIGNATURE_VERSION wins over profile.signature_version.
-func (cp *Profile) EffectiveSignatureVersion() string {
+// Precedence matches the SLS plugin hook: --cli-sign-version >
+// ALIBABA_CLOUD_SIGNATURE_VERSION > profile.signature_version.
+func (cp *Profile) EffectiveSignatureVersion(cliSignVersion string) string {
+	if v := strings.TrimSpace(cliSignVersion); v != "" {
+		return v
+	}
 	if v := strings.TrimSpace(os.Getenv(EnvSignatureVersion)); v != "" {
 		return v
 	}
@@ -42,8 +65,8 @@ func (cp *Profile) EffectiveSignatureVersion() string {
 // UseSignatureV4 reports whether OpenAPI calls should use signature V4.
 // Empty means keep the current (ACS3 / legacy) behavior.
 // Unsupported values return an error so callers do not silently fall back.
-func (cp *Profile) UseSignatureV4() (bool, error) {
-	v := strings.TrimSpace(cp.EffectiveSignatureVersion())
+func (cp *Profile) UseSignatureV4(cliSignVersion string) (bool, error) {
+	v := strings.TrimSpace(cp.EffectiveSignatureVersion(cliSignVersion))
 	if v == "" {
 		return false, nil
 	}

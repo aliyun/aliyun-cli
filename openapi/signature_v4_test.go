@@ -61,6 +61,27 @@ func TestGetOpenapiClientSignatureV4FromEnv(t *testing.T) {
 	assert.NotNil(t, client.Spi)
 }
 
+func TestGetOpenapiClientSignatureV4FromCliSignVersionFlag(t *testing.T) {
+	t.Setenv(config.EnvSignatureVersion, "")
+	_, ctx, _, _ := newCanonicalHelpTestContext(t)
+	config.AddFlags(ctx.Flags())
+	f := config.CliSignVersionFlag(ctx.Flags())
+	require.NotNil(t, f)
+	f.SetAssigned(true)
+	f.SetValue("v4")
+	profile := &config.Profile{
+		Mode:            config.AK,
+		AccessKeyId:     "id",
+		AccessKeySecret: "secret",
+		RegionId:        "cn-hangzhou",
+	}
+	client, err := GetOpenapiClient(profile, ctx, &meta.Product{Code: "Ecs", GlobalEndpoint: "ecs.cn-hangzhou.aliyuncs.com"})
+	require.NoError(t, err)
+	assert.Equal(t, config.SignatureVersionV4, tea.StringValue(client.SignatureVersion))
+	assert.Equal(t, "Ecs", tea.StringValue(client.ProductId))
+	assert.NotNil(t, client.Spi)
+}
+
 func TestProcessInvokeRejectsSignatureV4ForPascalCase(t *testing.T) {
 	t.Setenv(config.EnvSignatureVersion, "")
 	stdout := new(bytes.Buffer)
@@ -78,4 +99,25 @@ func TestProcessInvokeRejectsSignatureV4ForPascalCase(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "signature version v4 is not supported for PascalCase")
 	assert.NotContains(t, err.Error(), "init client")
+}
+
+func TestProcessInvokeRejectsSignatureV4FromCliSignVersionFlag(t *testing.T) {
+	t.Setenv(config.EnvSignatureVersion, "")
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	config.AddFlags(ctx.Flags())
+	f := config.CliSignVersionFlag(ctx.Flags())
+	require.NotNil(t, f)
+	f.SetAssigned(true)
+	f.SetValue("v4")
+	c := &Commando{profile: config.Profile{
+		Mode:            config.AK,
+		AccessKeyId:     "id",
+		AccessKeySecret: "secret",
+		RegionId:        "cn-hangzhou",
+	}}
+	err := c.processInvoke(ctx, "ecs", "DescribeInstances", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "signature version v4 is not supported for PascalCase")
 }

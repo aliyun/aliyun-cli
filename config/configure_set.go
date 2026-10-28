@@ -34,6 +34,7 @@ func NewConfigureSetCommand() *cli.Command {
 	}
 
 	AddFlags(cmd.Flags())
+	cmd.Flags().Add(NewSignatureVersionFlag())
 
 	return cmd
 }

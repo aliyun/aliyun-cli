@@ -60,6 +60,7 @@ const (
 	BearerTokenFlagName                = "bearer-token"
 	BearerTokenHeaderKeyFlagName       = "bearer-token-header-key"
 	SignatureVersionFlagName           = "signature-version"
+	CliSignVersionFlagName             = "cli-sign-version"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -102,7 +103,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewAutoPluginInstallEnablePreFlag())
 	fs.Add(NewBearerTokenFlag())
 	fs.Add(NewBearerTokenHeaderKeyFlag())
-	fs.Add(NewSignatureVersionFlag())
+	fs.Add(NewCliSignVersionFlag())
 }
 
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
@@ -713,14 +714,32 @@ func SignatureVersionFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(SignatureVersionFlagName)
 }
 
+func CliSignVersionFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(CliSignVersionFlagName)
+}
+
+// NewSignatureVersionFlag persists signature_version into the profile via configure set.
 func NewSignatureVersionFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "config",
 		Name:         SignatureVersionFlagName,
 		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--signature-version v4` to save signature V4 as the profile default for kebab-case OpenAPI requests",
+			"使用 `--signature-version v4` 将签名 V4 写入 Profile，作为中划线式 OpenAPI 请求的默认签名版本"),
+	}
+}
+
+// NewCliSignVersionFlag selects the signature version for the current command.
+// Name matches the SLS plugin hook flag so plugins and the core CLI stay aligned.
+func NewCliSignVersionFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         CliSignVersionFlagName,
+		AssignedMode: cli.AssignedOnce,
 		Persistent:   true,
 		Short: i18n.T(
-			"use `--signature-version v4` to sign kebab-case OpenAPI requests with signature V4",
-			"使用 `--signature-version v4` 让中划线式 OpenAPI 请求使用签名 V4"),
+			"use `--cli-sign-version v4` to sign this kebab-case OpenAPI request with signature V4",
+			"使用 `--cli-sign-version v4` 让本次中划线式 OpenAPI 请求使用签名 V4"),
 	}
 }

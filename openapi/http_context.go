@@ -70,7 +70,7 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	if err != nil {
 		return
 	}
-	useV4, err := cp.UseSignatureV4()
+	useV4, err := cp.UseSignatureV4(config.CliSignVersionFromFlags(ctx.Flags()))
 	if err != nil {
 		return nil, err
 	}

@@ -80,13 +80,21 @@ aliyun configure set \
 
 阶段一仅让中划线式命令（例如 `aliyun ecs describe-instances`）支持签名 V4。大驼峰式命令仍走 V1 Golang SDK，暂不支持签名 V4。
 
-在 Profile 中开启：
+优先级（与 SLS 插件 `--cli-sign-version` 一致）：命令行 flag > 环境变量 > Profile。
+
+单次命令开启：
+
+```sh
+aliyun ecs describe-instances --cli-sign-version v4
+```
+
+在 Profile 中设为默认：
 
 ```sh
 aliyun configure set --profile default --signature-version v4
 ```
 
-或仅对当前进程设置环境变量（与 Profile 同时存在时，环境变量优先）：
+或仅对当前进程设置环境变量：
 
 ```sh
 export ALIBABA_CLOUD_SIGNATURE_VERSION=v4
