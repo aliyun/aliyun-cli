@@ -585,7 +585,7 @@ func (c *Context) PrepareEnv() error {
 		if _, exists := os.LookupEnv(target); exists {
 			continue
 		}
-		if value := strings.TrimSpace(os.Getenv(source)); value != "" {
+		if value := os.Getenv(source); value != "" {
 			envMapNew[target] = value
 		}
 	}

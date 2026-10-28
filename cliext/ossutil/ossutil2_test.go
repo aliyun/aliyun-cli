@@ -559,9 +559,9 @@ func TestPrepareEnv_OriginalCallContext(t *testing.T) {
 				targetSet, wantSet         bool
 			}{
 				{name: "maps common value", source: mapping.value, want: mapping.value, wantSet: true},
-				{name: "trims common value", source: " \t" + mapping.value + "\n", want: mapping.value, wantSet: true},
+				{name: "preserves common whitespace", source: " \t" + mapping.value + "\n", want: " \t" + mapping.value + "\n", wantSet: true},
 				{name: "ignores empty common value"},
-				{name: "ignores blank common value", source: " \t\n"},
+				{name: "preserves blank common value", source: " \t\n", want: " \t\n", wantSet: true},
 				{name: "preserves dedicated value", source: mapping.value, target: mapping.override, targetSet: true, want: mapping.override, wantSet: true},
 				{name: "preserves dedicated empty value", source: mapping.value, targetSet: true, wantSet: true},
 				{name: "preserves dedicated whitespace", source: mapping.value, target: " \t", targetSet: true, want: " \t", wantSet: true},
