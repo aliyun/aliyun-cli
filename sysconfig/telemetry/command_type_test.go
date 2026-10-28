@@ -69,3 +69,24 @@ func TestDetectCommandType(t *testing.T) {
 		})
 	}
 }
+
+func TestDetectCommandTypeForScopeReusesResolvedPluginType(t *testing.T) {
+	t.Setenv(plugin.EnvPluginsDir, t.TempDir())
+
+	tests := []struct {
+		name       string
+		pluginType string
+		want       string
+	}{
+		{name: "go plugin", pluginType: plugin.PluginTypeGo, want: CommandTypePluginGo},
+		{name: "meta plugin", pluginType: plugin.PluginTypeMeta, want: CommandTypePluginMeta},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scope := Scope{PluginType: tt.pluginType}
+			if got := detectCommandTypeForScope([]string{"not-installed", "list"}, scope); got != tt.want {
+				t.Fatalf("detectCommandTypeForScope() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

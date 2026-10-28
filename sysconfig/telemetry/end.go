@@ -71,14 +71,16 @@ func flush(exitCode *int, err error) {
 		RemoveUnvalidatedPluginNames(execution.pluginAction)
 	}
 	ev, buildErr := BuildEvent(BuildInput{
-		Scope:        execution.scope,
-		RootArgs:     execution.rootArgs,
-		InstanceID:   instanceID,
-		DurationMs:   commandExecutionDurationMs(execution),
-		Err:          err,
-		ExitCode:     exitCode,
-		AIMode:       execution.aiMode,
-		PluginAction: execution.pluginAction,
+		Scope:          execution.scope,
+		RootArgs:       execution.rootArgs,
+		InstanceID:     instanceID,
+		DurationMs:     commandExecutionDurationMs(execution),
+		Err:            err,
+		ExitCode:       exitCode,
+		AIMode:         execution.aiMode,
+		AuthMode:       execution.authMode,
+		AuthModeSource: execution.authModeSource,
+		PluginAction:   execution.pluginAction,
 	})
 	if buildErr != nil {
 		return

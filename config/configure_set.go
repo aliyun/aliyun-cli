@@ -19,6 +19,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 )
 
 func NewConfigureSetCommand() *cli.Command {
@@ -66,6 +67,7 @@ func doConfigureSet(ctx *cli.Context) error {
 	mode, ok := ModeFlag(flags).GetValue()
 	if ok {
 		profile.Mode = NormalizeMode(mode)
+		telemetry.SetAuthenticationMode(string(profile.Mode), telemetry.AuthModeSourceExplicit)
 	} else {
 		if profile.Mode == "" {
 			profile.Mode = AK
