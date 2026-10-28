@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cloudsso"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 	"github.com/aliyun/aliyun-cli/v3/util"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -188,6 +189,12 @@ func NewConfigureCommand() *cli.Command {
 
 func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 	w := ctx.Stdout()
+	authModeSource := telemetry.AuthModeSourceDefault
+	if modeFlag := ModeFlag(ctx.Flags()); modeFlag != nil && modeFlag.IsAssigned() {
+		if value, _ := modeFlag.GetValue(); strings.TrimSpace(value) != "" {
+			authModeSource = telemetry.AuthModeSourceExplicit
+		}
+	}
 
 	var err error
 	var conf *Configuration
@@ -225,9 +232,12 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 	cp, ok := conf.GetProfile(profileName)
 	if !ok {
 		cp = conf.NewProfile(profileName)
+	} else if authModeSource != telemetry.AuthModeSourceExplicit {
+		authModeSource = telemetry.AuthModeSourceExisting
 	}
 
 	normalizedMode := NormalizeMode(mode)
+	telemetry.SetAuthenticationMode(string(normalizedMode), authModeSource)
 	noBrowser := ctx.Flags().Get("no-browser")
 	manualOAuth := noBrowser != nil && noBrowser.IsAssigned()
 	if manualOAuth && normalizedMode != OAuth {

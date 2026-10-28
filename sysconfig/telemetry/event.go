@@ -76,21 +76,25 @@ type Event struct {
 	ShellType          string                 `json:"shell_type,omitempty"`
 	StdinIsTTY         bool                   `json:"stdin_is_tty"`
 	Locale             string                 `json:"locale,omitempty"`
-	Mode               string                 `json:"mode"`
+	AIModeEnabled      bool                   `json:"ai_mode_enabled"`
+	AuthMode           string                 `json:"auth_mode,omitempty"`
+	AuthModeSource     string                 `json:"auth_mode_source,omitempty"`
 	AgentName          string                 `json:"agent_name,omitempty"`
 	InstanceID         string                 `json:"instance_id"`
 	PluginAction       *PluginManagementEvent `json:"plugin_action,omitempty"`
 }
 
 type BuildInput struct {
-	Scope        Scope
-	RootArgs     []string
-	InstanceID   string
-	DurationMs   int64
-	Err          error
-	ExitCode     *int
-	AIMode       bool
-	PluginAction *PluginManagementEvent
+	Scope          Scope
+	RootArgs       []string
+	InstanceID     string
+	DurationMs     int64
+	Err            error
+	ExitCode       *int
+	AIMode         bool
+	AuthMode       string
+	AuthModeSource string
+	PluginAction   *PluginManagementEvent
 }
 
 type localErrorCoder interface {
@@ -175,11 +179,6 @@ func BuildEvent(in BuildInput) (Event, error) {
 	pos := commandParts(in.RootArgs, in.Scope.CommandToken)
 	command := normalizeCommand(pos)
 
-	mode := "default"
-	if in.AIMode {
-		mode = "ai"
-	}
-
 	pluginField := ""
 	if in.Scope.PluginName != "" {
 		ver := in.Scope.PluginVer
@@ -205,7 +204,7 @@ func BuildEvent(in BuildInput) (Event, error) {
 		EventType:          eventType,
 		Timestamp:          time.Now().UTC().Format(time.RFC3339),
 		Pipeline:           in.Scope.Pipeline,
-		CommandType:        DetectCommandType(in.RootArgs),
+		CommandType:        detectCommandTypeForScope(in.RootArgs, in.Scope),
 		Command:            command,
 		Params:             ExtractParamNames(in.RootArgs),
 		Result:             classifyResult(in.Err, in.ExitCode),
@@ -225,7 +224,9 @@ func BuildEvent(in BuildInput) (Event, error) {
 		ShellType:          detectShellType(),
 		StdinIsTTY:         detectStdinTTY(),
 		Locale:             detectLocale(),
-		Mode:               mode,
+		AIModeEnabled:      in.AIMode,
+		AuthMode:           in.AuthMode,
+		AuthModeSource:     in.AuthModeSource,
 		AgentName:          util.DetectAgentName(),
 		InstanceID:         in.InstanceID,
 		PluginAction:       in.PluginAction,

@@ -15,21 +15,30 @@
 package telemetry
 
 import (
+	"strings"
 	"time"
 )
 
 type activeCommandExecution struct {
-	configDir    string
-	scope        Scope
-	rootArgs     []string
-	start        time.Time
-	aiMode       bool
-	cfg          *Config
-	pluginAction *PluginManagementEvent
+	configDir      string
+	scope          Scope
+	rootArgs       []string
+	start          time.Time
+	aiMode         bool
+	authMode       string
+	authModeSource string
+	cfg            *Config
+	pluginAction   *PluginManagementEvent
 }
 
 var activeExecution *activeCommandExecution
 var executionEnded bool
+
+const (
+	AuthModeSourceExplicit = "explicit"
+	AuthModeSourceDefault  = "default"
+	AuthModeSourceExisting = "existing"
+)
 
 func resetExecutionState() {
 	activeExecution = nil
@@ -61,6 +70,61 @@ func takeCommandExecutionForEnd() (*activeCommandExecution, bool) {
 	}
 	executionEnded = true
 	return activeExecution, true
+}
+
+// SetAuthenticationMode records only a known authentication-mode enum for the
+// active configure command. Unknown values are ignored rather than uploaded.
+func SetAuthenticationMode(mode, source string) {
+	if activeExecution == nil {
+		return
+	}
+	canonicalMode := safeAuthenticationMode(mode)
+	if canonicalMode == "" || !safeAuthModeSource(source) {
+		return
+	}
+	activeExecution.authMode = canonicalMode
+	activeExecution.authModeSource = source
+}
+
+func safeAuthenticationMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "ak":
+		return "AK"
+	case "ststoken":
+		return "StsToken"
+	case "ramrolearn":
+		return "RamRoleArn"
+	case "ecsramrole":
+		return "EcsRamRole"
+	case "rsakeypair":
+		return "RsaKeyPair"
+	case "ramrolearnwithrolename":
+		return "RamRoleArnWithRoleName"
+	case "chainableramrolearn":
+		return "ChainableRamRoleArn"
+	case "external":
+		return "External"
+	case "credentialsuri":
+		return "CredentialsURI"
+	case "oidc":
+		return "OIDC"
+	case "cloudsso":
+		return "CloudSSO"
+	case "oauth":
+		return "OAuth"
+	case "bearertoken":
+		return "BearerToken"
+	case "anonymous":
+		return "Anonymous"
+	default:
+		return ""
+	}
+}
+
+func safeAuthModeSource(source string) bool {
+	return source == AuthModeSourceExplicit ||
+		source == AuthModeSourceDefault ||
+		source == AuthModeSourceExisting
 }
 
 func commandExecutionDurationMs(execution *activeCommandExecution) int64 {

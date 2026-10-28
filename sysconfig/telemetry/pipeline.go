@@ -26,7 +26,26 @@ type Scope struct {
 	Pipeline     string
 	PluginName   string
 	PluginVer    string
+	PluginType   string
 	CommandToken string
+}
+
+func scopeFromLocalPlugin(commandToken string, lp *plugin.LocalPlugin) Scope {
+	scope := Scope{
+		Active:       true,
+		Pipeline:     PipelinePublic,
+		CommandToken: commandToken,
+	}
+	if lp == nil {
+		return scope
+	}
+	scope.PluginName = lp.Name
+	scope.PluginVer = lp.Version
+	scope.PluginType = plugin.NormalizePluginType(lp.Type)
+	if lp.Inner {
+		scope.Pipeline = PipelineInner
+	}
+	return scope
 }
 
 func DetectInnerScope(commandToken string) Scope {
@@ -40,35 +59,21 @@ func DetectInnerScope(commandToken string) Scope {
 	if err != nil || lp == nil || !lp.Inner {
 		return Scope{}
 	}
-	return Scope{
-		Active:       true,
-		Pipeline:     PipelineInner,
-		PluginName:   lp.Name,
-		PluginVer:    lp.Version,
-		CommandToken: commandToken,
-	}
+	return scopeFromLocalPlugin(commandToken, lp)
 }
 
 func SelectScope(commandToken string, cfg *Config) (bool, Scope) {
 	if commandToken == "" || Disabled(cfg) {
 		return false, Scope{}
 	}
-	inner := DetectInnerScope(commandToken)
-	if inner.Active {
-		return true, inner
+	if plugin.IsReservedTopLevelCommand(commandToken) {
+		return true, scopeFromLocalPlugin(commandToken, nil)
 	}
-	scope := Scope{
-		Active:       true,
-		Pipeline:     PipelinePublic,
-		CommandToken: commandToken,
+	lp, err := plugin.LookupLocalPlugin(commandToken)
+	if err != nil {
+		return true, scopeFromLocalPlugin(commandToken, nil)
 	}
-	if !plugin.IsReservedTopLevelCommand(commandToken) {
-		if lp, err := plugin.LookupLocalPlugin(commandToken); err == nil && lp != nil {
-			scope.PluginName = lp.Name
-			scope.PluginVer = lp.Version
-		}
-	}
-	return true, scope
+	return true, scopeFromLocalPlugin(commandToken, lp)
 }
 
 func ShouldCollectInner(commandToken string, cfg *Config) (bool, Scope) {

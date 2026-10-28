@@ -109,11 +109,11 @@ func postTelemetryBatch(batch []uploadEvent) bool {
 
 func newUploadEvent(event Event) uploadEvent {
 	attributes := map[string]any{
-		"command":   event.Command,
-		"os":        event.OS,
-		"arch":      event.Arch,
-		"goVersion": event.GoVersion,
-		"mode":      event.Mode,
+		"command":       event.Command,
+		"os":            event.OS,
+		"arch":          event.Arch,
+		"goVersion":     event.GoVersion,
+		"aiModeEnabled": event.AIModeEnabled,
 	}
 	// Only emit pipeline for inner events; public is the default and omitted.
 	if event.Pipeline == PipelineInner {
@@ -137,6 +137,8 @@ func newUploadEvent(event Event) uploadEvent {
 	addAttribute(attributes, "shellType", event.ShellType)
 	attributes["stdinIsTTY"] = event.StdinIsTTY
 	addAttribute(attributes, "locale", event.Locale)
+	addAttribute(attributes, "authMode", event.AuthMode)
+	addAttribute(attributes, "authModeSource", event.AuthModeSource)
 	addAttribute(attributes, "plugin", event.Plugin)
 	addAttribute(attributes, "agentName", event.AgentName)
 	if action := event.PluginAction; action != nil {

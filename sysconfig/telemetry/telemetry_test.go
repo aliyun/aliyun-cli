@@ -71,6 +71,21 @@ func TestBuildEventTimestampUsesUTC(t *testing.T) {
 	}
 }
 
+func TestBuildEventRecordsAIModeAsBoolean(t *testing.T) {
+	event, err := BuildEvent(BuildInput{
+		Scope:      Scope{Active: true, Pipeline: PipelinePublic},
+		RootArgs:   []string{"version"},
+		InstanceID: "instance-id",
+		AIMode:     true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !event.AIModeEnabled {
+		t.Fatal("AI mode must be recorded as enabled")
+	}
+}
+
 func TestBuildEventClassifiesConfigurationCommands(t *testing.T) {
 	event, err := BuildEvent(BuildInput{
 		Scope:      Scope{Active: true, Pipeline: PipelinePublic, CommandToken: "configure"},
@@ -199,6 +214,25 @@ func TestTelemetryEnabledByDefault(t *testing.T) {
 	}
 }
 
+func TestSetAuthenticationModeUsesSafeEnums(t *testing.T) {
+	resetExecutionState()
+	t.Cleanup(resetExecutionState)
+	beginCommandExecution("", Scope{Active: true}, nil, false, nil)
+
+	SetAuthenticationMode("oauth", AuthModeSourceExplicit)
+	if activeExecution.authMode != "OAuth" ||
+		activeExecution.authModeSource != AuthModeSourceExplicit {
+		t.Fatalf("unexpected authentication telemetry: %+v", activeExecution)
+	}
+
+	resetExecutionState()
+	beginCommandExecution("", Scope{Active: true}, nil, false, nil)
+	SetAuthenticationMode("user-provided-secret", AuthModeSourceExplicit)
+	if activeExecution.authMode != "" || activeExecution.authModeSource != "" {
+		t.Fatalf("unknown authentication mode must not be recorded: %+v", activeExecution)
+	}
+}
+
 func TestPublicTelemetryDefaultAndExplicitDisablePersistence(t *testing.T) {
 	configDir := t.TempDir()
 	cfg, err := Load(configDir)
@@ -247,7 +281,7 @@ func TestSelectScopeKeepsInnerAndPublicPluginsSeparated(t *testing.T) {
 			Name: "aliyun-cli-inner-test", Command: "inner-test", Version: "1.0.0", Inner: true,
 		},
 		"aliyun-cli-public-test": {
-			Name: "aliyun-cli-public-test", Command: "public-test", Version: "2.0.0",
+			Name: "aliyun-cli-public-test", Command: "public-test", Version: "2.0.0", Type: plugin.PluginTypeMeta,
 		},
 	}}
 	data, err := json.Marshal(manifest)
@@ -273,7 +307,8 @@ func TestSelectScopeKeepsInnerAndPublicPluginsSeparated(t *testing.T) {
 	if !ok ||
 		scope.Pipeline != PipelinePublic ||
 		scope.PluginName != "aliyun-cli-public-test" ||
-		scope.PluginVer != "2.0.0" {
+		scope.PluginVer != "2.0.0" ||
+		scope.PluginType != plugin.PluginTypeMeta {
 		t.Fatalf("unexpected public plugin scope: ok=%v scope=%+v", ok, scope)
 	}
 }
@@ -465,7 +500,9 @@ func TestUploadFileUsesVersionedExtensibleContract(t *testing.T) {
 		ShellType:          "zsh",
 		StdinIsTTY:         true,
 		Locale:             "zh_CN.UTF-8",
-		Mode:               "default",
+		AIModeEnabled:      false,
+		AuthMode:           "OAuth",
+		AuthModeSource:     AuthModeSourceExplicit,
 		InstanceID:         "d69b3a04-b81c-47e7-a882-504e5865352d",
 	}
 	cacheFile, err := WriteEvent(cacheDir, event)
@@ -515,6 +552,16 @@ func TestUploadFileUsesVersionedExtensibleContract(t *testing.T) {
 		attributes["locale"] != "zh_CN.UTF-8" {
 		t.Fatalf("unexpected terminal environment attributes: %#v", attributes)
 	}
+	if attributes["authMode"] != "OAuth" ||
+		attributes["authModeSource"] != AuthModeSourceExplicit {
+		t.Fatalf("unexpected authentication attributes: %#v", attributes)
+	}
+	if attributes["aiModeEnabled"] != false {
+		t.Fatalf("unexpected AI mode attribute: %#v", attributes)
+	}
+	if _, exists := attributes["mode"]; exists {
+		t.Fatalf("ambiguous mode attribute must not be uploaded: %#v", attributes)
+	}
 	if _, exists := got["rawCommand"]; exists {
 		t.Fatal("raw command must not be uploaded")
 	}
@@ -547,20 +594,20 @@ func TestUploadPublicPluginManagementEventUsesSharedEndpoint(t *testing.T) {
 
 	configDir := t.TempDir()
 	cacheFile, err := WriteEvent(GetPublicCacheDir(configDir), Event{
-		Schema:     "1",
-		EventID:    "44f505ad-0b0d-4ae8-bbd0-8db24b288fa2",
-		EventType:  "cli.plugin.management.completed",
-		Timestamp:  "2026-10-09T12:20:30Z",
-		Pipeline:   PipelinePublic,
-		Command:    "plugin install",
-		Result:     "Success",
-		DurationMs: 12,
-		CLIVersion: "3.0.300",
-		OS:         "darwin",
-		Arch:       "arm64",
-		GoVersion:  "go1.25.1",
-		Mode:       "default",
-		InstanceID: "d69b3a04-b81c-47e7-a882-504e5865352d",
+		Schema:        "1",
+		EventID:       "44f505ad-0b0d-4ae8-bbd0-8db24b288fa2",
+		EventType:     "cli.plugin.management.completed",
+		Timestamp:     "2026-10-09T12:20:30Z",
+		Pipeline:      PipelinePublic,
+		Command:       "plugin install",
+		Result:        "Success",
+		DurationMs:    12,
+		CLIVersion:    "3.0.300",
+		OS:            "darwin",
+		Arch:          "arm64",
+		GoVersion:     "go1.25.1",
+		AIModeEnabled: false,
+		InstanceID:    "d69b3a04-b81c-47e7-a882-504e5865352d",
 		PluginAction: &PluginManagementEvent{
 			Operation:   "install",
 			PluginNames: []string{"aliyun-cli-demo"},
@@ -602,18 +649,18 @@ func TestUploadFileDropsEventAfterFailedAttempt(t *testing.T) {
 
 	configDir := t.TempDir()
 	cacheFile, err := WriteEvent(GetInnerCacheDir(configDir), Event{
-		Schema:     "1",
-		EventID:    "44f505ad-0b0d-4ae8-bbd0-8db24b288fa2",
-		Timestamp:  "2026-10-09T12:20:30Z",
-		Pipeline:   "inner",
-		Command:    "rdc list",
-		Result:     "Success",
-		CLIVersion: "3.0.300",
-		OS:         "darwin",
-		Arch:       "arm64",
-		GoVersion:  "go1.25.1",
-		Mode:       "default",
-		InstanceID: "d69b3a04-b81c-47e7-a882-504e5865352d",
+		Schema:        "1",
+		EventID:       "44f505ad-0b0d-4ae8-bbd0-8db24b288fa2",
+		Timestamp:     "2026-10-09T12:20:30Z",
+		Pipeline:      "inner",
+		Command:       "rdc list",
+		Result:        "Success",
+		CLIVersion:    "3.0.300",
+		OS:            "darwin",
+		Arch:          "arm64",
+		GoVersion:     "go1.25.1",
+		AIModeEnabled: false,
+		InstanceID:    "d69b3a04-b81c-47e7-a882-504e5865352d",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -664,18 +711,18 @@ func TestRunUploadCommandAcceptsHiddenArgumentForms(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			configDir := t.TempDir()
 			cacheFile, err := WriteEvent(GetInnerCacheDir(configDir), Event{
-				Schema:     "1",
-				EventID:    "44f505ad-0b0d-4ae8-bbd0-8db24b288fa2",
-				Timestamp:  "2026-10-09T12:20:30Z",
-				Pipeline:   "inner",
-				Command:    "cspec",
-				Result:     "Success",
-				CLIVersion: "3.0.300",
-				OS:         "darwin",
-				Arch:       "arm64",
-				GoVersion:  "go1.25.1",
-				Mode:       "default",
-				InstanceID: "d69b3a04-b81c-47e7-a882-504e5865352d",
+				Schema:        "1",
+				EventID:       "44f505ad-0b0d-4ae8-bbd0-8db24b288fa2",
+				Timestamp:     "2026-10-09T12:20:30Z",
+				Pipeline:      "inner",
+				Command:       "cspec",
+				Result:        "Success",
+				CLIVersion:    "3.0.300",
+				OS:            "darwin",
+				Arch:          "arm64",
+				GoVersion:     "go1.25.1",
+				AIModeEnabled: false,
+				InstanceID:    "d69b3a04-b81c-47e7-a882-504e5865352d",
 			})
 			if err != nil {
 				t.Fatal(err)

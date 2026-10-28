@@ -60,7 +60,27 @@ func DetectCommandType(args []string) string {
 		return CommandTypeCLIExt
 	}
 	if local, err := plugin.LookupLocalPlugin(commandToken); err == nil && local != nil {
-		if local.IsMeta() {
+		return classifyCommandType(parts, plugin.NormalizePluginType(local.Type))
+	}
+	return classifyCommandType(parts, "")
+}
+
+// detectCommandTypeForScope reuses plugin metadata resolved while selecting
+// the telemetry pipeline, so event construction does not read the manifest again.
+func detectCommandTypeForScope(args []string, scope Scope) string {
+	return classifyCommandType(positionalParts(args), scope.PluginType)
+}
+
+func classifyCommandType(parts []string, pluginType string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	commandToken := strings.ToLower(strings.TrimSpace(parts[0]))
+	if isCLIExtension(commandToken) {
+		return CommandTypeCLIExt
+	}
+	if pluginType != "" {
+		if plugin.NormalizePluginType(pluginType) == plugin.PluginTypeMeta {
 			return CommandTypePluginMeta
 		}
 		return CommandTypePluginGo
