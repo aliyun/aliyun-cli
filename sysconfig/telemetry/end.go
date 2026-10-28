@@ -27,6 +27,7 @@ type BeginInput struct {
 	ConfigDir    string
 	CommandArgs  []string
 	CommandToken string
+	AuthMode     string
 }
 
 func Begin(in BeginInput) {
@@ -42,6 +43,7 @@ func Begin(in BeginInput) {
 	aiCfg, _ := aimode.Load(in.ConfigDir)
 	aiOn := aiCfg != nil && aiCfg.Enabled
 	beginCommandExecution(in.ConfigDir, scope, in.CommandArgs, aiOn, cfg)
+	SetEffectiveAuthenticationMode(in.AuthMode)
 }
 
 func End(err error) {

@@ -139,6 +139,7 @@ func Main(args []string) {
 		ConfigDir:    configDir,
 		CommandArgs:  commandArgs,
 		CommandToken: commandToken,
+		AuthMode:     string(profile.Mode),
 	})
 
 	if os.Getenv("GENERATE_METADATA") == "YES" {
