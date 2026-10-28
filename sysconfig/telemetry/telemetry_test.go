@@ -219,6 +219,11 @@ func TestSetAuthenticationModeUsesSafeEnums(t *testing.T) {
 	t.Cleanup(resetExecutionState)
 	beginCommandExecution("", Scope{Active: true}, nil, false, nil)
 
+	SetEffectiveAuthenticationMode("ak")
+	if activeExecution.authMode != "AK" || activeExecution.authModeSource != "" {
+		t.Fatalf("unexpected effective authentication mode: %+v", activeExecution)
+	}
+
 	SetAuthenticationMode("oauth", AuthModeSourceExplicit)
 	if activeExecution.authMode != "OAuth" ||
 		activeExecution.authModeSource != AuthModeSourceExplicit {

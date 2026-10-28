@@ -72,8 +72,17 @@ func takeCommandExecutionForEnd() (*activeCommandExecution, bool) {
 	return activeExecution, true
 }
 
-// SetAuthenticationMode records only a known authentication-mode enum for the
-// active configure command. Unknown values are ignored rather than uploaded.
+// SetEffectiveAuthenticationMode records only a known authentication-mode enum
+// for the profile resolved by the active command.
+func SetEffectiveAuthenticationMode(mode string) {
+	if activeExecution == nil {
+		return
+	}
+	activeExecution.authMode = safeAuthenticationMode(mode)
+}
+
+// SetAuthenticationMode records the mode selected by an active configure
+// command together with its selection source.
 func SetAuthenticationMode(mode, source string) {
 	if activeExecution == nil {
 		return
