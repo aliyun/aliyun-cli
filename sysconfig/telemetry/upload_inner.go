@@ -45,7 +45,7 @@ type uploadBatch struct {
 }
 
 func telemetryUploadEndpoint() string {
-	if v := strings.TrimSpace(os.Getenv("ALIYUN_CLI_TELEMETRY_ENDPOINT")); v != "" {
+	if v := strings.TrimSpace(os.Getenv("ALIBABA_CLOUD_CLI_TELEMETRY_ENDPOINT")); v != "" {
 		return v
 	}
 	return defaultTelemetryEndpoint
