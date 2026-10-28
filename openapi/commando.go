@@ -975,6 +975,20 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 }
 
 func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
+	// PascalCase / Restful legacy path still uses the V1 Golang SDK, which does
+	// not support signature V4. Fail closed instead of signing incorrectly.
+	if useV4, err := c.profile.UseSignatureV4(); err != nil {
+		return err
+	} else if useV4 {
+		return cli.NewErrorWithTip(
+			fmt.Errorf("signature version v4 is not supported for PascalCase commands yet"),
+			"%s",
+			i18n.T(
+				"Use a kebab-case command instead (for example `aliyun ecs describe-instances`). PascalCase support is planned after migrating off the V1 Golang SDK.",
+				"请改用中划线式命令（例如 `aliyun ecs describe-instances`）。大驼峰式命令将在阶段二迁移到 V2 Golang SDK 后支持签名 V4。",
+			).Text())
+	}
+
 	// create specific invoker
 	invoker, err := c.createInvoker(ctx, productCode, apiOrMethod, path)
 	if err != nil {

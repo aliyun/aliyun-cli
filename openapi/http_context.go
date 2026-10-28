@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	popgateway "github.com/alibabacloud-go/alibabacloud-gateway-pop/client"
 	slsgateway "github.com/alibabacloud-go/alibabacloud-gateway-sls/client"
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
@@ -69,11 +70,18 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	if err != nil {
 		return
 	}
+	useV4, err := cp.UseSignatureV4()
+	if err != nil {
+		return nil, err
+	}
 	conf := openapiClient.Config{
 		Credential: credential,
 		RegionId:   tea.String(cp.RegionId),
 		// AccessKeyId:     tea.String(cp.AccessKeyId),
 		// AccessKeySecret: tea.String(cp.AccessKeySecret),
+	}
+	if useV4 {
+		conf.SignatureVersion = tea.String(config.SignatureVersionV4)
 	}
 	if cp.Endpoint != "" {
 		conf.Endpoint = tea.String(cp.Endpoint)
@@ -116,6 +124,22 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 		return
 	}
 	client.DisableSDKError = tea.Bool(true)
+	if useV4 {
+		// Signature V4 goes through the POP gateway SPI (ACS4-HMAC-SHA256).
+		productId := strings.TrimSpace(product.Code)
+		if productId == "" {
+			productId = product.GetLowerCode()
+		}
+		client.ProductId = tea.String(productId)
+		gateway, gerr := popgateway.NewClient()
+		if gerr != nil {
+			return nil, fmt.Errorf("init signature v4 gateway failed, %s", gerr)
+		}
+		if err = client.SetGatewayClient(gateway); err != nil {
+			return nil, fmt.Errorf("set signature v4 gateway failed, %s", err)
+		}
+		return client, nil
+	}
 	if strings.ToLower(product.Code) == "sls" {
 		client.Spi = &slsgateway.Client{} // host management for sls endpoint
 	}

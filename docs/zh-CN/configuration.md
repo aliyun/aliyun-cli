@@ -76,6 +76,24 @@ aliyun configure set \
 
 不要把真实密钥写进脚本、Shell 历史、源码仓库或 Issue。优先使用密钥管理系统注入、工作负载身份或临时凭证。
 
+## 签名 V4（中划线式命令）
+
+阶段一仅让中划线式命令（例如 `aliyun ecs describe-instances`）支持签名 V4。大驼峰式命令仍走 V1 Golang SDK，暂不支持签名 V4。
+
+在 Profile 中开启：
+
+```sh
+aliyun configure set --profile default --signature-version v4
+```
+
+或仅对当前进程设置环境变量（与 Profile 同时存在时，环境变量优先）：
+
+```sh
+export ALIBABA_CLOUD_SIGNATURE_VERSION=v4
+```
+
+未设置时，签名行为与现在一致。打开签名 V4 后执行大驼峰命令会得到明确错误，而不会静默退回旧签名。
+
 ## STS 临时凭证
 
 已经获得三个临时凭证字段时，可以使用 `StsToken`：
@@ -416,6 +434,7 @@ Saving profile[uri] ...Done.
 | `ALIBABA_CLOUD_REGION_ID` | 默认地域 |
 | `ALIBABA_CLOUD_STS_ENDPOINT` | 覆盖 STS Endpoint |
 | `ALIBABA_CLOUD_ENDPOINT` | 覆盖产品 Endpoint |
+| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI 签名版本；设为 `v4` 时，中划线式命令使用签名 V4（优先于 Profile 中的 `signature_version`） |
 | `ALIBABA_CLOUD_CREDENTIALS_URI` | CredentialsURI 地址 |
 | `ALIBABA_CLOUD_OIDC_PROVIDER_ARN` | OIDC Provider ARN |
 | `ALIBABA_CLOUD_OIDC_TOKEN_FILE` | OIDC Token 文件 |

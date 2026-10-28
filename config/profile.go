@@ -138,6 +138,7 @@ type Profile struct {
 	AutoPluginInstallEnablePre bool             `json:"auto_plugin_install_enable_pre,omitempty"` // install latest version (including pre-release) when true
 	BearerTokenValue           string           `json:"bearer_token,omitempty"`
 	BearerTokenHeaderKey       string           `json:"bearer_token_header_key,omitempty"`
+	SignatureVersion           string           `json:"signature_version,omitempty"` // empty (default ACS3) or "v4"
 	parent                     *Configuration   //`json:"-"`
 }
 
@@ -357,6 +358,9 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.ExternalAccountType = ExternalAccountTypeFlag(ctx.Flags()).GetStringOrDefault(cp.ExternalAccountType)
 	cp.BearerTokenValue = BearerTokenFlag(ctx.Flags()).GetStringOrDefault(cp.BearerTokenValue)
 	cp.BearerTokenHeaderKey = BearerTokenHeaderKeyFlag(ctx.Flags()).GetStringOrDefault(cp.BearerTokenHeaderKey)
+	if f := SignatureVersionFlag(ctx.Flags()); f != nil {
+		cp.SignatureVersion = f.GetStringOrDefault(cp.SignatureVersion)
+	}
 
 	if cp.AccessKeyId == "" {
 		cp.AccessKeyId = util.GetFromEnv("ALIBABA_CLOUD_ACCESS_KEY_ID", "ALIBABACLOUD_ACCESS_KEY_ID", "ALICLOUD_ACCESS_KEY_ID", "ACCESS_KEY_ID")

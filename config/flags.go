@@ -59,6 +59,7 @@ const (
 	AutoPluginInstallEnablePreFlagName = "auto-plugin-install-enable-pre"
 	BearerTokenFlagName                = "bearer-token"
 	BearerTokenHeaderKeyFlagName       = "bearer-token-header-key"
+	SignatureVersionFlagName           = "signature-version"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -101,6 +102,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewAutoPluginInstallEnablePreFlag())
 	fs.Add(NewBearerTokenFlag())
 	fs.Add(NewBearerTokenHeaderKeyFlag())
+	fs.Add(NewSignatureVersionFlag())
 }
 
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
@@ -704,5 +706,21 @@ func NewBearerTokenHeaderKeyFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--bearer-token-header-key <key>` to assign custom auth header key, e.g. x-custom-token",
 			"使用 `--bearer-token-header-key <key>` 指定自定义认证 Header 名称，例如 x-custom-token"),
+	}
+}
+
+func SignatureVersionFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(SignatureVersionFlagName)
+}
+
+func NewSignatureVersionFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         SignatureVersionFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--signature-version v4` to sign kebab-case OpenAPI requests with signature V4",
+			"使用 `--signature-version v4` 让中划线式 OpenAPI 请求使用签名 V4"),
 	}
 }
