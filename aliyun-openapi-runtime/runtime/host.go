@@ -65,6 +65,10 @@ type Settings struct {
 	// UserAgent is the host-supplied UA suffix after the engine base (custom --user-agent plus AI-mode segments).
 	// It is empty means base only.
 	UserAgent string
+
+	// SignatureVersion selects the OpenAPI signature version for this call.
+	// Empty keeps ACS3 / legacy behavior; "v4" enables ACS4 via the POP gateway SPI.
+	SignatureVersion string
 }
 
 func (s Settings) UseVPC() bool { return s.EndpointType == "vpc" }

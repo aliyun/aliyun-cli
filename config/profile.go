@@ -921,6 +921,13 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 
 	envs["ALIBABA_CLOUD_CLI_VERSION"] = cli.GetVersion()
 
+	// Forward effective signature version so Go plugins (aliyun-cli-runtime)
+	// honor profile.signature_version / --cli-sign-version / env the same way
+	// as the in-process OpenAPI path.
+	if v := cp.EffectiveSignatureVersion(CliSignVersionFromFlags(ctx.Flags())); v != "" {
+		envs[EnvSignatureVersion] = v
+	}
+
 	return envs, nil
 }
 
