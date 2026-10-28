@@ -448,14 +448,14 @@ func TestCacheRetentionUsesSafeDefaultForInvalidValues(t *testing.T) {
 }
 
 func TestTelemetryUploadEndpointDefaultAndOverride(t *testing.T) {
-	t.Setenv("ALIYUN_CLI_TELEMETRY_ENDPOINT", "")
+	t.Setenv("ALIBABA_CLOUD_CLI_TELEMETRY_ENDPOINT", "")
 	const productionEndpoint = "https://openapi-acore.aliyuncs.com/v1/telemetry/events"
 	if got := telemetryUploadEndpoint(); got != productionEndpoint {
 		t.Fatalf("default endpoint = %q, want %q", got, productionEndpoint)
 	}
 
 	const override = "http://127.0.0.1:18080/v1/telemetry/events"
-	t.Setenv("ALIYUN_CLI_TELEMETRY_ENDPOINT", override)
+	t.Setenv("ALIBABA_CLOUD_CLI_TELEMETRY_ENDPOINT", override)
 	if got := telemetryUploadEndpoint(); got != override {
 		t.Fatalf("override endpoint = %q, want %q", got, override)
 	}
@@ -479,7 +479,7 @@ func TestUploadFileUsesVersionedExtensibleContract(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
-	t.Setenv("ALIYUN_CLI_TELEMETRY_ENDPOINT", server.URL+"/v1/telemetry/events")
+	t.Setenv("ALIBABA_CLOUD_CLI_TELEMETRY_ENDPOINT", server.URL+"/v1/telemetry/events")
 
 	configDir := t.TempDir()
 	cacheDir := GetInnerCacheDir(configDir)
@@ -595,7 +595,7 @@ func TestUploadPublicPluginManagementEventUsesSharedEndpoint(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
-	t.Setenv("ALIYUN_CLI_TELEMETRY_ENDPOINT", server.URL)
+	t.Setenv("ALIBABA_CLOUD_CLI_TELEMETRY_ENDPOINT", server.URL)
 
 	configDir := t.TempDir()
 	cacheFile, err := WriteEvent(GetPublicCacheDir(configDir), Event{
@@ -650,7 +650,7 @@ func TestUploadFileDropsEventAfterFailedAttempt(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer server.Close()
-	t.Setenv("ALIYUN_CLI_TELEMETRY_ENDPOINT", server.URL)
+	t.Setenv("ALIBABA_CLOUD_CLI_TELEMETRY_ENDPOINT", server.URL)
 
 	configDir := t.TempDir()
 	cacheFile, err := WriteEvent(GetInnerCacheDir(configDir), Event{
@@ -686,7 +686,7 @@ func TestRunUploadCommandAcceptsHiddenArgumentForms(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
-	t.Setenv("ALIYUN_CLI_TELEMETRY_ENDPOINT", server.URL)
+	t.Setenv("ALIBABA_CLOUD_CLI_TELEMETRY_ENDPOINT", server.URL)
 
 	for _, test := range []struct {
 		name string
