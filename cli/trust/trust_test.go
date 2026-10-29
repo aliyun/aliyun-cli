@@ -716,3 +716,43 @@ func TestRecoveryPatchContractWithPublisher(t *testing.T) {
 	withAuthority := []byte(`{"type":"recovery","authority":"https://api.aliyun.com"}`)
 	assert.Error(t, strictJSON(withAuthority, &RecoveryPatch{}))
 }
+
+func TestPluginIndexStillRequiresMatchingPurpose(t *testing.T) {
+	now := time.Now().UTC()
+	signer := newTestSigner(t, "plugins")
+	payload := []byte(`{"plugins":[]}`)
+	_, _, err := VerifyEnvelope(
+		signedBytes(t, payload, signer),
+		[]Key{signer.key},
+		Role{KeyIDs: []string{"plugins"}, Threshold: 1},
+		PurposePluginIndex,
+		now,
+		nil,
+	)
+	assert.ErrorContains(t, err, "threshold not met")
+}
+
+// Build anchors come from portal-cluster-v2 generate_cli_trust_bundle.py, which
+// writes recovery keys without purposes.
+func TestGeneratedRecoveryAnchorWithoutPurposesAppliesAcrossRuns(t *testing.T) {
+	f := newTrustFixture(t)
+	recovery := newTestSigner(t, "recovery-a")
+	replacementSigner := newTestSigner(t, "replacement")
+	f.publishRecovery(recovery, 1, f.signerRoot(1, replacementSigner, f.now.Add(24*time.Hour)), replacementSigner, "root")
+
+	generated, err := json.Marshal([]map[string]string{{
+		"algorithm": AlgorithmEd25519, "key_id": recovery.key.KeyID, "public_key": recovery.key.PublicKey,
+	}})
+	require.NoError(t, err)
+	var anchors []Key
+	require.NoError(t, strictJSON(generated, &anchors))
+	require.Empty(t, anchors[0].Purposes)
+	f.client.cfg.RecoveryKeys = anchors
+
+	f.rootSigner = replacementSigner
+	f.publish([]byte(`{"plugins":[]}`), 1, 1, f.plugin)
+	for run := 0; run < 2; run++ {
+		_, err := f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
+		require.NoError(t, err, "run %d", run)
+	}
+}

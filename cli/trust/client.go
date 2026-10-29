@@ -425,7 +425,9 @@ func (c *Client) loadPersistedRoot(cacheDir string, anchor Root, state State, no
 		if len(c.cfg.RecoveryKeys) == 0 || c.cfg.RecoveryRole.Threshold == 0 {
 			return anchor, fmt.Errorf("recovery trust anchor is not configured")
 		}
-		payload, _, err := VerifyEnvelope(data, c.cfg.RecoveryKeys, c.cfg.RecoveryRole, "recovery", now, nil)
+		// Same as CheckAndApplyRecovery: generated recovery anchors have no
+		// purposes, and the dedicated recovery role is enough to authorize them.
+		payload, _, err := VerifyEnvelope(data, c.cfg.RecoveryKeys, c.cfg.RecoveryRole, "", now, nil)
 		if err != nil {
 			return anchor, err
 		}
@@ -609,7 +611,9 @@ func (c *Client) CheckAndApplyRecovery(ctx context.Context, recoveryURL, cacheDi
 		return root, fmt.Errorf("recovery trust anchor is not configured")
 	}
 	now := c.cfg.Now().UTC()
-	payload, _, err := VerifyEnvelope(data, c.cfg.RecoveryKeys, c.cfg.RecoveryRole, "recovery", now, nil)
+	// Recovery anchor keys are dedicated to recovery and the generated build
+	// anchors carry no purposes, so the role alone authorizes them.
+	payload, _, err := VerifyEnvelope(data, c.cfg.RecoveryKeys, c.cfg.RecoveryRole, "", now, nil)
 	if err != nil {
 		return root, err
 	}
