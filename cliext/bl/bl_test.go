@@ -250,7 +250,7 @@ func TestInitBasicInfoUsesManagedPlatformPaths(t *testing.T) {
 		want string
 	}{
 		{goos: "linux", want: filepath.Join("root", prefixDirName, "bin", binName)},
-		{goos: "windows", want: filepath.Join("root", prefixDirName, binName+".cmd")},
+		{goos: "windows", want: filepath.Join("root", prefixDirName, "bin", binName+".exe")},
 	} {
 		t.Run(tc.goos, func(t *testing.T) {
 			t.Setenv(execPathEnv, "")
@@ -263,30 +263,6 @@ func TestInitBasicInfoUsesManagedPlatformPaths(t *testing.T) {
 			}
 			if bridge.execFilePath != tc.want {
 				t.Fatalf("exec path = %q, want %q", bridge.execFilePath, tc.want)
-			}
-		})
-	}
-}
-
-func TestEnsureNodeAvailableEnforces1817(t *testing.T) {
-	for _, tc := range []struct {
-		name         string
-		major, minor int
-		wantErr      bool
-	}{
-		{name: "too old minor", major: 18, minor: 16, wantErr: true},
-		{name: "minimum", major: 18, minor: 17},
-		{name: "newer major", major: 20, minor: 0},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv(nodePathEnv, "")
-			ctx, _, _ := newTestContext()
-			bridge := NewContext(ctx)
-			bridge.lookPath = func(string) (string, error) { return "/fake/node", nil }
-			bridge.nodeVersion = func(string) (int, int, int, error) { return tc.major, tc.minor, 0, nil }
-			err := bridge.EnsureNodeAvailable()
-			if (err != nil) != tc.wantErr {
-				t.Fatalf("error = %v, wantErr %v", err, tc.wantErr)
 			}
 		})
 	}
@@ -318,35 +294,6 @@ func TestValidateExecPathOverride(t *testing.T) {
 		if err := bridge.validateExecPathOverride(); err == nil || !strings.Contains(err.Error(), "executable") {
 			t.Fatalf("permission error = %v", err)
 		}
-	}
-}
-
-func TestNpmInstallUsesVersionRegistryAndPrefix(t *testing.T) {
-	t.Setenv(versionEnv, "2.5.0")
-	t.Setenv(registryEnv, "https://registry.example.test")
-	ctx, _, _ := newTestContext()
-	bridge := NewContext(ctx)
-	bridge.npmPath = "/fake/npm"
-	bridge.prefixPath = "/managed/bl"
-	var gotName string
-	var gotArgs []string
-	bridge.command = func(name string, args ...string) *exec.Cmd {
-		gotName = name
-		gotArgs = append([]string(nil), args...)
-		return successfulCommand()
-	}
-	if err := bridge.npmInstall(); err != nil {
-		t.Fatalf("npmInstall: %v", err)
-	}
-	if gotName != "/fake/npm" {
-		t.Fatalf("command = %q", gotName)
-	}
-	want := []string{
-		"install", "-g", "--prefix", "/managed/bl", "--no-fund", "--no-audit", "--loglevel=warn",
-		"--registry", "https://registry.example.test", "bailian-cli@2.5.0",
-	}
-	if !reflect.DeepEqual(gotArgs, want) {
-		t.Fatalf("npm args mismatch\nwant: %#v\n got: %#v", want, gotArgs)
 	}
 }
 
@@ -478,11 +425,9 @@ func TestLoadBlProfileRecognizesModeFromExplicitHostCredentials(t *testing.T) {
 
 func TestRunWithExecOverride(t *testing.T) {
 	t.Setenv(execPathEnv, os.Args[0])
-	t.Setenv(nodePathEnv, "/fake/node")
 	ctx, _, _ := newTestContext()
 	bridge := NewContext(ctx)
 	bridge.configPath = t.TempDir
-	bridge.nodeVersion = func(string) (int, int, int, error) { return 20, 0, 0, nil }
 	bridge.loadProfile = func(*cli.Context) (config.Profile, error) { return config.Profile{}, nil }
 	bridge.getwd = func() (string, error) { return t.TempDir(), nil }
 	var gotArgs []string
@@ -499,230 +444,13 @@ func TestRunWithExecOverride(t *testing.T) {
 	}
 }
 
-func TestRunWithManagedInstalledPackage(t *testing.T) {
-	t.Setenv(execPathEnv, "")
-	t.Setenv(nodePathEnv, "/fake/node")
-	t.Setenv(npmPathEnv, os.Args[0])
-	root := t.TempDir()
-	execPath := filepath.Join(root, prefixDirName, "bin", binName)
-	if err := os.MkdirAll(filepath.Dir(execPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(execPath, []byte("installed"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	ctx, _, _ := newTestContext()
-	bridge := NewContext(ctx)
-	bridge.configPath = func() string { return root }
-	bridge.nodeVersion = func(string) (int, int, int, error) { return 20, 0, 0, nil }
-	bridge.loadProfile = func(*cli.Context) (config.Profile, error) { return config.Profile{}, nil }
-	bridge.getwd = func() (string, error) { return root, nil }
+func TestRunWithManagedInstalledBinary(t *testing.T) {
+	bridge, _ := binaryContext(t)
+	installOld(t, bridge, "2.6.2")
+	t.Setenv(noUpdateEnv, "1")
 	bridge.command = func(string, ...string) *exec.Cmd { return successfulCommand() }
-
 	if err := bridge.Run([]string{"help"}); err != nil {
 		t.Fatalf("Run: %v", err)
-	}
-}
-
-func TestEnsureNodeAvailableErrors(t *testing.T) {
-	t.Run("missing", func(t *testing.T) {
-		t.Setenv(nodePathEnv, "")
-		ctx, _, _ := newTestContext()
-		bridge := NewContext(ctx)
-		bridge.lookPath = func(string) (string, error) { return "", fmt.Errorf("not found") }
-		if err := bridge.EnsureNodeAvailable(); err == nil || !strings.Contains(err.Error(), "node >= 18.17") {
-			t.Fatalf("error = %v", err)
-		}
-	})
-
-	t.Run("version detection", func(t *testing.T) {
-		t.Setenv(nodePathEnv, "/bad/node")
-		ctx, _, _ := newTestContext()
-		bridge := NewContext(ctx)
-		bridge.nodeVersion = func(string) (int, int, int, error) { return 0, 0, 0, fmt.Errorf("broken") }
-		if err := bridge.EnsureNodeAvailable(); err == nil || !strings.Contains(err.Error(), "failed to detect node version") {
-			t.Fatalf("error = %v", err)
-		}
-	})
-}
-
-func TestEnsureNpmAvailable(t *testing.T) {
-	t.Run("override", func(t *testing.T) {
-		t.Setenv(npmPathEnv, "/custom/npm")
-		ctx, _, _ := newTestContext()
-		bridge := NewContext(ctx)
-		if err := bridge.EnsureNpmAvailable(); err != nil {
-			t.Fatalf("EnsureNpmAvailable: %v", err)
-		}
-		if bridge.npmPath != "/custom/npm" {
-			t.Fatalf("npm path = %q", bridge.npmPath)
-		}
-	})
-
-	t.Run("beside node", func(t *testing.T) {
-		t.Setenv(npmPathEnv, "")
-		dir := t.TempDir()
-		npmPath := filepath.Join(dir, "npm")
-		if err := os.WriteFile(npmPath, []byte("npm"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		ctx, _, _ := newTestContext()
-		bridge := NewContext(ctx)
-		bridge.nodePath = filepath.Join(dir, "node")
-		bridge.goos = func() string { return "linux" }
-		if err := bridge.EnsureNpmAvailable(); err != nil {
-			t.Fatalf("EnsureNpmAvailable: %v", err)
-		}
-		if bridge.npmPath != npmPath {
-			t.Fatalf("npm path = %q, want %q", bridge.npmPath, npmPath)
-		}
-	})
-
-	t.Run("path fallback", func(t *testing.T) {
-		t.Setenv(npmPathEnv, "")
-		ctx, _, _ := newTestContext()
-		bridge := NewContext(ctx)
-		bridge.nodePath = filepath.Join(t.TempDir(), "node")
-		bridge.goos = func() string { return "linux" }
-		bridge.lookPath = func(name string) (string, error) {
-			if name != "npm" {
-				t.Fatalf("lookup = %q", name)
-			}
-			return "/path/npm", nil
-		}
-		if err := bridge.EnsureNpmAvailable(); err != nil {
-			t.Fatalf("EnsureNpmAvailable: %v", err)
-		}
-		if bridge.npmPath != "/path/npm" {
-			t.Fatalf("npm path = %q", bridge.npmPath)
-		}
-	})
-
-	t.Run("missing", func(t *testing.T) {
-		t.Setenv(npmPathEnv, "")
-		ctx, _, _ := newTestContext()
-		bridge := NewContext(ctx)
-		bridge.nodePath = filepath.Join(t.TempDir(), "node")
-		bridge.goos = func() string { return "linux" }
-		bridge.lookPath = func(string) (string, error) { return "", fmt.Errorf("not found") }
-		if err := bridge.EnsureNpmAvailable(); err == nil || !strings.Contains(err.Error(), npmPathEnv) {
-			t.Fatalf("error = %v", err)
-		}
-	})
-}
-
-func TestEnsurePrefixAndPackage(t *testing.T) {
-	t.Run("already installed", func(t *testing.T) {
-		ctx, _, _ := newTestContext()
-		bridge := NewContext(ctx)
-		bridge.prefixPath = filepath.Join(t.TempDir(), "prefix")
-		bridge.installed = true
-		bridge.command = func(string, ...string) *exec.Cmd {
-			t.Fatal("npm must not run")
-			return nil
-		}
-		if err := bridge.EnsurePrefixAndPackage(); err != nil {
-			t.Fatalf("EnsurePrefixAndPackage: %v", err)
-		}
-	})
-
-	t.Run("installs package", func(t *testing.T) {
-		ctx, _, _ := newTestContext()
-		bridge := NewContext(ctx)
-		bridge.prefixPath = filepath.Join(t.TempDir(), "prefix")
-		bridge.execFilePath = filepath.Join(bridge.prefixPath, "bin", binName)
-		bridge.npmPath = "/fake/npm"
-		bridge.command = func(string, ...string) *exec.Cmd {
-			if err := os.MkdirAll(filepath.Dir(bridge.execFilePath), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(bridge.execFilePath, []byte("installed"), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			return successfulCommand()
-		}
-		if err := bridge.EnsurePrefixAndPackage(); err != nil {
-			t.Fatalf("EnsurePrefixAndPackage: %v", err)
-		}
-		if !bridge.installed {
-			t.Fatal("package was not marked installed")
-		}
-	})
-
-	t.Run("missing binary after install", func(t *testing.T) {
-		ctx, _, _ := newTestContext()
-		bridge := NewContext(ctx)
-		bridge.prefixPath = filepath.Join(t.TempDir(), "prefix")
-		bridge.execFilePath = filepath.Join(bridge.prefixPath, "bin", binName)
-		bridge.npmPath = "/fake/npm"
-		bridge.command = func(string, ...string) *exec.Cmd { return successfulCommand() }
-		if err := bridge.EnsurePrefixAndPackage(); err == nil || !strings.Contains(err.Error(), "binary not found") {
-			t.Fatalf("error = %v", err)
-		}
-	})
-
-	t.Run("npm failure", func(t *testing.T) {
-		ctx, _, _ := newTestContext()
-		bridge := NewContext(ctx)
-		bridge.prefixPath = filepath.Join(t.TempDir(), "prefix")
-		bridge.execFilePath = filepath.Join(bridge.prefixPath, "bin", binName)
-		bridge.npmPath = "/fake/npm"
-		bridge.command = func(string, ...string) *exec.Cmd { return helperCommand(4) }
-		if err := bridge.EnsurePrefixAndPackage(); err == nil || !strings.Contains(err.Error(), "failed to install") {
-			t.Fatalf("error = %v", err)
-		}
-	})
-
-	t.Run("prefix creation failure", func(t *testing.T) {
-		file := filepath.Join(t.TempDir(), "file")
-		if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		ctx, _, _ := newTestContext()
-		bridge := NewContext(ctx)
-		bridge.prefixPath = filepath.Join(file, "prefix")
-		if err := bridge.EnsurePrefixAndPackage(); err == nil || !strings.Contains(err.Error(), "failed to create prefix") {
-			t.Fatalf("error = %v", err)
-		}
-	})
-}
-
-func TestGetNodeVersion(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("requires a POSIX executable script")
-	}
-	for _, tc := range []struct {
-		name    string
-		script  string
-		major   int
-		minor   int
-		patch   int
-		wantErr string
-	}{
-		{name: "semantic version", script: "#!/bin/sh\nprintf 'v20.11.1\\n'\n", major: 20, minor: 11, patch: 1},
-		{name: "missing patch", script: "#!/bin/sh\nprintf 'v18.17\\n'\n", major: 18, minor: 17},
-		{name: "malformed", script: "#!/bin/sh\nprintf 'not-a-version\\n'\n", wantErr: "unexpected node --version output"},
-		{name: "command failure", script: "#!/bin/sh\nexit 3\n", wantErr: "exit status"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "node")
-			if err := os.WriteFile(path, []byte(tc.script), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			major, minor, patch, err := getNodeVersion(path)
-			if tc.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("error = %v", err)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("getNodeVersion: %v", err)
-			}
-			if major != tc.major || minor != tc.minor || patch != tc.patch {
-				t.Fatalf("version = %d.%d.%d", major, minor, patch)
-			}
-		})
 	}
 }
 
@@ -812,17 +540,9 @@ func TestExecuteSuccessAndErrors(t *testing.T) {
 }
 
 func TestNewBlCommandRun(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("requires a POSIX executable script")
-	}
-	nodePath := filepath.Join(t.TempDir(), "node")
-	if err := os.WriteFile(nodePath, []byte("#!/bin/sh\nprintf 'v20.0.0\\n'\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv(execPathEnv, os.Args[0])
-	t.Setenv(nodePathEnv, nodePath)
 	ctx, _, _ := newTestContext()
 	cmd := NewBlCommand()
 
@@ -954,20 +674,17 @@ func TestBuildExecEnvManagedEnvironment(t *testing.T) {
 				got := envMap(env)
 				binDir, separator := filepath.Join(bridge.prefixPath, "bin"), ":"
 				if goos == "windows" {
-					binDir, separator = bridge.prefixPath, ";"
+					separator = ";"
 				}
-				if got["npm_config_prefix"] != bridge.prefixPath || got["PATH"] != binDir+separator+"old-bin" || got["BAILIAN_INSTALL_METHOD"] != "npm" || got["ALIBABA_CLOUD_BL_COMPAT_MODE"] != "aliyun bl" || got["KEEP"] != "value" {
+				if got["npm_config_prefix"] != "old-lower" || got["NPM_CONFIG_PREFIX"] != "old-upper" || got["PATH"] != binDir+separator+"old-bin" || got["BAILIAN_INSTALL_METHOD"] != "binary" || got["BAILIAN_SHARE_DIR"] != bridge.prefixPath || got["BAILIAN_BIN_DIR"] != binDir || got["ALIBABA_CLOUD_BL_COMPAT_MODE"] != "aliyun bl" || got["KEEP"] != "value" {
 					t.Fatalf("managed environment missing: %v", got)
-				}
-				if _, ok := got["NPM_CONFIG_PREFIX"]; ok {
-					t.Fatal("uppercase npm prefix remains")
 				}
 				counts := make(map[string]int)
 				for _, entry := range env {
 					key, _, _ := strings.Cut(entry, "=")
 					counts[strings.ToLower(key)]++
 				}
-				for _, key := range []string{"npm_config_prefix", "path", "bailian_install_method", "alibaba_cloud_bl_compat_mode"} {
+				for _, key := range []string{"path", "bailian_install_method", "bailian_share_dir", "bailian_bin_dir", "alibaba_cloud_bl_compat_mode"} {
 					if counts[key] != 1 {
 						t.Fatalf("%s count = %d", key, counts[key])
 					}
@@ -1021,7 +738,7 @@ func TestBuildExecEnvWindowsCaseInsensitiveControls(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := envMap(env)
-	if got["NO_UPDATE_NOTIFIER"] != "1" || got["BAILIAN_INSTALL_METHOD"] != "npm" || got["ALIBABA_CLOUD_BL_COMPAT_MODE"] != "aliyun bl" || got["PATH"] != "managed;old" {
+	if got["NO_UPDATE_NOTIFIER"] != "1" || got["BAILIAN_INSTALL_METHOD"] != "binary" || got["ALIBABA_CLOUD_BL_COMPAT_MODE"] != "aliyun bl" || got["PATH"] != filepath.Join("managed", "bin")+";old" {
 		t.Fatalf("windows controls not replaced: %v", got)
 	}
 	counts := make(map[string]int)
@@ -1045,4 +762,53 @@ func envMap(env []string) map[string]string {
 		}
 	}
 	return result
+}
+
+func TestBinaryOverrideWithoutNodeOrNpm(t *testing.T) {
+	t.Setenv(execPathEnv, os.Args[0])
+	t.Setenv("PATH", "")
+	t.Setenv("ALIBABA_CLOUD_BL_NODE_PATH", "/missing/node")
+	t.Setenv("ALIBABA_CLOUD_BL_NPM_PATH", "/missing/npm")
+	t.Setenv(versionEnv, "../../invalid")
+	ctx, _, _ := newTestContext()
+	bridge := NewContext(ctx)
+	bridge.configPath = t.TempDir
+	bridge.goos = func() string { return "unsupported" }
+	bridge.loadProfile = func(*cli.Context) (config.Profile, error) { return config.Profile{}, nil }
+	bridge.command = func(_ string, args ...string) *exec.Cmd {
+		if !reflect.DeepEqual(args, []string{"help"}) {
+			t.Fatalf("override performed a version or installation check: %v", args)
+		}
+		return successfulCommand()
+	}
+	if err := bridge.Run([]string{"help"}); err != nil {
+		t.Fatalf("standalone override must not require Node/npm: %v", err)
+	}
+}
+
+func TestBinaryManagedPathsAndEnvironment(t *testing.T) {
+	t.Setenv(execPathEnv, "")
+	ctx, _, _ := newTestContext()
+	bridge := NewContext(ctx)
+	bridge.configPath = func() string { return "root" }
+	bridge.goos = func() string { return "windows" }
+	if err := bridge.InitBasicInfo(); err != nil {
+		t.Fatal(err)
+	}
+	wantPrefix := filepath.Join("root", "bl")
+	if bridge.execFilePath != filepath.Join(wantPrefix, "bin", "bl.exe") {
+		t.Errorf("binary install path = %s", bridge.execFilePath)
+	}
+	bridge.environ = func() []string {
+		return []string{"npm_config_prefix=caller", "bailian_share_dir=outside", "bailian_bin_dir=outside", "Path=caller-bin"}
+	}
+	bridge.loadProfile = func(*cli.Context) (config.Profile, error) { return config.Profile{}, nil }
+	env, err := bridge.BuildExecEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := envMap(env)
+	if got["BAILIAN_INSTALL_METHOD"] != "binary" || got["BAILIAN_SHARE_DIR"] != wantPrefix || got["BAILIAN_BIN_DIR"] != filepath.Join(wantPrefix, "bin") || got["npm_config_prefix"] != "caller" {
+		t.Errorf("binary environment contract not met: %v", got)
+	}
 }

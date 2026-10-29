@@ -1,14 +1,21 @@
 package bl
 
 import (
+	"archive/zip"
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
-	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
@@ -16,18 +23,19 @@ import (
 )
 
 const (
-	npmPackageName = "bailian-cli"
-	binName        = "bl"
-	prefixDirName  = "bl-prefix"
-	minNodeMajor   = 18
-	minNodeMinor   = 17
+	binName       = "bl"
+	prefixDirName = "bl"
+	releaseBase   = "https://bailian-wiki.oss-cn-hangzhou.aliyuncs.com/release"
+	metadataLimit = 1 << 20
+	binaryLimit   = 256 << 20
+	updateTTL     = 24 * time.Hour
 
 	execPathEnv = "ALIBABA_CLOUD_BL_EXEC_PATH"
-	nodePathEnv = "ALIBABA_CLOUD_BL_NODE_PATH"
-	npmPathEnv  = "ALIBABA_CLOUD_BL_NPM_PATH"
 	versionEnv  = "ALIBABA_CLOUD_BL_VERSION"
-	registryEnv = "ALIBABA_CLOUD_BL_NPM_REGISTRY"
+	noUpdateEnv = "ALIBABA_CLOUD_BL_NO_UPDATE_CHECK"
 )
+
+var numericVersion = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
 
 var hostProfileFlags = []string{
 	config.ProfileFlagName,
@@ -57,19 +65,20 @@ var hostProfileFlags = []string{
 type Context struct {
 	originCtx    *cli.Context
 	prefixPath   string
-	nodePath     string
-	npmPath      string
 	execFilePath string
 	installed    bool
 
 	configPath  func() string
 	goos        func() string
-	lookPath    func(string) (string, error)
-	nodeVersion func(string) (int, int, int, error)
+	goarch      func() string
 	command     func(string, ...string) *exec.Cmd
 	environ     func() []string
 	getwd       func() (string, error)
 	loadProfile func(*cli.Context) (config.Profile, error)
+	httpClient  *http.Client
+	releaseURL  string
+	now         func() time.Time
+	rename      func(string, string) error
 }
 
 type ExitError struct {
@@ -89,12 +98,15 @@ func NewContext(originCtx *cli.Context) *Context {
 		originCtx:   originCtx,
 		configPath:  config.GetConfigPath,
 		goos:        func() string { return runtime.GOOS },
-		lookPath:    exec.LookPath,
-		nodeVersion: getNodeVersion,
+		goarch:      func() string { return runtime.GOARCH },
 		command:     exec.Command,
 		environ:     os.Environ,
 		getwd:       os.Getwd,
 		loadProfile: loadBlProfile,
+		httpClient:  &http.Client{Timeout: 120 * time.Second},
+		releaseURL:  releaseBase,
+		now:         time.Now,
+		rename:      os.Rename,
 	}
 }
 
@@ -106,20 +118,12 @@ func (c *Context) Run(args []string) error {
 	if err := c.InitBasicInfo(); err != nil {
 		return err
 	}
-	if err := c.EnsureNodeAvailable(); err != nil {
-		return err
-	}
 	if c.usingExecPathOverride() {
 		if err := c.validateExecPathOverride(); err != nil {
 			return err
 		}
-	} else {
-		if err := c.EnsureNpmAvailable(); err != nil {
-			return err
-		}
-		if err := c.EnsurePrefixAndPackage(); err != nil {
-			return err
-		}
+	} else if err := c.EnsureBinary(); err != nil {
+		return err
 	}
 	return c.Execute(forwarded)
 }
@@ -206,95 +210,366 @@ func (c *Context) assignFlag(name, value string) error {
 
 func (c *Context) InitBasicInfo() error {
 	c.prefixPath = filepath.Join(c.configPath(), prefixDirName)
+	name := binName
 	if c.goos() == "windows" {
-		c.execFilePath = filepath.Join(c.prefixPath, binName+".cmd")
-	} else {
-		c.execFilePath = filepath.Join(c.prefixPath, "bin", binName)
+		name += ".exe"
 	}
+	c.execFilePath = filepath.Join(c.prefixPath, "bin", name)
 	if path := strings.TrimSpace(os.Getenv(execPathEnv)); path != "" {
 		c.execFilePath = path
 	}
 	info, err := os.Stat(c.execFilePath)
-	c.installed = err == nil && info.Mode().IsRegular()
+	c.installed = err == nil && info.Mode().IsRegular() && (c.goos() == "windows" || info.Mode()&0o111 != 0)
 	return nil
 }
 
-func (c *Context) EnsureNodeAvailable() error {
-	path := strings.TrimSpace(os.Getenv(nodePathEnv))
-	if path == "" {
-		var err error
-		path, err = c.lookPath("node")
+func (c *Context) platform() (string, error) {
+	goos, arch := c.goos(), c.goarch()
+	if arch == "amd64" {
+		arch = "x64"
+	}
+	platform := goos + "-" + arch
+	switch platform {
+	case "darwin-arm64", "darwin-x64", "linux-x64", "windows-x64":
+		return platform, nil
+	default:
+		return "", fmt.Errorf("unsupported bl platform %s/%s; supported platforms: darwin-arm64, darwin-x64, linux-x64, windows-x64; or set %s", goos, c.goarch(), execPathEnv)
+	}
+}
+
+func (c *Context) checkManagedPaths() error {
+	for _, path := range []string{c.prefixPath, filepath.Dir(c.execFilePath), c.execFilePath} {
+		info, err := os.Lstat(path)
+		if os.IsNotExist(err) {
+			continue
+		}
 		if err != nil {
-			return fmt.Errorf("node >= %d.%d is required for `aliyun bl`; install Node.js LTS or set %s", minNodeMajor, minNodeMinor, nodePathEnv)
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			if path == c.prefixPath {
+				return fmt.Errorf("managed bl prefix %s must not be a symlink", path)
+			}
+			root, err := filepath.EvalSymlinks(c.prefixPath)
+			if err != nil {
+				return err
+			}
+			target, err := filepath.EvalSymlinks(path)
+			if err != nil {
+				return fmt.Errorf("invalid managed bl symlink %s: %w", path, err)
+			}
+			relative, err := filepath.Rel(root, target)
+			if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) || filepath.IsAbs(relative) {
+				return fmt.Errorf("managed bl symlink %s escapes install directory", path)
+			}
+			info, err = os.Stat(target)
+			if err != nil {
+				return err
+			}
+		}
+		if path != c.execFilePath && !info.IsDir() || path == c.execFilePath && !info.Mode().IsRegular() {
+			return fmt.Errorf("invalid managed bl path %s", path)
 		}
 	}
-	major, minor, patch, err := c.nodeVersion(path)
-	if err != nil {
-		return fmt.Errorf("failed to detect node version at %s: %v", path, err)
-	}
-	if major < minNodeMajor || major == minNodeMajor && minor < minNodeMinor {
-		return fmt.Errorf("node version too old (got %d.%d.%d, need >= %d.%d.0)", major, minor, patch, minNodeMajor, minNodeMinor)
-	}
-	c.nodePath = path
 	return nil
 }
 
-func (c *Context) EnsureNpmAvailable() error {
-	if path := strings.TrimSpace(os.Getenv(npmPathEnv)); path != "" {
-		c.npmPath = path
-		return nil
-	}
-	candidate := filepath.Join(filepath.Dir(c.nodePath), "npm")
-	if c.goos() == "windows" {
-		candidate += ".cmd"
-	}
-	if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
-		c.npmPath = candidate
-		return nil
-	}
-	path, err := c.lookPath("npm")
+func (c *Context) EnsureBinary() error {
+	platform, err := c.platform()
 	if err != nil {
-		return fmt.Errorf("npm not found; install npm or set %s", npmPathEnv)
-	}
-	c.npmPath = path
-	return nil
-}
-
-func (c *Context) EnsurePrefixAndPackage() error {
-	if err := os.MkdirAll(c.prefixPath, 0o755); err != nil {
-		return fmt.Errorf("failed to create prefix %s: %v", c.prefixPath, err)
-	}
-	if c.installed {
-		return nil
-	}
-	fmt.Fprintln(c.originCtx.Stderr(), "Installing bailian-cli...")
-	if err := c.npmInstall(); err != nil {
 		return err
 	}
-	info, err := os.Stat(c.execFilePath)
-	if err != nil || !info.Mode().IsRegular() {
-		return fmt.Errorf("bailian-cli install completed but binary not found at %s", c.execFilePath)
+	pin := os.Getenv(versionEnv)
+	if pin != "" && !numericVersion.MatchString(pin) {
+		return fmt.Errorf("%s must be an exact numeric version X.Y.Z", versionEnv)
 	}
-	c.installed = true
-	return nil
+	if err := c.checkManagedPaths(); err != nil {
+		return err
+	}
+	if c.installed && (c.envValue(noUpdateEnv) == "1" || c.checkFresh(pin)) {
+		return nil
+	}
+	if err := os.MkdirAll(c.prefixPath, 0755); err != nil {
+		return err
+	}
+	lock := filepath.Join(c.prefixPath, ".install-lock")
+	if err := os.Mkdir(lock, 0700); err != nil {
+		if os.IsExist(err) {
+			if c.installed {
+				fmt.Fprintln(c.originCtx.Stderr(), "Warning: another bl installer holds the install lock; continuing with installed binary")
+				return nil
+			}
+			return fmt.Errorf("bl install lock exists at %s; retry after the installer finishes; remove a stale lock only after confirming no installer is running", lock)
+		}
+		return err
+	}
+	defer os.Remove(lock)
+	if err := c.checkManagedPaths(); err != nil {
+		return err
+	}
+	info, statErr := os.Stat(c.execFilePath)
+	c.installed = statErr == nil && info.Mode().IsRegular() && (c.goos() == "windows" || info.Mode()&0o111 != 0)
+	var current string
+	if c.installed {
+		current, err = c.installedVersion()
+	}
+	if err == nil {
+		var asset releaseAsset
+		asset, err = c.resolveAsset(platform, pin)
+		if err == nil && (!c.installed || newerVersion(asset.Version, current)) {
+			fmt.Fprintf(c.originCtx.Stderr(), "Installing bailian-cli %s...\n", asset.Version)
+			err = c.installAsset(asset)
+			if err == nil {
+				c.installed = true
+			}
+		}
+	}
+	if c.installed {
+		// Throttle failed checks too; never trust cached metadata for the binary's version.
+		c.saveCheck(pin)
+		if err != nil {
+			fmt.Fprintf(c.originCtx.Stderr(), "Warning: bl update check/install failed: %v; continuing with installed binary\n", err)
+		}
+		return nil
+	}
+	return fmt.Errorf("failed to install standalone bl: %w", err)
 }
 
-func (c *Context) npmInstall() error {
-	target := npmPackageName
-	if version := strings.TrimSpace(os.Getenv(versionEnv)); version != "" {
-		target += "@" + version
+func (c *Context) envValue(name string) string {
+	value := ""
+	for _, entry := range c.environ() {
+		key, v, _ := strings.Cut(entry, "=")
+		if key == name || c.goos() == "windows" && strings.EqualFold(key, name) {
+			value = v
+		}
 	}
-	args := []string{"install", "-g", "--prefix", c.prefixPath, "--no-fund", "--no-audit", "--loglevel=warn"}
-	if registry := strings.TrimSpace(os.Getenv(registryEnv)); registry != "" {
-		args = append(args, "--registry", registry)
+	return value
+}
+
+type updateCheck struct {
+	Target    string    `json:"target"`
+	CheckedAt time.Time `json:"checkedAt"`
+}
+
+func (c *Context) checkFresh(target string) bool {
+	f, err := os.Open(filepath.Join(c.prefixPath, "update-check.json"))
+	if err != nil {
+		return false
 	}
-	args = append(args, target)
-	cmd := c.command(c.npmPath, args...)
-	cmd.Stdout = c.originCtx.Stderr()
-	cmd.Stderr = c.originCtx.Stderr()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to install %s into %s via npm: %v", target, c.prefixPath, err)
+	defer f.Close()
+	data, err := readBounded(f, metadataLimit)
+	var check updateCheck
+	if err != nil || json.Unmarshal(data, &check) != nil || check.Target != target {
+		return false
 	}
+	age := c.now().Sub(check.CheckedAt)
+	return age >= 0 && age < updateTTL
+}
+
+func (c *Context) saveCheck(target string) {
+	data, _ := json.Marshal(updateCheck{Target: target, CheckedAt: c.now()})
+	f, err := os.CreateTemp(c.prefixPath, ".update-check-*")
+	if err != nil {
+		return
+	}
+	defer os.Remove(f.Name())
+	_, err = f.Write(data)
+	closeErr := f.Close()
+	if err == nil && closeErr == nil {
+		_ = os.Rename(f.Name(), filepath.Join(c.prefixPath, "update-check.json"))
+	}
+}
+
+func newerVersion(candidate, current string) bool {
+	a, b := strings.Split(candidate, "."), strings.Split(current, ".")
+	for i := 0; i < 3; i++ {
+		if len(a[i]) != len(b[i]) {
+			return len(a[i]) > len(b[i])
+		}
+		if a[i] != b[i] {
+			return a[i] > b[i]
+		}
+	}
+	return false
+}
+
+type releaseAsset struct {
+	Version string `json:"-"`
+	File    string `json:"file"`
+	Inner   string `json:"inner"`
+	SHA256  string `json:"sha256"`
+}
+
+func expectedAsset(version, platform string) releaseAsset {
+	stem := "bl-" + version + "-" + platform
+	inner := stem
+	if platform == "windows-x64" {
+		inner += ".exe"
+	}
+	return releaseAsset{Version: version, File: stem + ".zip", Inner: inner}
+}
+
+func validDigest(value string) bool {
+	decoded, err := hex.DecodeString(value)
+	return err == nil && len(decoded) == sha256.Size
+}
+
+func (c *Context) resolveAsset(platform, pin string) (releaseAsset, error) {
+	if pin != "" {
+		asset := expectedAsset(pin, platform)
+		data, err := c.fetch("/v"+pin+"/SHA256SUMS", metadataLimit)
+		if err != nil {
+			return asset, err
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) == 2 && strings.TrimPrefix(fields[1], "*") == asset.File {
+				if asset.SHA256 != "" || !validDigest(fields[0]) {
+					return asset, fmt.Errorf("invalid or duplicate checksum for %s", asset.File)
+				}
+				asset.SHA256 = fields[0]
+			}
+		}
+		if asset.SHA256 == "" {
+			return asset, fmt.Errorf("SHA256SUMS has no checksum for %s", asset.File)
+		}
+		return asset, nil
+	}
+	data, err := c.fetch("/manifest.json", metadataLimit)
+	if err != nil {
+		return releaseAsset{}, err
+	}
+	var manifest struct {
+		Name    string                  `json:"name"`
+		Channel string                  `json:"channel"`
+		Version string                  `json:"version"`
+		Assets  map[string]releaseAsset `json:"assets"`
+	}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return releaseAsset{}, fmt.Errorf("invalid bl manifest: %w", err)
+	}
+	if manifest.Name != "bailian-cli" || manifest.Channel != "latest" || !numericVersion.MatchString(manifest.Version) {
+		return releaseAsset{}, fmt.Errorf("invalid bl manifest identity or version")
+	}
+	asset := manifest.Assets[platform]
+	expected := expectedAsset(manifest.Version, platform)
+	if asset.File != expected.File || asset.Inner != expected.Inner || !validDigest(asset.SHA256) {
+		return asset, fmt.Errorf("invalid bl manifest asset for %s", platform)
+	}
+	asset.Version = manifest.Version
+	return asset, nil
+}
+
+func readBounded(r io.Reader, limit int64) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(r, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("bl download exceeds %d bytes", limit)
+	}
+	return data, nil
+}
+
+func (c *Context) fetch(path string, limit int64) ([]byte, error) {
+	resp, err := c.httpClient.Get(c.releaseURL + path)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("bl download %s: HTTP %d", path, resp.StatusCode)
+	}
+	return readBounded(resp.Body, limit)
+}
+
+func (c *Context) installAsset(asset releaseAsset) error {
+	data, err := c.fetch("/v"+asset.Version+"/"+asset.File, binaryLimit)
+	if err != nil {
+		return err
+	}
+	digest := sha256.Sum256(data)
+	if !strings.EqualFold(hex.EncodeToString(digest[:]), asset.SHA256) {
+		return fmt.Errorf("SHA256 mismatch for %s", asset.File)
+	}
+	archive, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return err
+	}
+	if len(archive.File) != 1 {
+		return fmt.Errorf("bl ZIP must contain exactly one root executable")
+	}
+	entry := archive.File[0]
+	if entry.Name != asset.Inner || strings.ContainsAny(entry.Name, `/\`) || !entry.Mode().IsRegular() {
+		return fmt.Errorf("unsafe bl ZIP entry %q", entry.Name)
+	}
+	if entry.UncompressedSize64 > binaryLimit {
+		return fmt.Errorf("bl executable exceeds %d bytes", binaryLimit)
+	}
+	r, err := entry.Open()
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if err := c.checkManagedPaths(); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(c.execFilePath), 0o755); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(filepath.Dir(c.execFilePath), ".bl-install-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	n, copyErr := io.Copy(f, io.LimitReader(r, binaryLimit+1))
+	if copyErr == nil && (n == 0 || n > binaryLimit) {
+		copyErr = fmt.Errorf("invalid bl executable size %d", n)
+	}
+	if copyErr == nil {
+		copyErr = f.Chmod(0o755)
+	}
+	closeErr := f.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return c.replaceExecutable(f.Name())
+}
+
+func (c *Context) replaceExecutable(temp string) error {
+	err := c.rename(temp, c.execFilePath)
+	if err == nil || c.goos() != "windows" {
+		return err
+	}
+	info, statErr := os.Lstat(c.execFilePath)
+	if statErr != nil || !info.Mode().IsRegular() {
+		return err
+	}
+	backup, backupErr := os.CreateTemp(filepath.Dir(c.execFilePath), ".bl-backup-*")
+	if backupErr != nil {
+		return backupErr
+	}
+	backupPath := backup.Name()
+	if err := backup.Close(); err != nil {
+		_ = os.Remove(backupPath)
+		return err
+	}
+	if err := os.Remove(backupPath); err != nil {
+		return err
+	}
+	if err := c.rename(c.execFilePath, backupPath); err != nil {
+		return err
+	}
+	if err := c.rename(temp, c.execFilePath); err != nil {
+		if rollbackErr := c.rename(backupPath, c.execFilePath); rollbackErr != nil {
+			return fmt.Errorf("bl replacement failed: %v; rollback failed: %v; previous binary retained at %s", err, rollbackErr, backupPath)
+		}
+		return err
+	}
+	_ = os.Remove(backupPath)
 	return nil
 }
 
@@ -368,12 +643,10 @@ func (c *Context) buildRuntimeEnv(base []string) []string {
 			key = strings.ToUpper(key)
 		}
 		switch {
-		case strings.EqualFold(key, "npm_config_prefix"):
-			continue
 		case key == "PATH":
 			pathValue = value
 			continue
-		case key == "BAILIAN_INSTALL_METHOD" || key == "ALIBABA_CLOUD_BL_COMPAT_MODE":
+		case key == "BAILIAN_INSTALL_METHOD" || key == "BAILIAN_SHARE_DIR" || key == "BAILIAN_BIN_DIR" || key == "ALIBABA_CLOUD_BL_COMPAT_MODE":
 			continue
 		case noUpdate && key == "NO_UPDATE_NOTIFIER":
 			continue
@@ -383,16 +656,17 @@ func (c *Context) buildRuntimeEnv(base []string) []string {
 	binDir := filepath.Join(c.prefixPath, "bin")
 	separator := string(os.PathListSeparator)
 	if windows {
-		binDir = c.prefixPath
 		separator = ";"
 	}
+	path := binDir
 	if pathValue != "" {
-		binDir += separator + pathValue
+		path += separator + pathValue
 	}
 	result = append(result,
-		"npm_config_prefix="+c.prefixPath,
-		"PATH="+binDir,
-		"BAILIAN_INSTALL_METHOD=npm",
+		"PATH="+path,
+		"BAILIAN_INSTALL_METHOD=binary",
+		"BAILIAN_SHARE_DIR="+c.prefixPath,
+		"BAILIAN_BIN_DIR="+binDir,
 		"ALIBABA_CLOUD_BL_COMPAT_MODE=aliyun bl",
 	)
 	if noUpdate {
@@ -472,27 +746,38 @@ func (c *Context) validateExecPathOverride() error {
 	return nil
 }
 
-func getNodeVersion(nodeBin string) (int, int, int, error) {
-	cmd := exec.Command(nodeBin, "--version")
-	var output bytes.Buffer
-	cmd.Stdout = &output
-	cmd.Stderr = &output
-	if err := cmd.Run(); err != nil {
-		return 0, 0, 0, err
+type versionBuffer struct {
+	buffer bytes.Buffer
+}
+
+func (b *versionBuffer) Write(p []byte) (int, error) {
+	if len(p) > metadataLimit-b.buffer.Len() {
+		return 0, fmt.Errorf("bl --version output exceeds limit")
 	}
-	parts := strings.Split(strings.TrimPrefix(strings.TrimSpace(output.String()), "v"), ".")
-	if len(parts) < 2 {
-		return 0, 0, 0, fmt.Errorf("unexpected node --version output: %q", output.String())
+	return b.buffer.Write(p)
+}
+
+func (c *Context) installedVersion() (string, error) {
+	cmd := c.command(c.execFilePath, "--version")
+	cmd.Env = c.buildRuntimeEnv(c.environ())
+	var output versionBuffer
+	cmd.Stdout, cmd.Stderr = &output, &output
+	cmd.WaitDelay = 5 * time.Second
+	if err := cmd.Start(); err != nil {
+		return "", err
 	}
-	values := [3]int{}
-	for i := 0; i < len(values) && i < len(parts); i++ {
-		value, err := strconv.Atoi(parts[i])
-		if err != nil {
-			return 0, 0, 0, fmt.Errorf("unexpected node --version output: %q", output.String())
+	timer := time.AfterFunc(30*time.Second, func() { _ = cmd.Process.Kill() })
+	defer timer.Stop()
+	if err := cmd.Wait(); err != nil {
+		return "", err
+	}
+	for _, field := range strings.Fields(output.buffer.String()) {
+		version := strings.TrimPrefix(field, "v")
+		if numericVersion.MatchString(version) {
+			return version, nil
 		}
-		values[i] = value
 	}
-	return values[0], values[1], values[2], nil
+	return "", fmt.Errorf("unexpected bl --version output")
 }
 
 func loadBlProfile(ctx *cli.Context) (config.Profile, error) {
