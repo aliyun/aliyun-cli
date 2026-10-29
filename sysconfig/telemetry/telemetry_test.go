@@ -16,10 +16,23 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 )
 
-func TestTelemetryOptOut(t *testing.T) {
-	t.Setenv(TelemetryOptOutEnv, "1")
-	if !OptOut() {
-		t.Fatal("expected telemetry opt out")
+func TestTelemetryEnvironmentDisabled(t *testing.T) {
+	for _, test := range []struct {
+		value    string
+		disabled bool
+	}{
+		{"1", true}, {"true", true}, {"yes", true}, {" TRUE ", true},
+		{"", false}, {"0", false}, {"false", false}, {"no", false}, {"invalid", false},
+	} {
+		t.Run(test.value, func(t *testing.T) {
+			t.Setenv("ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE", test.value)
+			if EnvironmentDisabled() != test.disabled || Disabled(DefaultConfig()) != test.disabled {
+				t.Fatalf("unexpected disable state for environment value %q", test.value)
+			}
+			if !Disabled(&Config{Enabled: false}) {
+				t.Fatal("an environment value must not override a disabled preference")
+			}
+		})
 	}
 }
 
@@ -217,7 +230,7 @@ func TestTelemetryEnabledByDefault(t *testing.T) {
 func TestSetAuthenticationModeUsesSafeEnums(t *testing.T) {
 	resetExecutionState()
 	t.Cleanup(resetExecutionState)
-	beginCommandExecution("", Scope{Active: true}, nil, false, nil)
+	beginCommandExecution("", Scope{Active: true}, nil, false)
 
 	SetEffectiveAuthenticationMode("ak")
 	if activeExecution.authMode != "AK" || activeExecution.authModeSource != "" {
@@ -231,7 +244,7 @@ func TestSetAuthenticationModeUsesSafeEnums(t *testing.T) {
 	}
 
 	resetExecutionState()
-	beginCommandExecution("", Scope{Active: true}, nil, false, nil)
+	beginCommandExecution("", Scope{Active: true}, nil, false)
 	SetAuthenticationMode("user-provided-secret", AuthModeSourceExplicit)
 	if activeExecution.authMode != "" || activeExecution.authModeSource != "" {
 		t.Fatalf("unknown authentication mode must not be recorded: %+v", activeExecution)
@@ -260,7 +273,7 @@ func TestPublicTelemetryDefaultAndExplicitDisablePersistence(t *testing.T) {
 	}
 }
 
-func TestSelectScopeUsesPublicPipelineByDefaultAndAllowsOptOut(t *testing.T) {
+func TestSelectScopeUsesPublicPipelineByDefaultAndAllowsDisabling(t *testing.T) {
 	cfg := DefaultConfig()
 	ok, scope := SelectScope("configure", cfg)
 	if !ok || scope.Pipeline != PipelinePublic {
@@ -271,9 +284,9 @@ func TestSelectScopeUsesPublicPipelineByDefaultAndAllowsOptOut(t *testing.T) {
 		t.Fatal("explicitly disabled public telemetry must not collect")
 	}
 	cfg.Enabled = true
-	t.Setenv(TelemetryOptOutEnv, "true")
+	t.Setenv(TelemetryDisableEnv, "true")
 	if ok, _ := SelectScope("configure", cfg); ok {
-		t.Fatal("environment opt out must disable telemetry")
+		t.Fatal("environment variable must disable telemetry")
 	}
 }
 
@@ -576,6 +589,9 @@ func TestUploadFileUsesVersionedExtensibleContract(t *testing.T) {
 	if _, err := os.Stat(cacheFile); !os.IsNotExist(err) {
 		t.Fatalf("uploaded cache should be removed, stat error: %v", err)
 	}
+	if _, err := os.Stat(GetConfigFilePath(configDir)); !os.IsNotExist(err) {
+		t.Fatalf("upload must not create telemetry config, stat error: %v", err)
+	}
 }
 
 func TestUploadPublicPluginManagementEventUsesSharedEndpoint(t *testing.T) {
@@ -598,6 +614,14 @@ func TestUploadPublicPluginManagementEventUsesSharedEndpoint(t *testing.T) {
 	t.Setenv("ALIBABA_CLOUD_CLI_TELEMETRY_ENDPOINT", server.URL)
 
 	configDir := t.TempDir()
+	originalConfig := []byte(`{"enabled":false}` + "\n")
+	if err := os.WriteFile(GetConfigFilePath(configDir), originalConfig, 0600); err != nil {
+		t.Fatal(err)
+	}
+	instanceID, err := EnsureInstanceID(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	cacheFile, err := WriteEvent(GetPublicCacheDir(configDir), Event{
 		Schema:        "1",
 		EventID:       "44f505ad-0b0d-4ae8-bbd0-8db24b288fa2",
@@ -636,12 +660,23 @@ func TestUploadPublicPluginManagementEventUsesSharedEndpoint(t *testing.T) {
 	if _, exists := attributes["pipeline"]; exists {
 		t.Fatalf("public event must omit pipeline: %#v", attributes)
 	}
+	currentConfig, err := os.ReadFile(GetConfigFilePath(configDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(currentConfig) != string(originalConfig) {
+		t.Fatal("upload must not rewrite telemetry config")
+	}
 	cfg, err := Load(configDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.LastUploadedAt == "" || cfg.LastUploadedAtInner != "" {
-		t.Fatalf("unexpected upload timestamps: %+v", cfg)
+	if cfg.Enabled {
+		t.Fatal("upload must preserve the disabled preference")
+	}
+	currentID, err := LoadInstanceID(configDir)
+	if err != nil || currentID != instanceID {
+		t.Fatalf("upload must preserve the instance ID: %q, %v", currentID, err)
 	}
 }
 

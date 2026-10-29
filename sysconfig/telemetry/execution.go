@@ -27,7 +27,6 @@ type activeCommandExecution struct {
 	aiMode         bool
 	authMode       string
 	authModeSource string
-	cfg            *Config
 	pluginAction   *PluginManagementEvent
 }
 
@@ -45,12 +44,21 @@ func resetExecutionState() {
 	executionEnded = false
 }
 
+// Defer only within automatic telemetry entry points, never around command
+// execution or explicit telemetry management. A recoverable panic discards this
+// invocation's collection silently, without retrying it from later callbacks.
+func recoverCollectionPanic() {
+	if recover() != nil {
+		activeExecution = nil
+		executionEnded = true
+	}
+}
+
 func beginCommandExecution(
 	configDir string,
 	scope Scope,
 	rootArgs []string,
 	aiMode bool,
-	cfg *Config,
 ) {
 	activeExecution = &activeCommandExecution{
 		configDir:    configDir,
@@ -58,7 +66,6 @@ func beginCommandExecution(
 		rootArgs:     append([]string(nil), rootArgs...),
 		start:        time.Now(),
 		aiMode:       aiMode,
-		cfg:          cfg,
 		pluginAction: DetectPluginManagement(rootArgs),
 	}
 	executionEnded = false
@@ -75,6 +82,7 @@ func takeCommandExecutionForEnd() (*activeCommandExecution, bool) {
 // SetEffectiveAuthenticationMode records only a known authentication-mode enum
 // for the profile resolved by the active command.
 func SetEffectiveAuthenticationMode(mode string) {
+	defer recoverCollectionPanic()
 	if activeExecution == nil {
 		return
 	}
@@ -84,6 +92,7 @@ func SetEffectiveAuthenticationMode(mode string) {
 // SetAuthenticationMode records the mode selected by an active configure
 // command together with its selection source.
 func SetAuthenticationMode(mode, source string) {
+	defer recoverCollectionPanic()
 	if activeExecution == nil {
 		return
 	}

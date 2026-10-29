@@ -19,17 +19,17 @@ import (
 	"strings"
 )
 
-const TelemetryOptOutEnv = "ALIBABA_CLOUD_CLI_TELEMETRY_OPTOUT"
+const TelemetryDisableEnv = "ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE"
 
 func envTruthy(key string) bool {
 	v := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
 	return v == "1" || v == "true" || v == "yes"
 }
 
-func OptOut() bool {
-	return envTruthy(TelemetryOptOutEnv)
+func EnvironmentDisabled() bool {
+	return envTruthy(TelemetryDisableEnv)
 }
 
 func Disabled(cfg *Config) bool {
-	return OptOut() || cfg == nil || !cfg.Enabled
+	return EnvironmentDisabled() || cfg == nil || !cfg.Enabled
 }
