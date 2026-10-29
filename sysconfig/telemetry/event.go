@@ -176,7 +176,7 @@ func BuildEvent(in BuildInput) (Event, error) {
 		return Event{}, err
 	}
 
-	pos := commandParts(in.RootArgs, in.Scope.CommandToken)
+	pos := commandParts(in.RootArgs, in.Scope)
 	command := normalizeCommand(pos)
 
 	pluginField := ""

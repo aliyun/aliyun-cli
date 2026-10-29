@@ -123,32 +123,13 @@ func newConfigureTelemetryPurgeCommand() *cli.Command {
 }
 
 func doTelemetryShow(ctx *cli.Context, configDir string, cfg *telemetry.Config) error {
-	innerStats := telemetry.InnerCacheStats(telemetry.GetInnerCacheDir(configDir))
-	publicStats := telemetry.InnerCacheStats(telemetry.GetPublicCacheDir(configDir))
-	instancePrefix, err := telemetry.LoadInstanceID(configDir)
-	if err != nil {
-		return fmt.Errorf("load telemetry instance ID failed: %w", err)
-	}
-	if len(instancePrefix) > 8 {
-		instancePrefix = instancePrefix[:8] + "..."
-	}
 	out := struct {
 		Enabled             bool   `json:"enabled"`
 		EnvironmentDisabled bool   `json:"environment_disabled"`
-		InstanceIDPrefix    string `json:"instance_id_prefix,omitempty"`
-		InnerCacheFiles     int    `json:"inner_cache_files"`
-		InnerCacheBytes     int64  `json:"inner_cache_bytes"`
-		PublicCacheFiles    int    `json:"public_cache_files"`
-		PublicCacheBytes    int64  `json:"public_cache_bytes"`
 		ConfigFile          string `json:"config_file"`
 	}{
 		Enabled:             cfg.Enabled,
 		EnvironmentDisabled: telemetry.EnvironmentDisabled(),
-		InstanceIDPrefix:    instancePrefix,
-		InnerCacheFiles:     innerStats.Files,
-		InnerCacheBytes:     innerStats.TotalBytes,
-		PublicCacheFiles:    publicStats.Files,
-		PublicCacheBytes:    publicStats.TotalBytes,
 		ConfigFile:          telemetry.GetConfigFilePath(configDir),
 	}
 	data, err := json.MarshalIndent(out, "", "  ")

@@ -16,6 +16,7 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -101,21 +102,29 @@ func TestConfigureTelemetryShowIncludesState(t *testing.T) {
 	ctx, stdout, configDir := testTelemetryContext(t)
 	require.NoError(t, os.MkdirAll(configDir, 0755))
 	require.NoError(t, telemetry.Save(configDir, &telemetry.Config{Enabled: true}))
-	id, err := telemetry.EnsureInstanceID(configDir)
-	require.NoError(t, err)
+	// Showing configuration must not depend on an ID being valid or readable.
+	const invalidID = "not-an-instance-id\n"
+	require.NoError(t, os.WriteFile(telemetry.GetInstanceIDFilePath(configDir), []byte(invalidID), 0600))
 	show := enterTelemetrySubcommand(t, ctx, "show")
 	require.NoError(t, show.Run(ctx, nil))
-	require.Contains(t, stdout.String(), `"enabled": true`)
-	require.Contains(t, stdout.String(), `"environment_disabled": false`)
-	require.Contains(t, stdout.String(), `"public_cache_files": 0`)
-	require.Contains(t, stdout.String(), `"instance_id_prefix": "`+id[:8]+`..."`)
-	require.NotContains(t, stdout.String(), "last_uploaded_at")
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &got))
+	want := map[string]any{
+		"enabled":              true,
+		"environment_disabled": false,
+		"config_file":          telemetry.GetConfigFilePath(configDir),
+	}
+	require.Equal(t, want, got)
 
 	t.Setenv("ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE", "1")
 	stdout.Reset()
 	require.NoError(t, show.Run(ctx, nil))
-	require.Contains(t, stdout.String(), `"enabled": true`)
-	require.Contains(t, stdout.String(), `"environment_disabled": true`)
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &got))
+	want["environment_disabled"] = true
+	require.Equal(t, want, got)
+	data, err := os.ReadFile(telemetry.GetInstanceIDFilePath(configDir))
+	require.NoError(t, err)
+	require.Equal(t, invalidID, string(data))
 }
 
 func TestConfigureTelemetryLifecycleDoesNotCollect(t *testing.T) {
