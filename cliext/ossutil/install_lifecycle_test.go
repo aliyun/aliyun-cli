@@ -376,10 +376,22 @@ func TestDownloadAndUnzipConcurrent(t *testing.T) {
 					results <- DownloadAndUnzip(fmt.Sprintf("%s/%d", server.URL, i), filepath.Join(tmp, fmt.Sprintf("download-%d.zip", i)), target, fmt.Sprintf("center-%d", i))
 				}()
 			}
+			succeeded := 0
 			for range count {
 				if err := <-results; err != nil {
+					// Windows may deny replacing a destination held by a concurrent rename.
+					var renameErr *os.LinkError
+					if sameTarget && runtime.GOOS == "windows" && errors.As(err, &renameErr) &&
+						renameErr.Op == "rename" && renameErr.New == filepath.Join(tmp, "ossutil") && errors.Is(renameErr, os.ErrPermission) {
+						continue
+					}
 					t.Error(err)
+				} else {
+					succeeded++
 				}
+			}
+			if succeeded == 0 {
+				t.Fatal("no concurrent installation published a binary")
 			}
 			if t.Failed() {
 				return
