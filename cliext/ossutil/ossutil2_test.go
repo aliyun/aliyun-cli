@@ -171,6 +171,33 @@ func TestRun_NotInstalled_FreshInstallAndExecute(t *testing.T) {
 	}
 }
 
+func TestRun_ManagedBinaryUnsupportedPlatform(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_OSSUTIL_EXEC_PATH", "")
+	configDir := t.TempDir()
+	oldPath, oldOS, oldLatest, oldDownload := getConfigurePathFunc, runtimeGOOSFunc, getLatestOssUtilVersionFunc, downloadAndUnzipFunc
+	t.Cleanup(func() {
+		getConfigurePathFunc, runtimeGOOSFunc, getLatestOssUtilVersionFunc, downloadAndUnzipFunc = oldPath, oldOS, oldLatest, oldDownload
+	})
+	getConfigurePathFunc = func() string { return configDir }
+	runtimeGOOSFunc = func() string { return "unsupported" }
+	getLatestOssUtilVersionFunc = func() (string, error) {
+		t.Fatal("unsupported platform must fail before querying versions")
+		return "", nil
+	}
+	downloadAndUnzipFunc = func(string, string, string, string) error {
+		t.Fatal("unsupported platform must not download a binary")
+		return nil
+	}
+	ctx, _, _ := newOriginCtx()
+	if err := NewContext(ctx).Run([]string{"ls"}); err == nil || !strings.Contains(err.Error(), "os type unsupported") {
+		t.Fatalf("expected unsupported platform error, got %v", err)
+	}
+	entries, err := os.ReadDir(configDir)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("unsupported platform wrote managed files: %v, %v", entries, err)
+	}
+}
+
 func TestRun_Installed_NoVersionCheckWithinTTL(t *testing.T) {
 	origHOME := os.Getenv("HOME")
 	t.Cleanup(func() { _ = os.Setenv("HOME", origHOME) })
