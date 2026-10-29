@@ -3,6 +3,7 @@ package ossutil
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -134,6 +135,42 @@ func TestExternalBinaryRelativePath(t *testing.T) {
 	}
 }
 
+func TestExternalBinaryRemovedWorkingDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not allow removing the current working directory")
+	}
+	forbidManagedOssutil(t)
+	dir := filepath.Join(t.TempDir(), "removed-cwd")
+	if err := os.Mkdir(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Getwd(); err == nil {
+		t.Skip("the host can still resolve a removed working directory")
+	}
+	t.Setenv("ALIBABA_CLOUD_OSSUTIL_EXEC_PATH", "ossutil")
+	ctx, _, _ := newOriginCtx()
+	err := NewContext(ctx).Run([]string{"ls"})
+	var pathErr *os.PathError
+	if err == nil || !strings.Contains(err.Error(), `ALIBABA_CLOUD_OSSUTIL_EXEC_PATH="ossutil"`) || !errors.As(err, &pathErr) || pathErr.Op != "getwd" {
+		t.Fatalf("expected wrapped working-directory error, got %v", err)
+	}
+}
+
+func TestExternalBinaryWindowsPermissions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ossutil.exe")
+	if err := os.WriteFile(path, nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	c := &Context{execFilePath: path, osType: "windows"}
+	if err := c.validateExecPathOverride(); err != nil {
+		t.Fatalf("Windows must not require Unix executable permission bits: %v", err)
+	}
+}
+
 func TestOssutilExternalBinaryProcess(t *testing.T) {
 	code := os.Getenv("ALIYUN_OSSUTIL_TEST_CHILD_EXIT")
 	if code == "" {
@@ -161,11 +198,12 @@ func TestOssutilExternalBinaryProcess(t *testing.T) {
 func TestRun_ExternalBinaryInvalid(t *testing.T) {
 	for _, tc := range []struct{ name, want string }{
 		{"missing", "existing file"}, {"directory", "regular file"}, {"not executable", "not executable"},
+		{"symlink loop", "symbolic links"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			forbidManagedOssutil(t)
-			if tc.name == "not executable" && runtime.GOOS == "windows" {
-				t.Skip("Windows does not use Unix executable permission bits")
+			if (tc.name == "not executable" || tc.name == "symlink loop") && runtime.GOOS == "windows" {
+				t.Skip("Unix executable permissions and symlink-loop behavior")
 			}
 			path := filepath.Join(t.TempDir(), "ossutil")
 			if tc.name == "directory" {
@@ -176,13 +214,23 @@ func TestRun_ExternalBinaryInvalid(t *testing.T) {
 				if err := os.WriteFile(path, nil, 0644); err != nil {
 					t.Fatal(err)
 				}
+			} else if tc.name == "symlink loop" {
+				if err := os.Symlink("ossutil", path); err != nil {
+					t.Fatal(err)
+				}
 			}
 			t.Setenv("ALIBABA_CLOUD_OSSUTIL_EXEC_PATH", path)
 			ctx, _, _ := newOriginCtx()
 			err := NewContext(ctx).Run([]string{"ls"})
-			for _, want := range []string{"ALIBABA_CLOUD_OSSUTIL_EXEC_PATH", path, tc.want} {
+			for _, want := range []string{"ALIBABA_CLOUD_OSSUTIL_EXEC_PATH", strconv.Quote(path), tc.want} {
 				if err == nil || !strings.Contains(err.Error(), want) {
 					t.Fatalf("error %v should contain %q", err, want)
+				}
+			}
+			if tc.name == "symlink loop" {
+				var pathErr *os.PathError
+				if !errors.As(err, &pathErr) || pathErr.Op != "stat" || os.IsNotExist(pathErr) {
+					t.Fatalf("expected wrapped non-missing stat error, got %v", err)
 				}
 			}
 		})
