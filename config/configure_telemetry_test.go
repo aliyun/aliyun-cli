@@ -85,6 +85,18 @@ func TestConfigureTelemetryEnableAndDisable(t *testing.T) {
 	require.False(t, cfg.Enabled)
 }
 
+func TestConfigureTelemetryNoticeDoesNotConsumeInput(t *testing.T) {
+	ctx, stdout, _ := testTelemetryContext(t)
+	oldStdin := stdin
+	stdin = strings.NewReader("credential-input\n")
+	t.Cleanup(func() { stdin = oldStdin })
+
+	printTelemetryNotice(ctx)
+	require.Contains(t, stdout.String(), "telemetry")
+	require.Contains(t, stdout.String(), "ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE=1")
+	require.Equal(t, "credential-input", ReadInput(""))
+}
+
 func TestConfigureTelemetryShowIncludesState(t *testing.T) {
 	ctx, stdout, configDir := testTelemetryContext(t)
 	require.NoError(t, os.MkdirAll(configDir, 0755))
