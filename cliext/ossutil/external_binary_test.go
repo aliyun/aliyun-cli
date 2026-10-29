@@ -148,14 +148,17 @@ func TestExternalBinaryRemovedWorkingDirectory(t *testing.T) {
 	if err := os.Remove(dir); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Getwd(); err == nil {
+	_, cwdErr := os.Getwd()
+	if cwdErr == nil {
 		t.Skip("the host can still resolve a removed working directory")
+	}
+	if cause := errors.Unwrap(cwdErr); cause != nil {
+		cwdErr = cause
 	}
 	t.Setenv("ALIBABA_CLOUD_OSSUTIL_EXEC_PATH", "ossutil")
 	ctx, _, _ := newOriginCtx()
 	err := NewContext(ctx).Run([]string{"ls"})
-	var pathErr *os.PathError
-	if err == nil || !strings.Contains(err.Error(), `ALIBABA_CLOUD_OSSUTIL_EXEC_PATH="ossutil"`) || !errors.As(err, &pathErr) || pathErr.Op != "getwd" {
+	if err == nil || !strings.Contains(err.Error(), `ALIBABA_CLOUD_OSSUTIL_EXEC_PATH="ossutil"`) || !errors.Is(err, cwdErr) {
 		t.Fatalf("expected wrapped working-directory error, got %v", err)
 	}
 }
