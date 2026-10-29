@@ -60,12 +60,7 @@ func newConfigureTelemetryEnableCommand() *cli.Command {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
 			}
-			configDir, cfg, err := loadTelemetryConfig()
-			if err != nil {
-				return err
-			}
-			cfg.Enabled = true
-			return telemetry.Save(configDir, cfg)
+			return telemetry.Save(GetConfigPath(), &telemetry.Config{Enabled: true})
 		},
 	}
 }
@@ -81,12 +76,7 @@ func newConfigureTelemetryDisableCommand() *cli.Command {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
 			}
-			configDir, cfg, err := loadTelemetryConfig()
-			if err != nil {
-				return err
-			}
-			cfg.Enabled = false
-			return telemetry.Save(configDir, cfg)
+			return telemetry.Save(GetConfigPath(), &telemetry.Config{Enabled: false})
 		},
 	}
 }
@@ -127,11 +117,7 @@ func newConfigureTelemetryPurgeCommand() *cli.Command {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
 			}
-			configDir, cfg, err := loadTelemetryConfig()
-			if err != nil {
-				return err
-			}
-			return telemetry.Purge(configDir, cfg)
+			return telemetry.Purge(GetConfigPath())
 		},
 	}
 }
@@ -139,32 +125,31 @@ func newConfigureTelemetryPurgeCommand() *cli.Command {
 func doTelemetryShow(ctx *cli.Context, configDir string, cfg *telemetry.Config) error {
 	innerStats := telemetry.InnerCacheStats(telemetry.GetInnerCacheDir(configDir))
 	publicStats := telemetry.InnerCacheStats(telemetry.GetPublicCacheDir(configDir))
-	instancePrefix := cfg.InstanceID
+	instancePrefix, err := telemetry.LoadInstanceID(configDir)
+	if err != nil {
+		return fmt.Errorf("load telemetry instance ID failed: %w", err)
+	}
 	if len(instancePrefix) > 8 {
 		instancePrefix = instancePrefix[:8] + "..."
 	}
 	out := struct {
-		Enabled           bool   `json:"enabled"`
-		EnvironmentOptOut bool   `json:"environment_opt_out"`
-		InstanceIDPrefix  string `json:"instance_id_prefix,omitempty"`
-		InnerCacheFiles   int    `json:"inner_cache_files"`
-		InnerCacheBytes   int64  `json:"inner_cache_bytes"`
-		PublicCacheFiles  int    `json:"public_cache_files"`
-		PublicCacheBytes  int64  `json:"public_cache_bytes"`
-		LastUploaded      string `json:"last_uploaded_at,omitempty"`
-		LastUploadedInner string `json:"last_uploaded_at_inner,omitempty"`
-		ConfigFile        string `json:"config_file"`
+		Enabled             bool   `json:"enabled"`
+		EnvironmentDisabled bool   `json:"environment_disabled"`
+		InstanceIDPrefix    string `json:"instance_id_prefix,omitempty"`
+		InnerCacheFiles     int    `json:"inner_cache_files"`
+		InnerCacheBytes     int64  `json:"inner_cache_bytes"`
+		PublicCacheFiles    int    `json:"public_cache_files"`
+		PublicCacheBytes    int64  `json:"public_cache_bytes"`
+		ConfigFile          string `json:"config_file"`
 	}{
-		Enabled:           cfg.Enabled,
-		EnvironmentOptOut: telemetry.OptOut(),
-		InstanceIDPrefix:  instancePrefix,
-		InnerCacheFiles:   innerStats.Files,
-		InnerCacheBytes:   innerStats.TotalBytes,
-		PublicCacheFiles:  publicStats.Files,
-		PublicCacheBytes:  publicStats.TotalBytes,
-		LastUploaded:      cfg.LastUploadedAt,
-		LastUploadedInner: cfg.LastUploadedAtInner,
-		ConfigFile:        telemetry.GetConfigFilePath(configDir),
+		Enabled:             cfg.Enabled,
+		EnvironmentDisabled: telemetry.EnvironmentDisabled(),
+		InstanceIDPrefix:    instancePrefix,
+		InnerCacheFiles:     innerStats.Files,
+		InnerCacheBytes:     innerStats.TotalBytes,
+		PublicCacheFiles:    publicStats.Files,
+		PublicCacheBytes:    publicStats.TotalBytes,
+		ConfigFile:          telemetry.GetConfigFilePath(configDir),
 	}
 	data, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {

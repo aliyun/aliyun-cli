@@ -16,18 +16,18 @@ package telemetry
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 )
 
-const ConfigFileName = "telemetry.json"
+const (
+	ConfigFileName = "telemetry.json"
+	CacheDirName   = "telemetry-cache"
+)
 
 type Config struct {
-	Enabled             bool   `json:"enabled"`
-	InstanceID          string `json:"instance_id,omitempty"`
-	LastUploadedAtInner string `json:"last_uploaded_at_inner,omitempty"`
-	LastUploadedAt      string `json:"last_uploaded_at,omitempty"`
+	Enabled bool `json:"enabled"`
 }
 
 func DefaultConfig() *Config {
@@ -41,11 +41,11 @@ func GetConfigFilePath(configDir string) string {
 }
 
 func GetInnerCacheDir(configDir string) string {
-	return filepath.Join(configDir, "telemetry", "inner")
+	return filepath.Join(configDir, CacheDirName, "inner")
 }
 
 func GetPublicCacheDir(configDir string) string {
-	return filepath.Join(configDir, "telemetry", "public")
+	return filepath.Join(configDir, CacheDirName, "public")
 }
 
 func GetCacheDir(configDir, pipeline string) string {
@@ -66,7 +66,7 @@ func Load(configDir string) (*Config, error) {
 	}
 	var c Config
 	if err := json.Unmarshal(data, &c); err != nil {
-		return DefaultConfig(), nil
+		return nil, fmt.Errorf("invalid telemetry config: %w", err)
 	}
 	return &c, nil
 }
@@ -82,56 +82,7 @@ func Save(configDir string, c *Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(GetConfigFilePath(configDir), data, 0600)
-}
-
-func EnsureInstanceID(configDir string, c *Config) (string, error) {
-	if c == nil {
-		c = DefaultConfig()
-	}
-	if c.InstanceID != "" {
-		return c.InstanceID, nil
-	}
-	id, err := newUUID()
-	if err != nil {
-		return "", err
-	}
-	c.InstanceID = id
-	if err := Save(configDir, c); err != nil {
-		return "", err
-	}
-	return id, nil
-}
-
-func MarkUploaded(configDir string, c *Config, pipeline string) error {
-	if c == nil {
-		var err error
-		c, err = Load(configDir)
-		if err != nil {
-			return err
-		}
-	}
-	now := time.Now().Format(time.RFC3339)
-	if pipeline == PipelineInner {
-		c.LastUploadedAtInner = now
-	} else {
-		c.LastUploadedAt = now
-	}
-	return Save(configDir, c)
-}
-
-func Purge(configDir string, c *Config) error {
-	if c == nil {
-		var err error
-		c, err = Load(configDir)
-		if err != nil {
-			return err
-		}
-	}
-	_ = os.RemoveAll(filepath.Join(configDir, "telemetry"))
-	c.InstanceID = ""
-	if err := Save(configDir, c); err != nil {
-		return err
-	}
-	return nil
+	// Only explicit preference changes write this single-field file. Atomic
+	// replacement keeps concurrent readers safe; the last completed save wins.
+	return atomicWriteFile(GetConfigFilePath(configDir), data, 0600)
 }

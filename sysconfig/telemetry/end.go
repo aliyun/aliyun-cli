@@ -21,6 +21,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
+	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
 )
 
 type BeginInput struct {
@@ -31,7 +32,13 @@ type BeginInput struct {
 }
 
 func Begin(in BeginInput) {
+	defer recoverCollectionPanic()
 	resetExecutionState()
+	// Managing telemetry must not create an ID or emit a new event, especially
+	// immediately after disable or purge.
+	if isTelemetryManagementCommand(in.CommandArgs) {
+		return
+	}
 	cfg, err := Load(in.ConfigDir)
 	if err != nil {
 		return
@@ -42,8 +49,23 @@ func Begin(in BeginInput) {
 	}
 	aiCfg, _ := aimode.Load(in.ConfigDir)
 	aiOn := aiCfg != nil && aiCfg.Enabled
-	beginCommandExecution(in.ConfigDir, scope, in.CommandArgs, aiOn, cfg)
+	beginCommandExecution(in.ConfigDir, scope, in.CommandArgs, aiOn)
 	SetEffectiveAuthenticationMode(in.AuthMode)
+}
+
+func isTelemetryManagementCommand(args []string) bool {
+	for _, command := range []string{"configure", "telemetry"} {
+		args = sysmock.StripLeadingGlobalFlags(args)
+		// The command parser accepts "help" before any subcommand.
+		for len(args) > 0 && args[0] == "help" {
+			args = sysmock.StripLeadingGlobalFlags(args[1:])
+		}
+		if len(args) == 0 || args[0] != command {
+			return false
+		}
+		args = args[1:]
+	}
+	return true
 }
 
 func End(err error) {
@@ -55,15 +77,17 @@ func EndWithExitCode(exitCode int) {
 }
 
 func flush(exitCode *int, err error) {
+	defer recoverCollectionPanic()
 	execution, ok := takeCommandExecutionForEnd()
 	if !ok {
 		return
 	}
-	cfg := execution.cfg
-	if cfg == nil {
-		cfg, _ = Load(execution.configDir)
+	// A command may have disabled telemetry while this invocation was running.
+	cfg, configErr := Load(execution.configDir)
+	if configErr != nil || Disabled(cfg) {
+		return
 	}
-	instanceID, idErr := EnsureInstanceID(execution.configDir, cfg)
+	instanceID, idErr := EnsureInstanceID(execution.configDir)
 	if idErr != nil {
 		return
 	}

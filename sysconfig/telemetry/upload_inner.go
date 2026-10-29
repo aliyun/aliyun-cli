@@ -76,11 +76,8 @@ func UploadFile(configDir, pipeline, cacheFile string) error {
 	if event.Pipeline != pipeline {
 		return nil
 	}
-	if !postTelemetryBatch([]uploadEvent{newUploadEvent(event)}) {
-		return nil
-	}
-	cfg, _ := Load(configDir)
-	return MarkUploaded(configDir, cfg, pipeline)
+	postTelemetryBatch([]uploadEvent{newUploadEvent(event)})
+	return nil
 }
 
 func postTelemetryBatch(batch []uploadEvent) bool {

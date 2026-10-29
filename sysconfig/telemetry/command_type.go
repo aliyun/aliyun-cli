@@ -33,6 +33,7 @@ var cliExtensions = map[string]struct{}{}
 
 // RegisterCLIExtensions records the root commands implemented by cliext.
 func RegisterCLIExtensions(extensions map[string]bool) {
+	defer recoverCollectionPanic()
 	registered := make(map[string]struct{}, len(extensions))
 	for name, enabled := range extensions {
 		if enabled {
