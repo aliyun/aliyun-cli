@@ -33,7 +33,7 @@ func GetInstanceIDFilePath(configDir string) string {
 	return filepath.Join(configDir, InstanceIDFileName)
 }
 
-// LoadInstanceID only reads the ID; status commands must not create one.
+// LoadInstanceID reads an existing ID without creating one.
 func LoadInstanceID(configDir string) (string, error) {
 	data, err := os.ReadFile(GetInstanceIDFilePath(configDir))
 	if os.IsNotExist(err) {

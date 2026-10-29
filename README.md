@@ -141,6 +141,18 @@ aliyun plugin update --name <plugin-name>
 
 See [command usage](./docs/en/usage.md) and [plugin management](./docs/en/plugins.md) for the complete workflows.
 
+## Data collection
+
+Telemetry is enabled by default to help improve Alibaba Cloud CLI's stability, usability, and performance.
+
+To disable telemetry, run:
+
+```sh
+aliyun configure telemetry disable
+```
+
+You can also disable it by setting `ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE=1`. See [Telemetry data collection](./docs/en/telemetry.md) for the collected information and available controls.
+
 ## Troubleshoot
 
 [OpenAPI Troubleshoot](https://api.aliyun.com/troubleshoot?source=github_sdk) helps diagnose OpenAPI request failures by `RequestId` or error message.
@@ -152,6 +164,7 @@ See [command usage](./docs/en/usage.md) and [plugin management](./docs/en/plugin
 | Documentation index | [English](./docs/README.md#english) | [中文](./docs/README.md#简体中文) |
 | Installation and upgrade | [Guide](./docs/en/installation.md) | [指南](./docs/zh-CN/installation.md) |
 | Configuration and credentials | [Guide](./docs/en/configuration.md) | [指南](./docs/zh-CN/configuration.md) |
+| Telemetry data collection | [Guide](./docs/en/telemetry.md) | [指南](./docs/zh-CN/telemetry.md) |
 | Commands, output, and automation | [Guide](./docs/en/usage.md) | [指南](./docs/zh-CN/usage.md) |
 | MCP, OpenTelemetry, and machine interfaces | [Guide](./docs/en/integrations.md) | [指南](./docs/zh-CN/integrations.md) |
 | Built-in OSS automation | [Guide](./docs/en/oss.md) | [指南](./docs/zh-CN/oss.md) |

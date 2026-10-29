@@ -95,33 +95,3 @@ func cleanupExpiredEventFiles(
 		_ = os.Remove(filepath.Join(cacheDir, name))
 	}
 }
-
-type CacheStats struct {
-	Files      int
-	TotalBytes int64
-	Lines      int
-}
-
-func InnerCacheStats(cacheDir string) CacheStats {
-	var stats CacheStats
-	entries, err := os.ReadDir(cacheDir)
-	if err != nil {
-		return stats
-	}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if !strings.HasSuffix(name, ".ndjson") {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		stats.Files++
-		stats.TotalBytes += info.Size()
-	}
-	return stats
-}

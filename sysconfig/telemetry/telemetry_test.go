@@ -51,9 +51,10 @@ func TestExtractParamNames(t *testing.T) {
 
 func TestBuildEventKeepsDeepPluginCommandHierarchy(t *testing.T) {
 	event, err := BuildEvent(BuildInput{
-		Scope: Scope{Active: true, Pipeline: PipelinePublic},
+		Scope: Scope{Active: true, Pipeline: PipelinePublic,
+			CommandToken: "custom-plugin", PluginName: "aliyun-cli-custom-plugin", PluginType: plugin.PluginTypeGo},
 		RootArgs: []string{
-			"custom-plugin", "resource", "policy", "list",
+			"custom-plugin", "resource", "policy", "list", "--path", "/private/customer.json", "--body=private business body",
 		},
 		InstanceID: "instance-id",
 	})
@@ -392,12 +393,16 @@ func TestWriteEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(path); err != nil {
+	data, err := os.ReadFile(path)
+	if err != nil {
 		t.Fatal(err)
 	}
-	st := InnerCacheStats(cache)
-	if st.Files != 1 || st.TotalBytes == 0 {
-		t.Fatalf("unexpected stats: %+v", st)
+	var persisted Event
+	if err := json.Unmarshal(data, &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if persisted.EventID != ev.EventID {
+		t.Fatalf("unexpected event ID: %s", persisted.EventID)
 	}
 	_ = os.RemoveAll(dir)
 }

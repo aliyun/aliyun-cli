@@ -4,6 +4,8 @@
 
 阿里云 CLI 默认将具名 Profile 保存在 `~/.aliyun/config.json`。
 
+遥测设置与采集范围见[遥测数据采集](./telemetry.md)。
+
 ## 创建和管理 Profile
 
 本地交互使用推荐从 OAuth 开始：

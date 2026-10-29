@@ -139,6 +139,18 @@ aliyun plugin update --name <plugin-name>
 
 完整说明见[命令使用指南](./docs/zh-CN/usage.md)和[插件管理指南](./docs/zh-CN/plugins.md)。
 
+## 数据采集
+
+遥测默认开启，用于改进阿里云 CLI 的稳定性、易用性和性能。
+
+如需关闭遥测，请运行：
+
+```sh
+aliyun configure telemetry disable
+```
+
+也可以设置环境变量 `ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE=1` 关闭遥测。采集范围与管理方式详见[遥测数据采集](./docs/zh-CN/telemetry.md)。
+
 ## 问题诊断
 
 [OpenAPI 问题诊断](https://api.aliyun.com/troubleshoot?source=github_sdk) 可通过 `RequestId` 或报错信息定位 OpenAPI 调用问题。
@@ -150,6 +162,7 @@ aliyun plugin update --name <plugin-name>
 | 文档索引 | [中文](./docs/README.md#简体中文) | [English](./docs/README.md#english) |
 | 安装与升级 | [指南](./docs/zh-CN/installation.md) | [Guide](./docs/en/installation.md) |
 | 配置与凭证 | [指南](./docs/zh-CN/configuration.md) | [Guide](./docs/en/configuration.md) |
+| 遥测数据采集 | [指南](./docs/zh-CN/telemetry.md) | [Guide](./docs/en/telemetry.md) |
 | 命令、输出与自动化 | [指南](./docs/zh-CN/usage.md) | [Guide](./docs/en/usage.md) |
 | MCP、OpenTelemetry 与机器接口 | [指南](./docs/zh-CN/integrations.md) | [Guide](./docs/en/integrations.md) |
 | 内置 OSS 自动化 | [指南](./docs/zh-CN/oss.md) | [Guide](./docs/en/oss.md) |
