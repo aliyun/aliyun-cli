@@ -672,7 +672,7 @@ func TestBuildExecEnvManagedEnvironment(t *testing.T) {
 					t.Fatal(err)
 				}
 				got := envMap(env)
-				binDir, separator := filepath.Join(bridge.prefixPath, "bin"), ":"
+				binDir, separator := filepath.Join(bridge.prefixPath, "bin"), string(os.PathListSeparator)
 				if goos == "windows" {
 					separator = ";"
 				}
@@ -772,7 +772,8 @@ func TestBinaryOverrideWithoutNodeOrNpm(t *testing.T) {
 	ctx, _, _ := newTestContext()
 	bridge := NewContext(ctx)
 	bridge.configPath = t.TempDir
-	bridge.goos = func() string { return "unsupported" }
+	bridge.goos = func() string { return runtime.GOOS }
+	bridge.goarch = func() string { return "unsupported" }
 	bridge.loadProfile = func(*cli.Context) (config.Profile, error) { return config.Profile{}, nil }
 	bridge.command = func(_ string, args ...string) *exec.Cmd {
 		if !reflect.DeepEqual(args, []string{"help"}) {
@@ -809,5 +810,123 @@ func TestBinaryManagedPathsAndEnvironment(t *testing.T) {
 	got := envMap(env)
 	if got["BAILIAN_INSTALL_METHOD"] != "binary" || got["BAILIAN_SHARE_DIR"] != wantPrefix || got["BAILIAN_BIN_DIR"] != filepath.Join(wantPrefix, "bin") || got["npm_config_prefix"] != "caller" {
 		t.Errorf("binary environment contract not met: %v", got)
+	}
+}
+
+func TestPrepareArgsHostFlagErrors(t *testing.T) {
+	for _, args := range [][]string{{"--profile="}, {"--profile", ""}, {"--profile", "--"}, {"-p"}, {"-p", "--"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			ctx, _, _ := newTestContext()
+			if _, err := NewContext(ctx).PrepareArgs(args); err == nil || !strings.Contains(err.Error(), "requires a value") {
+				t.Fatalf("missing host flag value = %v", err)
+			}
+		})
+	}
+	for _, ctx := range []*cli.Context{nil, cli.NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{})} {
+		bridge := NewContext(ctx)
+		for _, args := range [][]string{{"--profile=prod"}, {"-pprod"}} {
+			if _, err := bridge.PrepareArgs(args); err == nil || !strings.Contains(err.Error(), "--profile is not registered") {
+				t.Fatalf("unregistered host flag = %v", err)
+			}
+		}
+		if _, ok := assignedFlagValue(ctx, config.ProfileFlagName); ok {
+			t.Fatal("unregistered flag returned a value")
+		}
+	}
+}
+
+func TestRunWithoutArgsDelegatesToOverride(t *testing.T) {
+	bridge, _ := binaryContext(t)
+	t.Setenv(execPathEnv, os.Args[0])
+	called := false
+	bridge.command = func(name string, args ...string) *exec.Cmd {
+		called = true
+		if name != os.Args[0] || len(args) != 0 {
+			t.Fatalf("no-argument delegation = %s %v", name, args)
+		}
+		return successfulCommand()
+	}
+	if err := bridge.Run(nil); err != nil || !called {
+		t.Fatalf("no-argument Run = %v, called=%v", err, called)
+	}
+}
+
+func TestNewBlCommandReturnsHostErrors(t *testing.T) {
+	ctx, _, _ := newTestContext()
+	if err := NewBlCommand().Run(ctx, []string{"--profile"}); err == nil || !strings.Contains(err.Error(), "requires a value") {
+		t.Fatalf("command swallowed host preparation error: %v", err)
+	}
+	t.Setenv(execPathEnv, filepath.Join(t.TempDir(), "missing"))
+	if err := NewBlCommand().Run(ctx, nil); err == nil || !strings.Contains(err.Error(), execPathEnv) {
+		t.Fatalf("command swallowed override error: %v", err)
+	}
+}
+
+func TestLoadBlProfileSelectedConfigAndErrors(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "")
+	t.Setenv("ALIBABACLOUD_IGNORE_PROFILE", "")
+	for _, key := range []string{"ALIBABACLOUD_PROFILE", "ALIBABA_CLOUD_PROFILE", "ALICLOUD_PROFILE"} {
+		t.Setenv(key, "")
+	}
+	for _, tc := range []struct {
+		name, content, flag, env, want, errText string
+	}{
+		{name: "explicit profile wins", flag: " prod ", env: "missing", want: "prod"},
+		{name: "environment profile", env: "prod", want: "prod"},
+		{name: "current profile", want: "default"},
+		{name: "missing profile", flag: "missing", errText: "unknown profile missing"},
+		{name: "unreadable config", content: "not json", errText: "init config failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("ALIBABA_CLOUD_PROFILE", tc.env)
+			path := filepath.Join(t.TempDir(), "selected.json")
+			content := tc.content
+			if content == "" {
+				content = `{"current":"default","profiles":[{"name":"default"},{"name":"prod","mode":"AK","access_key_id":"fixture-ak","access_key_secret":"fixture-sk"}]}`
+			}
+			if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+				t.Fatal(err)
+			}
+			ctx, _, _ := newTestContext()
+			bridge := NewContext(ctx)
+			if err := bridge.assignFlag(config.ConfigurePathFlagName, path); err != nil {
+				t.Fatal(err)
+			}
+			if tc.flag != "" {
+				if err := bridge.assignFlag(config.ProfileFlagName, tc.flag); err != nil {
+					t.Fatal(err)
+				}
+			}
+			profile, err := loadBlProfile(ctx)
+			if tc.errText != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.errText) {
+					t.Fatalf("profile error = %v, want %q", err, tc.errText)
+				}
+			} else if err != nil || profile.Name != tc.want {
+				t.Fatalf("selected profile = %q, %v, want %q", profile.Name, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestExecuteRejectsCredentialErrorsBeforeStarting(t *testing.T) {
+	for _, profile := range []config.Profile{
+		{Mode: config.StsToken, AccessKeyId: "ak", StsToken: "token"},
+		{Mode: config.BearerToken, BearerTokenValue: "fixture-token"},
+	} {
+		t.Run(string(profile.Mode), func(t *testing.T) {
+			ctx, _, _ := newTestContext()
+			bridge := NewContext(ctx)
+			bridge.loadProfile = func(*cli.Context) (config.Profile, error) { return profile, nil }
+			bridge.getwd = func() (string, error) { t.Fatal("cwd read after credential failure"); return "", nil }
+			bridge.command = func(string, ...string) *exec.Cmd { t.Fatal("command started after credential failure"); return nil }
+			want := "access key ID and secret must be configured together"
+			if profile.Mode == config.BearerToken {
+				want = "credential provider returned incomplete access key credentials"
+			}
+			if err := bridge.Execute(nil); err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatalf("credential error = %v, want %q", err, want)
+			}
+		})
 	}
 }

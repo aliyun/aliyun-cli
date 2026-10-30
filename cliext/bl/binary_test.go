@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -30,13 +31,22 @@ func binaryContext(t *testing.T) (*Context, *bytes.Buffer) {
 	c := NewContext(ctx)
 	root := t.TempDir()
 	c.configPath = func() string { return root }
-	c.goos = func() string { return "linux" }
-	c.goarch = func() string { return "amd64" }
+	c.goos = func() string { return runtime.GOOS }
+	c.goarch = func() string { return runtime.GOARCH }
 	c.loadProfile = func(*cli.Context) (config.Profile, error) { return config.Profile{}, nil }
 	if err := c.InitBasicInfo(); err != nil {
 		t.Fatal(err)
 	}
 	return c, stderr
+}
+
+func binaryPlatform(t *testing.T, c *Context) string {
+	t.Helper()
+	platform, err := c.platform()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return platform
 }
 
 func zipFixture(t *testing.T, names []string, mode os.FileMode, body []byte) []byte {
@@ -74,13 +84,14 @@ func assetFixture(t *testing.T, version, platform string) (releaseAsset, []byte)
 
 func releaseServer(t *testing.T, c *Context, a releaseAsset, payload []byte, paths *[]string) {
 	t.Helper()
+	platform := binaryPlatform(t, c)
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if paths != nil {
 			*paths = append(*paths, r.URL.Path)
 		}
 		switch r.URL.Path {
 		case "/manifest.json":
-			_ = json.NewEncoder(w).Encode(map[string]any{"name": "bailian-cli", "channel": "latest", "version": a.Version, "assets": map[string]releaseAsset{"linux-x64": a, "darwin-arm64": a, "darwin-x64": a, "windows-x64": a}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"name": "bailian-cli", "channel": "latest", "version": a.Version, "assets": map[string]releaseAsset{platform: a}})
 		case "/v" + a.Version + "/" + a.File:
 			_, _ = w.Write(payload)
 		default:
@@ -137,7 +148,7 @@ func TestBinaryManifestIgnoresRemovedVersionControl(t *testing.T) {
 		t.Run(value, func(t *testing.T) {
 			c, _ := binaryContext(t)
 			t.Setenv("ALIBABA_CLOUD_BL_VERSION", value)
-			a, payload := assetFixture(t, "2.7.1", "linux-x64")
+			a, payload := assetFixture(t, "2.7.1", binaryPlatform(t, c))
 			var paths []string
 			releaseServer(t, c, a, payload, &paths)
 			if err := c.EnsureBinary(); err != nil {
@@ -152,7 +163,7 @@ func TestBinaryManifestIgnoresRemovedVersionControl(t *testing.T) {
 
 func TestBinaryReleaseInstallation(t *testing.T) {
 	c, _ := binaryContext(t)
-	a, payload := assetFixture(t, "2.6.2", "linux-x64")
+	a, payload := assetFixture(t, "2.6.2", binaryPlatform(t, c))
 	var paths []string
 	releaseServer(t, c, a, payload, &paths)
 	if err := c.EnsureBinary(); err != nil {
@@ -166,8 +177,12 @@ func TestBinaryReleaseInstallation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0755 || !c.installed {
-		t.Fatalf("mode/installed = %v/%v", info.Mode(), c.installed)
+	wantMode := os.FileMode(0755)
+	if runtime.GOOS == "windows" {
+		wantMode = 0666 // Windows reports writable files without Unix executable bits.
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm() != wantMode || !c.installed {
+		t.Fatalf("mode/installed = %v/%v, want %v/true", info.Mode(), c.installed, wantMode)
 	}
 	if !reflect.DeepEqual(paths, []string{"/manifest.json", "/v2.6.2/" + a.File}) {
 		t.Fatalf("requests = %v", paths)
@@ -182,7 +197,8 @@ func TestBinaryManagedInternalUpdateLinks(t *testing.T) {
 			if err := os.MkdirAll(realDir, 0755); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(filepath.Join(realDir, "bl"), []byte("updated"), 0755); err != nil {
+			name := filepath.Base(c.execFilePath)
+			if err := os.WriteFile(filepath.Join(realDir, name), []byte("updated"), 0755); err != nil {
 				t.Fatal(err)
 			}
 			if err := os.Symlink(filepath.Join("versions", "2.7.1"), filepath.Join(c.prefixPath, "current")); err != nil {
@@ -196,7 +212,7 @@ func TestBinaryManagedInternalUpdateLinks(t *testing.T) {
 				if err := os.MkdirAll(filepath.Dir(c.execFilePath), 0755); err != nil {
 					t.Fatal(err)
 				}
-				if err := os.Symlink(filepath.Join("..", "current", "bl"), c.execFilePath); err != nil {
+				if err := os.Symlink(filepath.Join("..", "current", name), c.execFilePath); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -216,7 +232,7 @@ func TestBinaryManagedInternalUpdateLinks(t *testing.T) {
 
 func TestBinaryConcurrentFirstInstall(t *testing.T) {
 	c, _ := binaryContext(t)
-	a, payload := assetFixture(t, "2.6.2", "linux-x64")
+	a, payload := assetFixture(t, "2.6.2", binaryPlatform(t, c))
 	started, finish := make(chan struct{}), make(chan struct{})
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, ".zip") {
@@ -225,7 +241,7 @@ func TestBinaryConcurrentFirstInstall(t *testing.T) {
 			_, _ = w.Write(payload)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"name": "bailian-cli", "channel": "latest", "version": a.Version, "assets": map[string]releaseAsset{"linux-x64": a}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"name": "bailian-cli", "channel": "latest", "version": a.Version, "assets": map[string]releaseAsset{binaryPlatform(t, c): a}})
 	}))
 	defer s.Close()
 	c.releaseURL, c.httpClient = s.URL, s.Client()
@@ -285,8 +301,8 @@ func TestBinaryManifestValidation(t *testing.T) {
 	for _, bad := range []string{"json", "name", "channel", "version", "missing", "file", "inner", "hash", "traversal"} {
 		t.Run(bad, func(t *testing.T) {
 			c, _ := binaryContext(t)
-			a, payload := assetFixture(t, "2.6.2", "linux-x64")
-			m := map[string]any{"name": "bailian-cli", "channel": "latest", "version": "2.6.2", "assets": map[string]releaseAsset{"linux-x64": a}}
+			a, payload := assetFixture(t, "2.6.2", binaryPlatform(t, c))
+			m := map[string]any{"name": "bailian-cli", "channel": "latest", "version": "2.6.2", "assets": map[string]releaseAsset{binaryPlatform(t, c): a}}
 			switch bad {
 			case "name":
 				m["name"] = "other"
@@ -306,7 +322,7 @@ func TestBinaryManifestValidation(t *testing.T) {
 				a.File = "../" + a.File
 			}
 			if bad == "file" || bad == "inner" || bad == "hash" || bad == "traversal" {
-				m["assets"] = map[string]releaseAsset{"linux-x64": a}
+				m["assets"] = map[string]releaseAsset{binaryPlatform(t, c): a}
 			}
 			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path != "/manifest.json" {
@@ -335,7 +351,7 @@ func TestBinaryInstalledUpgradeIgnoresRemovedVersionControl(t *testing.T) {
 			c, _ := binaryContext(t)
 			installOld(t, c, "2.6.2")
 			t.Setenv("ALIBABA_CLOUD_BL_VERSION", value)
-			a, payload := assetFixture(t, "2.7.1", "linux-x64")
+			a, payload := assetFixture(t, "2.7.1", binaryPlatform(t, c))
 			var paths []string
 			releaseServer(t, c, a, payload, &paths)
 			if err := c.EnsureBinary(); err != nil {
@@ -374,7 +390,7 @@ func TestBinaryUpdatePolicy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c, _ := binaryContext(t)
 			installOld(t, c, tc.current)
-			a, payload := assetFixture(t, tc.latest, "linux-x64")
+			a, payload := assetFixture(t, tc.latest, binaryPlatform(t, c))
 			var paths []string
 			releaseServer(t, c, a, payload, &paths)
 			if tc.disable {
@@ -413,7 +429,7 @@ func TestBinaryUpdateFailureContinuesInstalled(t *testing.T) {
 		t.Run(bad, func(t *testing.T) {
 			c, stderr := binaryContext(t)
 			installOld(t, c, "2.6.2")
-			a, payload := assetFixture(t, "2.7.1", "linux-x64")
+			a, payload := assetFixture(t, "2.7.1", binaryPlatform(t, c))
 			if bad == "checksum" {
 				payload = []byte("corrupt")
 			}
@@ -423,7 +439,7 @@ func TestBinaryUpdateFailureContinuesInstalled(t *testing.T) {
 			if bad == "http" || bad == "download" {
 				s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if bad == "download" && r.URL.Path == "/manifest.json" {
-						_ = json.NewEncoder(w).Encode(map[string]any{"name": "bailian-cli", "channel": "latest", "version": a.Version, "assets": map[string]releaseAsset{"linux-x64": a}})
+						_ = json.NewEncoder(w).Encode(map[string]any{"name": "bailian-cli", "channel": "latest", "version": a.Version, "assets": map[string]releaseAsset{binaryPlatform(t, c): a}})
 						return
 					}
 					http.Error(w, "offline", 503)
@@ -488,11 +504,11 @@ func TestBinaryTTLUsesTimestampAndExpires(t *testing.T) {
 }
 
 func TestBinaryUnsafeZIPPreservesOld(t *testing.T) {
-	for _, bad := range []string{"checksum", "invalid zip", "traversal", "absolute", "nested", "backslash", "symlink", "dir", "duplicate", "unexpected", "oversize", "corrupt data"} {
+	for _, bad := range []string{"checksum", "invalid zip", "traversal", "absolute", "nested", "backslash", "symlink", "dir", "duplicate", "unexpected", "oversize", "empty", "unsupported compression", "corrupt data"} {
 		t.Run(bad, func(t *testing.T) {
 			c, _ := binaryContext(t)
 			installOld(t, c, "2.5.0")
-			a, payload := assetFixture(t, "2.6.2", "linux-x64")
+			a, payload := assetFixture(t, "2.6.2", binaryPlatform(t, c))
 			names := []string{a.Inner}
 			mode := os.FileMode(0755)
 			body := []byte("new")
@@ -515,6 +531,8 @@ func TestBinaryUnsafeZIPPreservesOld(t *testing.T) {
 				names = []string{"other"}
 			case "oversize":
 				body = bytes.Repeat([]byte{0}, binaryLimit+1)
+			case "empty":
+				body = nil
 			}
 			if bad != "checksum" {
 				payload = zipFixture(t, names, mode, body)
@@ -527,6 +545,11 @@ func TestBinaryUnsafeZIPPreservesOld(t *testing.T) {
 			if bad == "corrupt data" {
 				central := bytes.Index(payload, []byte{'P', 'K', 1, 2})
 				payload[central+16] ^= 255 // Corrupt the central directory CRC, not an unused local header.
+			}
+			if bad == "unsupported compression" {
+				central := bytes.Index(payload, []byte{'P', 'K', 1, 2})
+				payload[8], payload[9] = 255, 255
+				payload[central+10], payload[central+11] = 255, 255
 			}
 			if bad != "checksum" {
 				sum := sha256.Sum256(payload)
@@ -589,11 +612,16 @@ func TestBinaryAtomicRenameFailures(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c, _ := binaryContext(t)
-			installOld(t, c, "2.5.0")
+			c.goos = func() string { return "linux" }
+			c.goarch = func() string { return "amd64" }
 			if tc.windows {
 				c.goos = func() string { return "windows" }
 			}
-			a, payload := assetFixture(t, "2.6.2", "linux-x64")
+			if err := c.InitBasicInfo(); err != nil {
+				t.Fatal(err)
+			}
+			installOld(t, c, "2.5.0")
+			a, payload := assetFixture(t, "2.6.2", binaryPlatform(t, c))
 			releaseServer(t, c, a, payload, nil)
 			calls := 0
 			c.rename = func(old, new string) error {
@@ -654,7 +682,7 @@ func TestBinaryChildUpdateNotDowngradedAfterTTL(t *testing.T) {
 	installOld(t, c, "2.9.0") // The child replaced itself; host metadata has no authoritative version.
 	now := c.now()
 	c.now = func() time.Time { return now.Add(updateTTL + time.Second) }
-	a, payload := assetFixture(t, "2.7.1", "linux-x64")
+	a, payload := assetFixture(t, "2.7.1", binaryPlatform(t, c))
 	var paths []string
 	releaseServer(t, c, a, payload, &paths)
 	if err := c.EnsureBinary(); err != nil {
@@ -669,6 +697,12 @@ func TestBinaryManifestPlatformAssets(t *testing.T) {
 	for _, platform := range []string{"darwin-arm64", "darwin-x64", "linux-x64", "windows-x64"} {
 		t.Run(platform, func(t *testing.T) {
 			c, _ := binaryContext(t)
+			goos, arch, _ := strings.Cut(platform, "-")
+			if arch == "x64" {
+				arch = "amd64"
+			}
+			c.goos = func() string { return goos }
+			c.goarch = func() string { return arch }
 			a, payload := assetFixture(t, "2.6.2", platform)
 			releaseServer(t, c, a, payload, nil)
 			got, err := c.resolveAsset(platform)
@@ -738,7 +772,7 @@ func TestBinaryDisabledCheckMustBeExactOne(t *testing.T) {
 			c, _ := binaryContext(t)
 			installOld(t, c, "2.6.2")
 			t.Setenv(noUpdateEnv, value)
-			a, payload := assetFixture(t, "2.7.1", "linux-x64")
+			a, payload := assetFixture(t, "2.7.1", binaryPlatform(t, c))
 			var paths []string
 			releaseServer(t, c, a, payload, &paths)
 			if err := c.EnsureBinary(); err != nil {
@@ -753,9 +787,13 @@ func TestBinaryDisabledCheckMustBeExactOne(t *testing.T) {
 
 func TestBinaryReplacementFailureKeepsRollbackBackup(t *testing.T) {
 	c, _ := binaryContext(t)
-	installOld(t, c, "2.5.0")
 	c.goos = func() string { return "windows" }
-	a, payload := assetFixture(t, "2.6.2", "windows-x64")
+	c.goarch = func() string { return "amd64" }
+	if err := c.InitBasicInfo(); err != nil {
+		t.Fatal(err)
+	}
+	installOld(t, c, "2.5.0")
+	a, payload := assetFixture(t, "2.6.2", binaryPlatform(t, c))
 	releaseServer(t, c, a, payload, nil)
 	calls := 0
 	c.rename = func(old, new string) error {
@@ -820,6 +858,102 @@ func TestBinaryManagedSymlinksRejected(t *testing.T) {
 			}
 			if err := c.EnsureBinary(); err == nil || !strings.Contains(err.Error(), "symlink") {
 				t.Fatalf("unsafe managed path=%v", err)
+			}
+		})
+	}
+}
+
+type binaryRoundTripper func(*http.Request) (*http.Response, error)
+
+func (f binaryRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestBinaryFetchPropagatesBodyReadError(t *testing.T) {
+	c, _ := binaryContext(t)
+	c.httpClient.Transport = binaryRoundTripper(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(failedReader{})}, nil
+	})
+	if _, err := c.fetch("/manifest.json", metadataLimit); err == nil || !strings.Contains(err.Error(), "read failure") {
+		t.Fatalf("HTTP body read error = %v", err)
+	}
+}
+
+func TestBinaryManagedPathsChangedBeforeLock(t *testing.T) {
+	for _, component := range []string{"prefix", "executable"} {
+		t.Run(component, func(t *testing.T) {
+			c, _ := binaryContext(t)
+			installOld(t, c, "2.6.2")
+			// Mutate between validations deterministically rather than relying on race timing.
+			c.environ = func() []string {
+				if err := os.Remove(c.execFilePath); err != nil {
+					t.Fatal(err)
+				}
+				if component == "prefix" {
+					if err := os.Remove(filepath.Dir(c.execFilePath)); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Remove(c.prefixPath); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(c.prefixPath, []byte("not a directory"), 0600); err != nil {
+						t.Fatal(err)
+					}
+				} else if err := os.Mkdir(c.execFilePath, 0755); err != nil {
+					t.Fatal(err)
+				}
+				return nil
+			}
+			c.httpClient.Transport = binaryRoundTripper(func(*http.Request) (*http.Response, error) {
+				t.Fatal("download attempted after managed path changed")
+				return nil, fmt.Errorf("unexpected download")
+			})
+			if err := c.EnsureBinary(); err == nil {
+				t.Fatal("managed path changed after validation was accepted")
+			}
+			if component == "executable" {
+				if _, err := os.Stat(filepath.Join(c.prefixPath, ".install-lock")); !os.IsNotExist(err) {
+					t.Fatalf("lock leaked after validation failure: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestBinaryInstallRevalidatesManagedPathsAfterDownload(t *testing.T) {
+	c, _ := binaryContext(t)
+	a, payload := assetFixture(t, "2.6.2", binaryPlatform(t, c))
+	c.httpClient.Transport = binaryRoundTripper(func(*http.Request) (*http.Response, error) {
+		if err := os.MkdirAll(c.execFilePath, 0755); err != nil {
+			t.Fatal(err)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(payload))}, nil
+	})
+	if err := c.installAsset(a); err == nil || !strings.Contains(err.Error(), "invalid managed bl path") {
+		t.Fatalf("managed executable changed during download = %v", err)
+	}
+	files, err := os.ReadDir(filepath.Dir(c.execFilePath))
+	if err != nil || len(files) != 1 || !files[0].IsDir() {
+		t.Fatalf("failed validation left installation files: %v, %v", files, err)
+	}
+}
+
+func TestBinaryWindowsRenameFailureWithoutRegularDestination(t *testing.T) {
+	for _, directory := range []bool{false, true} {
+		t.Run(fmt.Sprint(directory), func(t *testing.T) {
+			c, _ := binaryContext(t)
+			c.goos = func() string { return "windows" }
+			if err := c.InitBasicInfo(); err != nil {
+				t.Fatal(err)
+			}
+			if directory {
+				if err := os.MkdirAll(c.execFilePath, 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			failure := fmt.Errorf("rename unavailable")
+			calls := 0
+			c.rename = func(string, string) error { calls++; return failure }
+			if err := c.replaceExecutable(filepath.Join(t.TempDir(), "temporary")); err != failure || calls != 1 {
+				t.Fatalf("replacement error = %v, calls=%d", err, calls)
 			}
 		})
 	}
