@@ -135,11 +135,28 @@ func NewManager() (*Manager, error) {
 	base := pluginsettings.EffectiveSourceBase(settings)
 	trustCacheDir := filepath.Join(sysDir, "trust")
 	return &Manager{
-		rootDir:       rootDir,
-		sourceBase:    base,
-		trustCacheDir: trustCacheDir,
-		trustClient:   newArtifactTrustClient(trustCacheDir, base),
+		rootDir:             rootDir,
+		sourceBase:          base,
+		trustCacheDir:       trustCacheDir,
+		trustClient:         newArtifactTrustClient(trustCacheDir, base),
+		skipSignatureVerify: allowUnsignedFallbackForTest,
 	}, nil
+}
+
+// allowUnsignedFallbackForTest lets tests that serve an unsigned fixture index
+// use NewManager without embedding a release trust root. Production CLI never
+// sets this; official sources still fail closed.
+var allowUnsignedFallbackForTest bool
+
+// AllowUnsignedFallbackForTest is for unsigned httptest fixtures only.
+func AllowUnsignedFallbackForTest(enable bool) {
+	allowUnsignedFallbackForTest = enable
+}
+
+// AllowUnsignedFallback lets this manager fall back to an unsigned index after
+// verification fails. Official default sources still fail closed.
+func (m *Manager) AllowUnsignedFallback() {
+	m.skipSignatureVerify = true
 }
 
 func (m *Manager) ApplySourceBaseOverride(raw string) error {

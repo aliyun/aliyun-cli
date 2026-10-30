@@ -69,6 +69,8 @@ func TestPluginInstallRecoveryRespectsInteractiveAndAutomaticModes(t *testing.T)
 	for _, mode := range []string{"noninteractive", "cancel", "automatic prerelease", "interactive prerelease"} {
 		t.Run(mode, func(t *testing.T) {
 			c, ctx, output, stderr := newCanonicalHelpTestContext(t)
+			plugin.AllowUnsignedFallbackForTest(true)
+			t.Cleanup(func() { plugin.AllowUnsignedFallbackForTest(false) })
 			root := t.TempDir()
 			t.Setenv(plugin.EnvPluginsDir, root)
 			t.Setenv(plugin.EnvNoCache, "")
