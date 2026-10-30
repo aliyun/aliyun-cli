@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/stretchr/testify/assert"
@@ -105,6 +106,9 @@ func TestNewListCommand_WithPlugins(t *testing.T) {
 				Version:     "1.0.0",
 				Description: "FC plugin",
 				Path:        pluginPath,
+				TrustVerification: &TrustVerification{
+					KeyIDs: []string{"plugins-2026"}, IndexVersion: 42,
+				},
 			},
 		},
 	}
@@ -127,6 +131,8 @@ func TestNewListCommand_WithPlugins(t *testing.T) {
 	assert.Contains(t, output, "aliyun-cli-fc")
 	assert.Contains(t, output, "1.0.0")
 	assert.Contains(t, output, "FC plugin")
+	assert.Contains(t, output, "verified")
+	assert.Contains(t, output, "42")
 }
 
 func TestNewListRemoteCommand(t *testing.T) {
@@ -159,6 +165,7 @@ func TestNewListRemoteCommand_Run(t *testing.T) {
 			},
 		},
 	}
+	usePluginTrustIndex(t, index)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(index)
@@ -349,6 +356,7 @@ func assignSourceBaseFlag(ctx *cli.Context, base string) {
 	f := ctx.Flags().Get("source-base")
 	f.SetAssigned(true)
 	f.SetValue(base)
+	ctx.Flags().Get("skip-signature-verify").SetAssigned(true)
 }
 
 func TestNewInstallCommand_Run_WithNamesFlag(t *testing.T) {
@@ -769,6 +777,12 @@ func TestNewShowCommand_Run_Success(t *testing.T) {
 				ShortDescription: "short",
 				Description:      "full description",
 				Inner:            true,
+				TrustVerification: &TrustVerification{
+					KeyIDs:       []string{"plugins-2026"},
+					IndexVersion: 9,
+					Checksum:     "abc123",
+					VerifiedAt:   time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC),
+				},
 			},
 		},
 	}
@@ -803,6 +817,10 @@ func TestNewShowCommand_Run_Success(t *testing.T) {
 	assert.NotContains(t, out, "Metadata schema:")
 	assert.Contains(t, out, "Short description:\tshort")
 	assert.Contains(t, out, "Description:\tfull description")
+	assert.Contains(t, out, "Trust:\tverified")
+	assert.Contains(t, out, "Trust key IDs:\tplugins-2026")
+	assert.Contains(t, out, "Trust index version:\t9")
+	assert.Contains(t, out, "Trust checksum:\tabc123")
 	assert.Contains(t, out, "API default:\t2017-06-13\n")
 	assert.Contains(t, out, "API supported:\t2019-08-16, 2017-06-13\n")
 	assert.Contains(t, out, "Inner:\ttrue")
@@ -852,6 +870,7 @@ func TestNewManagerWithOptionalSourceBase(t *testing.T) {
 		assert.NotNil(t, f)
 		f.SetAssigned(true)
 		f.SetValue("  https://mirror.example/plugins/  ")
+		ctx.Flags().Get("skip-signature-verify").SetAssigned(true)
 		mgr, err := newManagerWithOptionalSourceBase(ctx)
 		assert.NoError(t, err)
 		assert.NotNil(t, mgr)

@@ -104,7 +104,7 @@ func TestPluginCommandsReportIndexAndLocalManifestFailures(t *testing.T) {
 	ctx := newTestContext()
 	command := newListRemoteCommand()
 	ctx.EnterCommand(command)
-	require.ErrorContains(t, command.Run(ctx, nil), "failed to fetch remote plugin index")
+	require.ErrorContains(t, command.Run(ctx, nil), "artifact trust bootstrap root is not configured")
 	require.NoError(t, os.WriteFile(filepath.Join(root, "manifest.json"), []byte("{"), 0600))
 	http.DefaultTransport = managerBoundaryTransport(func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(bytes.NewBufferString(`{"plugins":[]}`))}, nil

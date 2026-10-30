@@ -34,6 +34,9 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
       CLI_RELEASE_SIGNING_KEY: ${{ secrets.CLI_RELEASE_SIGNING_KEY }}
+      CLI_TRUST_ROOT_ENVELOPE_BASE64: ${{ vars.CLI_TRUST_ROOT_ENVELOPE_BASE64 }}
+      CLI_TRUST_RECOVERY_KEYS_BASE64: ${{ vars.CLI_TRUST_RECOVERY_KEYS_BASE64 }}
+      CLI_TRUST_RECOVERY_ROLE_BASE64: ${{ vars.CLI_TRUST_RECOVERY_ROLE_BASE64 }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,7 +65,8 @@ jobs:
         run: |
           TAG=${{ github.ref_name }}
           VERSION=${TAG#v}
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -tags aliyun_cli_packed_meta -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o out/aliyun ./main
+          LDFLAGS=$(bash tools/release_ldflags.sh "${VERSION}")
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -tags aliyun_cli_packed_meta -ldflags "${LDFLAGS}" -o out/aliyun ./main
           codesign --sign "${{ secrets.APPLE_TEAM_ID }}" \
             --entitlements tools/osx-entitlements.plist \
             --options runtime \
@@ -70,7 +74,7 @@ jobs:
           tar zcvf out/aliyun-cli-macosx-${VERSION}-amd64.tgz -C out aliyun
           bash tools/publish_archive.sh ${VERSION} out/aliyun-cli-macosx-${VERSION}-amd64.tgz out/aliyun
           cp out/aliyun out/aliyun.amd64
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -tags aliyun_cli_packed_meta -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o out/aliyun ./main
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -tags aliyun_cli_packed_meta -ldflags "${LDFLAGS}" -o out/aliyun ./main
           codesign --sign "${{ secrets.APPLE_TEAM_ID }}" \
             --entitlements tools/osx-entitlements.plist \
             --options runtime \
@@ -111,6 +115,9 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
       CLI_RELEASE_SIGNING_KEY: ${{ secrets.CLI_RELEASE_SIGNING_KEY }}
+      CLI_TRUST_ROOT_ENVELOPE_BASE64: ${{ vars.CLI_TRUST_ROOT_ENVELOPE_BASE64 }}
+      CLI_TRUST_RECOVERY_KEYS_BASE64: ${{ vars.CLI_TRUST_RECOVERY_KEYS_BASE64 }}
+      CLI_TRUST_RECOVERY_ROLE_BASE64: ${{ vars.CLI_TRUST_RECOVERY_ROLE_BASE64 }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -126,12 +133,13 @@ jobs:
         run: |
           TAG=${{ github.ref_name }}
           VERSION=${TAG#v}
+          LDFLAGS=$(bash tools/release_ldflags.sh "${VERSION}")
           # build for Linux amd64
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags aliyun_cli_packed_meta -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o out/aliyun ./main
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags aliyun_cli_packed_meta -ldflags "${LDFLAGS}" -o out/aliyun ./main
           tar zcvf out/aliyun-cli-linux-${VERSION}-amd64.tgz -C out aliyun
           bash tools/publish_archive.sh ${VERSION} out/aliyun-cli-linux-${VERSION}-amd64.tgz out/aliyun
           # build for Linux arm64
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags aliyun_cli_packed_meta -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o out/aliyun ./main
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags aliyun_cli_packed_meta -ldflags "${LDFLAGS}" -o out/aliyun ./main
           tar zcvf out/aliyun-cli-linux-${VERSION}-arm64.tgz -C out aliyun
           bash tools/publish_archive.sh ${VERSION} out/aliyun-cli-linux-${VERSION}-arm64.tgz out/aliyun
       - name: Attest Linux release archives
@@ -152,6 +160,9 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CLI_RELEASE_SIGNING_KEY: ${{ secrets.CLI_RELEASE_SIGNING_KEY }}
+      CLI_TRUST_ROOT_ENVELOPE_BASE64: ${{ vars.CLI_TRUST_ROOT_ENVELOPE_BASE64 }}
+      CLI_TRUST_RECOVERY_KEYS_BASE64: ${{ vars.CLI_TRUST_RECOVERY_KEYS_BASE64 }}
+      CLI_TRUST_RECOVERY_ROLE_BASE64: ${{ vars.CLI_TRUST_RECOVERY_ROLE_BASE64 }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -167,10 +178,12 @@ jobs:
         run: |
           $tag = "${{ github.ref_name }}"
           $version = $tag -replace 'v', ''
+          $ldflags = bash ./tools/release_ldflags.sh $version
+          if ($LASTEXITCODE -ne 0) { exit 1 }
           $env:GOOS = "windows"
           $env:GOARCH = "amd64"
           $env:CGO_ENABLED = "0"
-          go build -tags aliyun_cli_packed_meta -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${version}'" -o ./out/aliyun.exe ./main
+          go build -tags aliyun_cli_packed_meta -ldflags "$ldflags" -o ./out/aliyun.exe ./main
           Compress-Archive -Path ./out/aliyun.exe -DestinationPath ./out/aliyun-cli-windows-${version}-amd64.zip
           bash ./tools/publish_archive.sh ${version} ./out/aliyun-cli-windows-${version}-amd64.zip ./out/aliyun.exe
       - name: Attest Windows release archives
