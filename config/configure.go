@@ -33,10 +33,12 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cloudsso"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 	"github.com/aliyun/aliyun-cli/v3/util"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"golang.org/x/term"
 )
 
 var oauthClientMap = map[string]string{
@@ -71,6 +73,11 @@ var hookFileStat = func(fn func(name string) (os.FileInfo, error)) func(name str
 }
 
 var stdin io.Reader = os.Stdin
+
+var configureStdinIsTerminal = func() bool {
+	file, ok := stdin.(*os.File)
+	return ok && term.IsTerminal(int(file.Fd()))
+}
 
 // 为了方便 mock 的函数变量
 var cloudssoGetAccessToken = func(ssoLogin *cloudsso.SsoLogin) (*cloudsso.AccessTokenResponse, error) {
@@ -135,6 +142,9 @@ func NewConfigureCommand() *cli.Command {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
 			}
+			if configureStdinIsTerminal() {
+				printTelemetryNotice(ctx)
+			}
 			profileName, _ := ProfileFlag(ctx.Flags()).GetValue()
 			mode, _ := ModeFlag(ctx.Flags()).GetValue()
 			if mode == "" {
@@ -181,12 +191,19 @@ func NewConfigureCommand() *cli.Command {
 	c.AddSubCommand(NewConfigureSwitchCommand())
 	c.AddSubCommand(NewConfigureSafetyPolicyCommand())
 	c.AddSubCommand(NewConfigureAiModeCommand())
+	c.AddSubCommand(NewConfigureTelemetryCommand())
 	c.AddSubCommand(NewConfigurePluginSettingsCommand())
 	return c
 }
 
 func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 	w := ctx.Stdout()
+	authModeSource := telemetry.AuthModeSourceDefault
+	if modeFlag := ModeFlag(ctx.Flags()); modeFlag != nil && modeFlag.IsAssigned() {
+		if value, _ := modeFlag.GetValue(); strings.TrimSpace(value) != "" {
+			authModeSource = telemetry.AuthModeSourceExplicit
+		}
+	}
 
 	var err error
 	var conf *Configuration
@@ -224,9 +241,12 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 	cp, ok := conf.GetProfile(profileName)
 	if !ok {
 		cp = conf.NewProfile(profileName)
+	} else if authModeSource != telemetry.AuthModeSourceExplicit {
+		authModeSource = telemetry.AuthModeSourceExisting
 	}
 
 	normalizedMode := NormalizeMode(mode)
+	telemetry.SetAuthenticationMode(string(normalizedMode), authModeSource)
 	noBrowser := ctx.Flags().Get("no-browser")
 	manualOAuth := noBrowser != nil && noBrowser.IsAssigned()
 	if manualOAuth && normalizedMode != OAuth {
@@ -1120,6 +1140,14 @@ func configureCloudSSOTarget(w io.Writer, cp *Profile, httpClient *http.Client) 
 	unixTime := parsedTime.Unix()
 	cp.StsExpiration = unixTime - 5
 	return nil
+}
+
+func printTelemetryNotice(ctx *cli.Context) {
+	message := i18n.T(
+		"Alibaba Cloud CLI telemetry is enabled by default to improve product reliability and usability. It does not collect credentials, account identifiers, command argument values, or business payloads. To disable it, run \"aliyun configure telemetry disable\" or set ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE=1.",
+		"阿里云 CLI 遥测默认开启，用于改进产品稳定性和易用性。遥测不会收集凭据、账号标识、命令参数值或业务数据内容。如需关闭，请运行“aliyun configure telemetry disable”或设置 ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE=1。",
+	).GetMessage()
+	cli.Printf(ctx.Stdout(), "\n%s\n", message)
 }
 
 func ReadInput(defaultValue string) string {

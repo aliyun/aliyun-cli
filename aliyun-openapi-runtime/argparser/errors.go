@@ -38,4 +38,5 @@ func (e *InvalidArgumentError) Unwrap() error {
 	return e.Err
 }
 
-func (*InvalidArgumentError) AIRecoveryEligible() {}
+func (*InvalidArgumentError) AIRecoveryEligible()    {}
+func (*InvalidArgumentError) LocalErrorCode() string { return "INVALID_ARGUMENT" }

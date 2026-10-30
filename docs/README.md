@@ -6,6 +6,7 @@
 
 - [Installation and upgrade](./en/installation.md)
 - [Configuration and credentials](./en/configuration.md)
+- [Telemetry data collection](./en/telemetry.md)
 - [Commands, output, and automation](./en/usage.md)
 - [MCP proxy, OpenTelemetry, and machine-readable interfaces](./en/integrations.md)
 - [Built-in OSS automation](./en/oss.md)
@@ -15,6 +16,7 @@
 
 - [安装与升级](./zh-CN/installation.md)
 - [配置与凭证](./zh-CN/configuration.md)
+- [遥测数据采集](./zh-CN/telemetry.md)
 - [命令、输出与自动化](./zh-CN/usage.md)
 - [MCP 代理、OpenTelemetry 与机器可读接口](./zh-CN/integrations.md)
 - [内置 OSS 自动化](./zh-CN/oss.md)

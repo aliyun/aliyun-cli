@@ -90,7 +90,8 @@ func (e *HelpOptionError) Error() string {
 // adding decorative suggestions.
 func (*HelpOptionError) GetSuggestions() []string { return nil }
 
-func (*HelpOptionError) AIRecoveryEligible() {}
+func (*HelpOptionError) AIRecoveryEligible()    {}
+func (*HelpOptionError) LocalErrorCode() string { return "HELP_OPTION_ERROR" }
 
 // ParseHelpOptions recognizes only the stable public Help surface. Other argv
 // tokens are intentionally preserved for the normal command parser/provider

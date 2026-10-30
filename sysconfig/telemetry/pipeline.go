@@ -1,0 +1,85 @@
+// Copyright (c) 2009-present, Alibaba Cloud All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package telemetry
+
+import "github.com/aliyun/aliyun-cli/v3/cli/plugin"
+
+const (
+	PipelinePublic = "public"
+	PipelineInner  = "inner"
+)
+
+type Scope struct {
+	Active       bool
+	Pipeline     string
+	PluginName   string
+	PluginVer    string
+	PluginType   string
+	CommandToken string
+}
+
+func scopeFromLocalPlugin(commandToken string, lp *plugin.LocalPlugin) Scope {
+	scope := Scope{
+		Active:       true,
+		Pipeline:     PipelinePublic,
+		CommandToken: commandToken,
+	}
+	if lp == nil {
+		return scope
+	}
+	scope.PluginName = lp.Name
+	scope.PluginVer = lp.Version
+	scope.PluginType = plugin.NormalizePluginType(lp.Type)
+	if lp.Inner {
+		scope.Pipeline = PipelineInner
+	}
+	return scope
+}
+
+func DetectInnerScope(commandToken string) Scope {
+	if commandToken == "" {
+		return Scope{}
+	}
+	if plugin.IsReservedTopLevelCommand(commandToken) {
+		return Scope{}
+	}
+	lp, err := plugin.LookupLocalPlugin(commandToken)
+	if err != nil || lp == nil || !lp.Inner {
+		return Scope{}
+	}
+	return scopeFromLocalPlugin(commandToken, lp)
+}
+
+func SelectScope(commandToken string, cfg *Config) (bool, Scope) {
+	if commandToken == "" || Disabled(cfg) {
+		return false, Scope{}
+	}
+	if plugin.IsReservedTopLevelCommand(commandToken) {
+		return true, scopeFromLocalPlugin(commandToken, nil)
+	}
+	lp, err := plugin.LookupLocalPlugin(commandToken)
+	if err != nil {
+		return true, scopeFromLocalPlugin(commandToken, nil)
+	}
+	return true, scopeFromLocalPlugin(commandToken, lp)
+}
+
+func ShouldCollectInner(commandToken string, cfg *Config) (bool, Scope) {
+	if Disabled(cfg) {
+		return false, Scope{}
+	}
+	scope := DetectInnerScope(commandToken)
+	return scope.Active, scope
+}
