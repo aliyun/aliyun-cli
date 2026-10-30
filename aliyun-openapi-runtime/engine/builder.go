@@ -449,6 +449,7 @@ func buildExecContext(req Request, api *meta.API, res *argparser.Result) (*runti
 		ec.SkipSecureVerify = settings.SkipSecureVerify
 		ec.CLIVersion = settings.CLIVersion
 		ec.UserAgent = settings.UserAgent
+		ec.SignatureVersion = settings.SignatureVersion
 		ec.Transport = req.Host.TransportOptions()
 	}
 	if !ec.DryRun || res.Reserved.EstimateCost {

@@ -1947,6 +1947,26 @@ func TestGetRuntimeEnv_OptionalFields(t *testing.T) {
 	assert.Equal(t, "3", envs["ALIBABA_CLOUD_RETRY_COUNT"])
 }
 
+func TestGetRuntimeEnv_SignatureVersion(t *testing.T) {
+	t.Setenv(EnvSignatureVersion, "")
+	p := newProfile()
+	p.Mode = AK
+	p.AccessKeyId = "ak"
+	p.AccessKeySecret = "sk"
+	p.RegionId = "cn-hangzhou"
+	p.SignatureVersion = SignatureVersionV4
+
+	envs, err := p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	assert.Equal(t, SignatureVersionV4, envs[EnvSignatureVersion])
+
+	p.SignatureVersion = ""
+	envs, err = p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	_, has := envs[EnvSignatureVersion]
+	assert.False(t, has)
+}
+
 func TestGetRuntimeEnv_OptionalFieldsOmitted(t *testing.T) {
 	p := newProfile()
 	p.Mode = AK

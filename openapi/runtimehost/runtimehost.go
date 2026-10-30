@@ -104,6 +104,13 @@ func (h *cliHost) Settings() runtime.Settings {
 			s.SkipSecureVerify = true
 		}
 		s.UserAgent = buildUserAgentSuffix(h.ctx)
+		if h.loadErr == nil {
+			s.SignatureVersion = h.profile.EffectiveSignatureVersion(config.CliSignVersionFromFlags(h.ctx.Flags()))
+		} else if v := config.CliSignVersionFromFlags(h.ctx.Flags()); v != "" {
+			s.SignatureVersion = v
+		}
+	} else if h.loadErr == nil {
+		s.SignatureVersion = h.profile.EffectiveSignatureVersion("")
 	}
 	return s
 }

@@ -76,6 +76,32 @@ aliyun configure set \
 
 Do not put real secrets in scripts, shell history, source control, or issue reports. Prefer environment injection from a secret manager, a workload identity, or a temporary credential mode.
 
+## Signature V4 (kebab-case commands)
+
+Phase 1 enables signature V4 only for kebab-case commands such as `aliyun ecs describe-instances`. PascalCase commands still use the V1 Golang SDK and do not support signature V4 yet.
+
+Precedence (same as the SLS plugin `--cli-sign-version` hook): command flag > environment variable > profile.
+
+Enable it for one command:
+
+```sh
+aliyun ecs describe-instances --cli-sign-version v4
+```
+
+Save it as the profile default:
+
+```sh
+aliyun configure set --profile default --signature-version v4
+```
+
+Or set the environment variable for the current process:
+
+```sh
+export ALIBABA_CLOUD_SIGNATURE_VERSION=v4
+```
+
+When none are set, signing behavior stays unchanged. With signature V4 enabled, PascalCase commands return a clear error instead of silently falling back to the old signature.
+
 ## Temporary STS credentials
 
 Use `StsToken` when all three credential values have already been issued:
@@ -404,6 +430,7 @@ Environment variables can select a profile or fill fields not supplied by flags/
 | `ALIBABA_CLOUD_REGION_ID` | Default region |
 | `ALIBABA_CLOUD_STS_ENDPOINT` | Override the STS endpoint |
 | `ALIBABA_CLOUD_ENDPOINT` | Override the product endpoint |
+| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI signature version; set to `v4` so kebab-case commands use signature V4 (overrides profile `signature_version`) |
 | `ALIBABA_CLOUD_CREDENTIALS_URI` | CredentialsURI source |
 | `ALIBABA_CLOUD_OIDC_PROVIDER_ARN` | OIDC provider ARN |
 | `ALIBABA_CLOUD_OIDC_TOKEN_FILE` | OIDC token file |

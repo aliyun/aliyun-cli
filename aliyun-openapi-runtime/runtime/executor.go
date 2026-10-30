@@ -35,6 +35,7 @@ import (
 	"strings"
 	"time"
 
+	popgateway "github.com/alibabacloud-go/alibabacloud-gateway-pop/client"
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
 	"github.com/alibabacloud-go/tea/dara"
@@ -43,6 +44,9 @@ import (
 
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 )
+
+// SignatureVersionV4 enables ACS4-HMAC-SHA256 via the POP gateway SPI.
+const SignatureVersionV4 = "v4"
 
 // Executor runs one API call end-to-end.
 type Executor interface {
@@ -102,10 +106,12 @@ type ExecContext struct {
 	ForceHTTPS bool
 	ForceHTTP  bool
 
-	// SkipSecureVerify / CLIVersion / UserAgent come from Host.Settings.
+	// SkipSecureVerify / CLIVersion / UserAgent / SignatureVersion come from Host.Settings.
 	SkipSecureVerify bool
 	CLIVersion       string
 	UserAgent        string // host suffixes only; composed with base in send
+	// SignatureVersion selects ACS4 ("v4") when set; empty keeps ACS3 / legacy.
+	SignatureVersion string
 
 	// MetadataPluginName and MetadataPluginVersion identify the user/override metadata package that supplied this API.
 	// Baseline metadata leaves both empty.
@@ -553,7 +559,14 @@ func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) 
 	}
 
 	conf := &openapiClient.Config{Credential: ec.Credential}
-	if usesLegacySignature(ec.API.ProductCode) {
+	signVersion := strings.TrimSpace(ec.SignatureVersion)
+	useV4 := strings.EqualFold(signVersion, SignatureVersionV4)
+	if signVersion != "" && !useV4 {
+		return nil, fmt.Errorf("runtime: unsupported signature_version %q; only %q is supported", signVersion, SignatureVersionV4)
+	}
+	if useV4 {
+		conf.SignatureVersion = tea.String(SignatureVersionV4)
+	} else if usesLegacySignature(ec.API.ProductCode) {
 		conf.SignatureAlgorithm = tea.String("v2")
 	}
 	if ec.Region != "" {
@@ -594,6 +607,23 @@ func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) 
 		return nil, fmt.Errorf("runtime: create client: %w", err)
 	}
 	client.DisableSDKError = tea.Bool(true)
+	if useV4 {
+		productId := strings.TrimSpace(ec.API.ProductCode)
+		if productId == "" && ec.Product != nil {
+			productId = strings.TrimSpace(ec.Product.Code)
+		}
+		if productId == "" {
+			return nil, errors.New("runtime: signature version v4 requires a product id")
+		}
+		client.ProductId = tea.String(productId)
+		gateway, gerr := popgateway.NewClient()
+		if gerr != nil {
+			return nil, fmt.Errorf("runtime: init signature v4 gateway: %w", gerr)
+		}
+		if err = client.SetGatewayClient(gateway); err != nil {
+			return nil, fmt.Errorf("runtime: set signature v4 gateway: %w", err)
+		}
+	}
 
 	params := &openapiClient.Params{
 		Action:      tea.String(req.Action),

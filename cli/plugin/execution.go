@@ -161,6 +161,14 @@ func executePlugin(command string, args []string, ctx *cli.Context) (bool, error
 	if ctx != nil {
 		envs = mergeEnvs(envs, ctx.GetRuntimeEnvs())
 	}
+	// Canonical POP product code from the plugin manifest (e.g. "Ecs") —
+	// used by pricing and signature V4 ProductId. op.ProductCode inside
+	// plugins is a lowercase statistics code and is only a fallback.
+	if plugin != nil && strings.TrimSpace(plugin.ProductCode) != "" {
+		envs = mergeEnvs(envs, map[string]string{
+			"ALIBABA_CLOUD_PRICE_POP_CODE": strings.TrimSpace(plugin.ProductCode),
+		})
+	}
 
 	if err := runPluginCommand(binPath, adjustedArgs, stdout, stderr, envs); err != nil {
 		return true, err

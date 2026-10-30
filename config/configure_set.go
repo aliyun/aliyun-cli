@@ -34,6 +34,7 @@ func NewConfigureSetCommand() *cli.Command {
 	}
 
 	AddFlags(cmd.Flags())
+	cmd.Flags().Add(NewSignatureVersionFlag())
 
 	return cmd
 }
@@ -150,6 +151,15 @@ func doConfigureSet(ctx *cli.Context) error {
 	profile.EndpointType = EndpointTypeFlag(flags).GetStringOrDefault(profile.EndpointType)
 	profile.Endpoint = EndpointFlag(flags).GetStringOrDefault(profile.Endpoint)
 	profile.ExternalAccountType = ExternalAccountTypeFlag(flags).GetStringOrDefault(profile.ExternalAccountType)
+	if f := SignatureVersionFlag(flags); f != nil {
+		profile.SignatureVersion = f.GetStringOrDefault(profile.SignatureVersion)
+	}
+	if v := strings.TrimSpace(profile.SignatureVersion); v != "" && !strings.EqualFold(v, SignatureVersionV4) {
+		return fmt.Errorf("fail to set configuration: unsupported signature_version %q; only %q is supported", v, SignatureVersionV4)
+	}
+	if strings.EqualFold(strings.TrimSpace(profile.SignatureVersion), SignatureVersionV4) {
+		profile.SignatureVersion = SignatureVersionV4
+	}
 
 	if autoPluginInstallFlag := AutoPluginInstallFlag(flags); autoPluginInstallFlag != nil && autoPluginInstallFlag.IsAssigned() {
 		if val, ok := autoPluginInstallFlag.GetValue(); ok {
