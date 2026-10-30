@@ -1,7 +1,10 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/trust"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -129,4 +133,95 @@ func TestPluginAuditFieldsRoundTripAndDisplay(t *testing.T) {
 	var decoded LocalManifest
 	require.NoError(t, json.Unmarshal(data, &decoded))
 	assert.Equal(t, verification, decoded.Plugins["aliyun-cli-fc"].TrustVerification)
+}
+
+func TestDisplayInstalledPluginDetailsShowsUnverified(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, new(bytes.Buffer))
+	require.NoError(t, displayInstalledPluginDetails(ctx, "aliyun-cli-fc", &LocalPlugin{
+		Name: "aliyun-cli-fc", Version: "1.0.0",
+	}))
+	assert.Contains(t, stdout.String(), "Trust:\tunverified")
+}
+
+func TestUnsignedFallbackHelpersAndVerifiedIndexErrors(t *testing.T) {
+	t.Cleanup(func() { AllowUnsignedFallbackForTest(false) })
+	AllowUnsignedFallbackForTest(true)
+	home := t.TempDir()
+	cleanup := setTestHomeDir(t, home)
+	t.Cleanup(cleanup)
+	mgr, err := NewManager()
+	require.NoError(t, err)
+	assert.True(t, mgr.skipSignatureVerify)
+
+	other := &Manager{}
+	other.AllowUnsignedFallback()
+	assert.True(t, other.skipSignatureVerify)
+
+	fetcher := &fakePluginArtifactFetcher{artifact: &trust.VerifiedArtifact{Bytes: []byte("not-json")}}
+	_, err = (&Manager{rootDir: t.TempDir(), trustClient: fetcher}).GetIndex()
+	assert.ErrorContains(t, err, "failed to decode verified plugin index")
+}
+
+func TestVerifiedInstallRecordsTrustChecksumAndLength(t *testing.T) {
+	body := []byte("plugin-archive")
+	sum := sha256.Sum256(body)
+	checksum := hex.EncodeToString(sum[:])
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(server.Close)
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	manager := &Manager{
+		rootDir:       t.TempDir(),
+		httpTransport: server.Client().Transport,
+		indexTrustVerification: &TrustVerification{
+			KeyIDs: []string{"plugins-2026"}, IndexVersion: 7,
+		},
+	}
+	plugin := &PluginInfo{
+		Name: "aliyun-cli-fc",
+		Versions: map[string]VersionInfo{
+			"1.0.0": {Platforms: map[string]PlatformInfo{
+				PluginPlatformAny: {URL: server.URL + "/pkg.tgz", Checksum: checksum, Length: int64(len(body) + 1)},
+			}},
+		},
+	}
+	err := manager.installPlugin(ctx, plugin, "1.0.0", false, false)
+	assert.ErrorContains(t, err, "plugin length verification failed")
+	require.NotNil(t, manager.indexTrustVerification)
+	assert.Equal(t, checksum, manager.indexTrustVerification.Checksum)
+
+	plugin.Versions["1.0.0"].Platforms[PluginPlatformAny] = PlatformInfo{
+		URL: server.URL + "/pkg.tgz", Checksum: checksum, Length: int64(len(body)),
+	}
+	archive, err := manager.downloadAndVerifyPlugin(ctx, &PlatformInfo{
+		URL: server.URL + "/pkg.tgz", Checksum: checksum, Length: int64(len(body)),
+	}, "aliyun-cli-fc", "1.0.0")
+	require.NoError(t, err)
+	assert.NotEmpty(t, archive)
+}
+
+func TestSavePluginToManifestCopiesTrustVerification(t *testing.T) {
+	manager := &Manager{
+		rootDir: t.TempDir(),
+		indexTrustVerification: &TrustVerification{
+			KeyIDs: []string{"plugins-2026", "extra"}, IndexVersion: 11, Checksum: "abc",
+		},
+	}
+	require.NoError(t, manager.savePluginToManifest(
+		"aliyun-cli-fc",
+		"1.0.0",
+		manager.rootDir,
+		&PluginManifest{Name: "aliyun-cli-fc", Command: "fc"},
+	))
+	local, err := manager.GetLocalManifest()
+	require.NoError(t, err)
+	got := local.Plugins["aliyun-cli-fc"].TrustVerification
+	require.NotNil(t, got)
+	assert.Equal(t, []string{"plugins-2026", "extra"}, got.KeyIDs)
+	assert.Equal(t, uint64(11), got.IndexVersion)
+	manager.indexTrustVerification.KeyIDs[0] = "mutated"
+	assert.Equal(t, "plugins-2026", got.KeyIDs[0])
 }

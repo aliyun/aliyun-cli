@@ -719,6 +719,78 @@ func TestClearSourceCachesSkipsUnrelatedSiblings(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestVerifyArtifactKeysRejectsUndecodablePayload(t *testing.T) {
+	now := time.Now().UTC()
+	signer := newTestSigner(t, "root")
+	root := Root{
+		Authority: "https://api.aliyun.com",
+		Roles:     map[string]Role{"artifact-keys": {KeyIDs: []string{"root"}, Threshold: 1}},
+		Keys:      []Key{signer.key},
+	}
+	_, err := VerifyArtifactKeys(signedBytes(t, []byte("not-json"), signer), root, 1, now, nil)
+	assert.Error(t, err)
+}
+
+func TestFetchArtifactAndRecoveryCoverRemainingErrorReturns(t *testing.T) {
+	f := newTrustFixture(t)
+	delete(f.responses, "/discovery")
+	_, err := f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
+	assert.ErrorContains(t, err, "fetch discovery")
+
+	f = newTrustFixture(t)
+	f.responses["/discovery"] = []byte("{")
+	_, err = f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
+	assert.ErrorContains(t, err, "decode discovery")
+
+	recovery := newTestSigner(t, "recovery-a")
+	f = newTrustFixture(t)
+	f.client.cfg.RecoveryKeys = []Key{recovery.key}
+	f.client.cfg.RecoveryRole = Role{KeyIDs: []string{"recovery-a"}, Threshold: 1}
+	f.responses["/recovery-bad-sig"] = signedJSON(t, RecoveryPatch{Type: "recovery", SchemaVersion: SchemaVersion}, newTestSigner(t, "other"))
+	state := State{}
+	_, err = f.client.CheckAndApplyRecovery(context.Background(), f.server.URL+"/recovery-bad-sig", t.TempDir(), f.root, &state)
+	assert.Error(t, err)
+
+	f.responses["/recovery-not-object"] = signedBytes(t, []byte("[]"), recovery)
+	_, err = f.client.CheckAndApplyRecovery(context.Background(), f.server.URL+"/recovery-not-object", t.TempDir(), f.root, &state)
+	assert.Error(t, err)
+
+	cache := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(cache, "recovery-patch.json"), signedBytes(t, []byte("[]"), recovery), 0600))
+	_, err = f.client.loadPersistedRoot(cache, f.root, State{RecoveryEpoch: 1}, f.now, nil)
+	assert.Error(t, err)
+
+	blocked := filepath.Join(t.TempDir(), "not-a-dir")
+	require.NoError(t, os.WriteFile(blocked, []byte("x"), 0600))
+	nextSigner := newTestSigner(t, "root-next")
+	next := Root{
+		Type: "root", SchemaVersion: SchemaVersion, Version: 2,
+		ExpiresAt: f.now.Add(time.Hour), Authority: f.root.Authority,
+		Keys:  []Key{nextSigner.key},
+		Roles: map[string]Role{"root": {KeyIDs: []string{"root-next"}, Threshold: 1}},
+	}
+	f.responses["/roots/2.root.json"] = signedJSON(t, next, f.rootSigner, nextSigner)
+	delete(f.statuses, "/roots/2.root.json")
+	_, err = f.client.updateRoots(context.Background(), f.server.URL+"/roots", blocked, f.root, f.now, nil)
+	assert.Error(t, err)
+
+	replacement := f.signerRoot(2, nextSigner, f.now.Add(time.Hour))
+	patch := RecoveryPatch{
+		Type: "recovery", SchemaVersion: SchemaVersion, RecoveryEpoch: 1, PatchEpoch: 1,
+		NotBefore: f.now.Add(-time.Minute), ExpiresAt: f.now.Add(time.Hour),
+		AffectedRootMin: 1, AffectedRootMax: 10,
+		NewBootstrapRoot: signedJSON(t, replacement, nextSigner),
+		DenyKeyIDs:       []string{"old-key"},
+	}
+	f.responses["/recovery-apply"] = signedJSON(t, patch, recovery)
+	state = State{DenyKeyIDs: []string{"already-denied"}}
+	got, err := f.client.CheckAndApplyRecovery(context.Background(), f.server.URL+"/recovery-apply", t.TempDir(), f.root, &state)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(2), got.Version)
+	assert.Contains(t, state.DenyKeyIDs, "already-denied")
+	assert.Contains(t, state.DenyKeyIDs, "old-key")
+}
+
 func TestBootstrapRejectsWrongSelfSignature(t *testing.T) {
 	now := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
 	signer := newTestSigner(t, "root")
