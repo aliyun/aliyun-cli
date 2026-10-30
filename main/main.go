@@ -425,6 +425,7 @@ var rootFlagHelpSpecs = []openapi.RootFlagSpec{
 	{Name: "cli-query", Visibility: openapi.RootVisibilityDefault},
 	{Name: "cli-output", Visibility: openapi.RootVisibilityDefault},
 	{Name: "cli-dry-run", Visibility: openapi.RootVisibilityDefault},
+	{Name: "cli-sign-version", Visibility: openapi.RootVisibilityDefault},
 	{Name: "yes", Visibility: openapi.RootVisibilityDefault},
 	{Name: "cli-ai-mode", Visibility: openapi.RootVisibilityDefault},
 	{Name: "help", Visibility: openapi.RootVisibilityDefault},
