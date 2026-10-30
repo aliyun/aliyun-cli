@@ -34,6 +34,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cliext/cms2"
 	"github.com/aliyun/aliyun-cli/v3/cliext/codeup"
 	"github.com/aliyun/aliyun-cli/v3/cliext/computenestutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/dgate"
 	"github.com/aliyun/aliyun-cli/v3/cliext/ecctl"
 	"github.com/aliyun/aliyun-cli/v3/cliext/esacli"
 	"github.com/aliyun/aliyun-cli/v3/cliext/flowcli"
@@ -212,6 +213,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	addExtension(lindormcli.NewLindormCliCommand())
 	// mseutil command
 	addExtension(mseutil.NewMseutilCommand())
+	// dgate command（类型 C：不注入 AK/SK，只桥接官方二进制）
+	addExtension(dgate.NewDgateCommand())
 	// acr command
 	addExtension(acrutil.NewAcrutilCommand())
 	// codeup command
@@ -398,6 +401,7 @@ var rootCommandHelpSpecs = []openapi.RootCommandSpec{
 	{Path: []string{"kmscli"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"lindorm"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"mseutil"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"dgate"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"acrutil"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"codeup-cli"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"saectl"}, Group: openapi.RootGroupExtension},
