@@ -769,7 +769,6 @@ func TestBinaryOverrideWithoutNodeOrNpm(t *testing.T) {
 	t.Setenv("PATH", "")
 	t.Setenv("ALIBABA_CLOUD_BL_NODE_PATH", "/missing/node")
 	t.Setenv("ALIBABA_CLOUD_BL_NPM_PATH", "/missing/npm")
-	t.Setenv(versionEnv, "../../invalid")
 	ctx, _, _ := newTestContext()
 	bridge := NewContext(ctx)
 	bridge.configPath = t.TempDir

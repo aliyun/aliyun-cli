@@ -25,7 +25,6 @@ import (
 func binaryContext(t *testing.T) (*Context, *bytes.Buffer) {
 	t.Helper()
 	t.Setenv(execPathEnv, "")
-	t.Setenv(versionEnv, "")
 	t.Setenv(noUpdateEnv, "")
 	ctx, _, stderr := newTestContext()
 	c := NewContext(ctx)
@@ -82,8 +81,6 @@ func releaseServer(t *testing.T, c *Context, a releaseAsset, payload []byte, pat
 		switch r.URL.Path {
 		case "/manifest.json":
 			_ = json.NewEncoder(w).Encode(map[string]any{"name": "bailian-cli", "channel": "latest", "version": a.Version, "assets": map[string]releaseAsset{"linux-x64": a, "darwin-arm64": a, "darwin-x64": a, "windows-x64": a}})
-		case "/v" + a.Version + "/SHA256SUMS":
-			fmt.Fprintf(w, "%s  unrelated.zip\n%s  %s\n", strings.Repeat("0", 64), a.SHA256, a.File)
 		case "/v" + a.Version + "/" + a.File:
 			_, _ = w.Write(payload)
 		default:
@@ -135,33 +132,45 @@ func TestBinaryVersionOutputBound(t *testing.T) {
 	}
 }
 
-func TestBinaryReleaseInstallation(t *testing.T) {
-	for _, pin := range []string{"", "2.6.2"} {
-		t.Run("pin="+pin, func(t *testing.T) {
+func TestBinaryManifestIgnoresRemovedVersionControl(t *testing.T) {
+	for _, value := range []string{"2.5.0", "../../invalid"} {
+		t.Run(value, func(t *testing.T) {
 			c, _ := binaryContext(t)
-			a, payload := assetFixture(t, "2.6.2", "linux-x64")
+			t.Setenv("ALIBABA_CLOUD_BL_VERSION", value)
+			a, payload := assetFixture(t, "2.7.1", "linux-x64")
 			var paths []string
 			releaseServer(t, c, a, payload, &paths)
-			t.Setenv(versionEnv, pin)
 			if err := c.EnsureBinary(); err != nil {
 				t.Fatal(err)
 			}
-			data, err := os.ReadFile(c.execFilePath)
-			if err != nil || string(data) != "standalone-2.6.2" {
-				t.Fatalf("binary = %q, %v", data, err)
-			}
-			info, _ := os.Stat(c.execFilePath)
-			if info.Mode().Perm() != 0755 || !c.installed {
-				t.Fatalf("mode/installed = %v/%v", info.Mode(), c.installed)
-			}
-			meta := "/manifest.json"
-			if pin != "" {
-				meta = "/v2.6.2/SHA256SUMS"
-			}
-			if !reflect.DeepEqual(paths, []string{meta, "/v2.6.2/" + a.File}) {
-				t.Fatalf("requests = %v", paths)
+			if !reflect.DeepEqual(paths, []string{"/manifest.json", "/v2.7.1/" + a.File}) {
+				t.Fatalf("manifest was overridden: %v", paths)
 			}
 		})
+	}
+}
+
+func TestBinaryReleaseInstallation(t *testing.T) {
+	c, _ := binaryContext(t)
+	a, payload := assetFixture(t, "2.6.2", "linux-x64")
+	var paths []string
+	releaseServer(t, c, a, payload, &paths)
+	if err := c.EnsureBinary(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(c.execFilePath)
+	if err != nil || string(data) != "standalone-2.6.2" {
+		t.Fatalf("binary = %q, %v", data, err)
+	}
+	info, err := os.Stat(c.execFilePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0755 || !c.installed {
+		t.Fatalf("mode/installed = %v/%v", info.Mode(), c.installed)
+	}
+	if !reflect.DeepEqual(paths, []string{"/manifest.json", "/v2.6.2/" + a.File}) {
+		t.Fatalf("requests = %v", paths)
 	}
 }
 
@@ -272,19 +281,6 @@ func TestBinaryPlatforms(t *testing.T) {
 	}
 }
 
-func TestBinaryInvalidPins(t *testing.T) {
-	for _, pin := range []string{"../2.6.2", "2.6", "v2.6.2", "2.6.2-beta", "2.6.2?x=1", "02.6.2", " 2.6.2 ", "2.6.2/evil"} {
-		t.Run(pin, func(t *testing.T) {
-			c, _ := binaryContext(t)
-			t.Setenv(versionEnv, pin)
-			c.releaseURL = "http://127.0.0.1:1"
-			if err := c.EnsureBinary(); err == nil || !strings.Contains(err.Error(), versionEnv) {
-				t.Fatalf("pin error = %v", err)
-			}
-		})
-	}
-}
-
 func TestBinaryManifestValidation(t *testing.T) {
 	for _, bad := range []string{"json", "name", "channel", "version", "missing", "file", "inner", "hash", "traversal"} {
 		t.Run(bad, func(t *testing.T) {
@@ -333,16 +329,31 @@ func TestBinaryManifestValidation(t *testing.T) {
 	}
 }
 
-func TestBinaryChecksumValidation(t *testing.T) {
-	for _, body := range []string{"", strings.Repeat("z", 64) + "  bl-2.6.2-linux-x64.zip", strings.Repeat("0", 64) + "  bl-2.6.2-linux-x64.zip.other", strings.Repeat("0", 64) + "  bl-2.6.2-linux-x64.zip\n" + strings.Repeat("0", 64) + "  bl-2.6.2-linux-x64.zip"} {
-		t.Run(body, func(t *testing.T) {
+func TestBinaryInstalledUpgradeIgnoresRemovedVersionControl(t *testing.T) {
+	for _, value := range []string{"2.5.0", "../../invalid"} {
+		t.Run(value, func(t *testing.T) {
 			c, _ := binaryContext(t)
-			t.Setenv(versionEnv, "2.6.2")
-			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, body) }))
-			defer s.Close()
-			c.releaseURL = s.URL
-			if err := c.EnsureBinary(); err == nil {
-				t.Fatal("bad checksums accepted")
+			installOld(t, c, "2.6.2")
+			t.Setenv("ALIBABA_CLOUD_BL_VERSION", value)
+			a, payload := assetFixture(t, "2.7.1", "linux-x64")
+			var paths []string
+			releaseServer(t, c, a, payload, &paths)
+			if err := c.EnsureBinary(); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(c.execFilePath)
+			if err != nil || string(data) != "standalone-2.7.1" {
+				t.Fatalf("manifest upgrade = %q, %v", data, err)
+			}
+			if !reflect.DeepEqual(paths, []string{"/manifest.json", "/v2.7.1/" + a.File}) {
+				t.Fatalf("manifest upgrade was overridden: %v", paths)
+			}
+			paths = nil
+			if err := c.EnsureBinary(); err != nil {
+				t.Fatal(err)
+			}
+			if len(paths) != 0 {
+				t.Fatalf("repeated update check %v", paths)
 			}
 		})
 	}
@@ -350,15 +361,13 @@ func TestBinaryChecksumValidation(t *testing.T) {
 
 func TestBinaryUpdatePolicy(t *testing.T) {
 	for _, tc := range []struct {
-		name, current, latest, pin string
-		disable, fresh, update     bool
+		name, current, latest  string
+		disable, fresh, update bool
 	}{
 		{name: "latest upgrade", current: "2.6.2", latest: "2.7.1", update: true},
 		{name: "same", current: "2.7.1", latest: "2.7.1"},
 		{name: "no downgrade", current: "2.8.0", latest: "2.7.1"},
 		{name: "numeric comparison", current: "2.9.0", latest: "2.10.0", update: true},
-		{name: "fixed upgrade", current: "2.5.0", latest: "2.6.2", pin: "2.6.2", update: true},
-		{name: "fixed no downgrade", current: "2.7.1", latest: "2.6.2", pin: "2.6.2"},
 		{name: "disabled", current: "2.6.2", latest: "2.7.1", disable: true},
 		{name: "fresh", current: "2.6.2", latest: "2.7.1", fresh: true},
 	} {
@@ -368,12 +377,11 @@ func TestBinaryUpdatePolicy(t *testing.T) {
 			a, payload := assetFixture(t, tc.latest, "linux-x64")
 			var paths []string
 			releaseServer(t, c, a, payload, &paths)
-			t.Setenv(versionEnv, tc.pin)
 			if tc.disable {
 				t.Setenv(noUpdateEnv, "1")
 			}
 			if tc.fresh {
-				c.saveCheck(tc.pin)
+				c.saveCheck()
 			}
 			if err := c.EnsureBinary(); err != nil {
 				t.Fatal(err)
@@ -388,9 +396,6 @@ func TestBinaryUpdatePolicy(t *testing.T) {
 			}
 			if (tc.fresh || tc.disable) && len(paths) != 0 {
 				t.Fatalf("unneeded requests %v", paths)
-			}
-			if tc.pin != "" && len(paths) > 0 && paths[0] != "/v"+tc.pin+"/SHA256SUMS" {
-				t.Fatalf("pin checked latest %v", paths)
 			}
 			paths = nil
 			if err := c.EnsureBinary(); err != nil {
@@ -455,26 +460,29 @@ func TestBinaryUpdateFailureContinuesInstalled(t *testing.T) {
 	}
 }
 
-func TestBinaryTTLUsesTargetAndExpires(t *testing.T) {
+func TestBinaryTTLUsesTimestampAndExpires(t *testing.T) {
 	c, _ := binaryContext(t)
 	installOld(t, c, "2.6.2")
-	c.saveCheck("")
-	if !c.checkFresh("") || c.checkFresh("2.6.2") {
-		t.Fatal("TTL target mismatch")
+	if c.checkFresh() {
+		t.Fatal("missing cache accepted")
+	}
+	c.saveCheck()
+	if !c.checkFresh() {
+		t.Fatal("fresh timestamp rejected")
 	}
 	now := c.now()
 	c.now = func() time.Time { return now.Add(updateTTL + time.Second) }
-	if c.checkFresh("") {
+	if c.checkFresh() {
 		t.Fatal("expired TTL")
 	}
 	c.now = func() time.Time { return now.Add(-time.Hour) }
-	if c.checkFresh("") {
+	if c.checkFresh() {
 		t.Fatal("future timestamp accepted")
 	}
 	if err := os.WriteFile(filepath.Join(c.prefixPath, "update-check.json"), []byte("bad json"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if c.checkFresh("") {
+	if c.checkFresh() {
 		t.Fatal("malformed metadata accepted")
 	}
 }
@@ -642,7 +650,7 @@ func TestBinaryActualVersionAndErrors(t *testing.T) {
 func TestBinaryChildUpdateNotDowngradedAfterTTL(t *testing.T) {
 	c, _ := binaryContext(t)
 	installOld(t, c, "2.6.2")
-	c.saveCheck("")
+	c.saveCheck()
 	installOld(t, c, "2.9.0") // The child replaced itself; host metadata has no authoritative version.
 	now := c.now()
 	c.now = func() time.Time { return now.Add(updateTTL + time.Second) }
@@ -657,24 +665,22 @@ func TestBinaryChildUpdateNotDowngradedAfterTTL(t *testing.T) {
 	}
 }
 
-func TestBinaryFixedPlatformAssets(t *testing.T) {
+func TestBinaryManifestPlatformAssets(t *testing.T) {
 	for _, platform := range []string{"darwin-arm64", "darwin-x64", "linux-x64", "windows-x64"} {
 		t.Run(platform, func(t *testing.T) {
 			c, _ := binaryContext(t)
 			a, payload := assetFixture(t, "2.6.2", platform)
 			releaseServer(t, c, a, payload, nil)
-			for _, pin := range []string{"2.6.2", ""} {
-				got, err := c.resolveAsset(platform, pin)
-				if err != nil || got != a {
-					t.Fatalf("asset = %#v, %v", got, err)
-				}
+			got, err := c.resolveAsset(platform)
+			if err != nil || got != a {
+				t.Fatalf("asset = %#v, %v", got, err)
 			}
 		})
 	}
 	c, _ := binaryContext(t)
 	c.releaseURL = "http://127.0.0.1:1"
-	if _, err := c.resolveAsset("linux-x64", "2.6.2"); err == nil {
-		t.Fatal("missing fixed checksum ignored")
+	if _, err := c.resolveAsset("linux-x64"); err == nil {
+		t.Fatal("failed manifest fetch ignored")
 	}
 }
 
@@ -687,8 +693,8 @@ func TestBinaryLocalAndReadFailures(t *testing.T) {
 		t.Fatal("reader error ignored")
 	}
 	c, _ := binaryContext(t)
-	c.saveCheck("") // Missing prefix: best-effort timestamp must not create anything.
-	if c.checkFresh("") {
+	c.saveCheck() // Missing prefix: best-effort timestamp must not create anything.
+	if c.checkFresh() {
 		t.Fatal("missing cache accepted")
 	}
 	if err := os.WriteFile(c.prefixPath, []byte("not a directory"), 0600); err != nil {
@@ -713,20 +719,17 @@ func TestBinaryTimeoutAndProductionMetadataBounds(t *testing.T) {
 		t.Fatal("HTTP timeout ignored")
 	}
 	s.Close()
-	for _, pin := range []string{"", "2.6.2"} {
-		t.Run("pin="+pin, func(t *testing.T) {
-			c, _ := binaryContext(t)
-			t.Setenv(versionEnv, pin)
-			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				_, _ = io.WriteString(w, strings.Repeat("x", metadataLimit+1))
-			}))
-			defer s.Close()
-			c.releaseURL = s.URL
-			if err := c.EnsureBinary(); err == nil || !strings.Contains(err.Error(), "exceeds") {
-				t.Fatalf("oversized metadata = %v", err)
-			}
-		})
-	}
+	t.Run("manifest", func(t *testing.T) {
+		c, _ := binaryContext(t)
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.WriteString(w, strings.Repeat("x", metadataLimit+1))
+		}))
+		defer s.Close()
+		c.releaseURL = s.URL
+		if err := c.EnsureBinary(); err == nil || !strings.Contains(err.Error(), "exceeds") {
+			t.Fatalf("oversized metadata = %v", err)
+		}
+	})
 }
 
 func TestBinaryDisabledCheckMustBeExactOne(t *testing.T) {

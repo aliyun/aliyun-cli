@@ -31,7 +31,6 @@ const (
 	updateTTL     = 24 * time.Hour
 
 	execPathEnv = "ALIBABA_CLOUD_BL_EXEC_PATH"
-	versionEnv  = "ALIBABA_CLOUD_BL_VERSION"
 	noUpdateEnv = "ALIBABA_CLOUD_BL_NO_UPDATE_CHECK"
 )
 
@@ -279,14 +278,10 @@ func (c *Context) EnsureBinary() error {
 	if err != nil {
 		return err
 	}
-	pin := os.Getenv(versionEnv)
-	if pin != "" && !numericVersion.MatchString(pin) {
-		return fmt.Errorf("%s must be an exact numeric version X.Y.Z", versionEnv)
-	}
 	if err := c.checkManagedPaths(); err != nil {
 		return err
 	}
-	if c.installed && (c.envValue(noUpdateEnv) == "1" || c.checkFresh(pin)) {
+	if c.installed && (c.envValue(noUpdateEnv) == "1" || c.checkFresh()) {
 		return nil
 	}
 	if err := os.MkdirAll(c.prefixPath, 0755); err != nil {
@@ -315,7 +310,7 @@ func (c *Context) EnsureBinary() error {
 	}
 	if err == nil {
 		var asset releaseAsset
-		asset, err = c.resolveAsset(platform, pin)
+		asset, err = c.resolveAsset(platform)
 		if err == nil && (!c.installed || newerVersion(asset.Version, current)) {
 			fmt.Fprintf(c.originCtx.Stderr(), "Installing bailian-cli %s...\n", asset.Version)
 			err = c.installAsset(asset)
@@ -326,7 +321,7 @@ func (c *Context) EnsureBinary() error {
 	}
 	if c.installed {
 		// Throttle failed checks too; never trust cached metadata for the binary's version.
-		c.saveCheck(pin)
+		c.saveCheck()
 		if err != nil {
 			fmt.Fprintf(c.originCtx.Stderr(), "Warning: bl update check/install failed: %v; continuing with installed binary\n", err)
 		}
@@ -347,11 +342,10 @@ func (c *Context) envValue(name string) string {
 }
 
 type updateCheck struct {
-	Target    string    `json:"target"`
 	CheckedAt time.Time `json:"checkedAt"`
 }
 
-func (c *Context) checkFresh(target string) bool {
+func (c *Context) checkFresh() bool {
 	f, err := os.Open(filepath.Join(c.prefixPath, "update-check.json"))
 	if err != nil {
 		return false
@@ -359,15 +353,15 @@ func (c *Context) checkFresh(target string) bool {
 	defer f.Close()
 	data, err := readBounded(f, metadataLimit)
 	var check updateCheck
-	if err != nil || json.Unmarshal(data, &check) != nil || check.Target != target {
+	if err != nil || json.Unmarshal(data, &check) != nil {
 		return false
 	}
 	age := c.now().Sub(check.CheckedAt)
 	return age >= 0 && age < updateTTL
 }
 
-func (c *Context) saveCheck(target string) {
-	data, _ := json.Marshal(updateCheck{Target: target, CheckedAt: c.now()})
+func (c *Context) saveCheck() {
+	data, _ := json.Marshal(updateCheck{CheckedAt: c.now()})
 	f, err := os.CreateTemp(c.prefixPath, ".update-check-*")
 	if err != nil {
 		return
@@ -414,27 +408,7 @@ func validDigest(value string) bool {
 	return err == nil && len(decoded) == sha256.Size
 }
 
-func (c *Context) resolveAsset(platform, pin string) (releaseAsset, error) {
-	if pin != "" {
-		asset := expectedAsset(pin, platform)
-		data, err := c.fetch("/v"+pin+"/SHA256SUMS", metadataLimit)
-		if err != nil {
-			return asset, err
-		}
-		for _, line := range strings.Split(string(data), "\n") {
-			fields := strings.Fields(line)
-			if len(fields) == 2 && strings.TrimPrefix(fields[1], "*") == asset.File {
-				if asset.SHA256 != "" || !validDigest(fields[0]) {
-					return asset, fmt.Errorf("invalid or duplicate checksum for %s", asset.File)
-				}
-				asset.SHA256 = fields[0]
-			}
-		}
-		if asset.SHA256 == "" {
-			return asset, fmt.Errorf("SHA256SUMS has no checksum for %s", asset.File)
-		}
-		return asset, nil
-	}
+func (c *Context) resolveAsset(platform string) (releaseAsset, error) {
 	data, err := c.fetch("/manifest.json", metadataLimit)
 	if err != nil {
 		return releaseAsset{}, err
