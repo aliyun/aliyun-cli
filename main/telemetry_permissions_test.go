@@ -263,7 +263,9 @@ func runTelemetryPermissionCommand(t *testing.T, home string, disabled bool, arg
 		"NO_COLOR=1", "LANG=C",
 	}
 	cmd.Env = append(cmd.Env, extraEnv...)
-	for _, name := range []string{"PATH", "SYSTEMROOT", "TMPDIR", "TMP", "TEMP"} {
+	// Re-executed test binaries need Go's coverage directory too; otherwise
+	// the coverage runtime writes warnings into the CLI's stderr on exit.
+	for _, name := range []string{"PATH", "SYSTEMROOT", "TMPDIR", "TMP", "TEMP", "GOCOVERDIR"} {
 		if value, ok := os.LookupEnv(name); ok {
 			cmd.Env = append(cmd.Env, name+"="+value)
 		}
