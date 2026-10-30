@@ -681,6 +681,7 @@ func TestInnerSourceStaysOffPublicDiscovery(t *testing.T) {
 func TestNewUsesConfiguredPluginSite(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv(pluginsettings.EnvSite, "")
 	require.NoError(t, pluginsettings.Save(
 		filepath.Join(home, ".aliyun"),
