@@ -18,6 +18,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
@@ -575,6 +576,17 @@ func (c *Context) PrepareEnv() error {
 		parts := strings.SplitN(env, "=", 2)
 		if len(parts) == 2 {
 			envMapNew[parts[0]] = parts[1]
+		}
+	}
+	for source, target := range map[string]string{
+		sysconfig.EnvSourceIP:        "OSSUTIL_ORIGINAL_SOURCE_IP",
+		sysconfig.EnvSecureTransport: "OSSUTIL_ORIGINAL_SECURE_TRANSPORT",
+	} {
+		if _, exists := os.LookupEnv(target); exists {
+			continue
+		}
+		if value := os.Getenv(source); value != "" {
+			envMapNew[target] = value
 		}
 	}
 	// use cap mode call oss
