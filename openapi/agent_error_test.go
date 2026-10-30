@@ -30,6 +30,7 @@ import (
 	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/mcpproxy"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
@@ -46,6 +47,52 @@ func requireAgentEnvelope(t *testing.T, err error, args []string, validator Reco
 	require.ErrorAs(t, normalized, &agentErr)
 	assert.ErrorIs(t, agentErr, err)
 	return agentErr.Envelope()
+}
+
+func TestNormalizeMCPAuthenticationError(t *testing.T) {
+	cmd := mcpproxy.NewMCPProxyCommand()
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.EnterCommand(cmd)
+	ctx.Flags().Get("skip-mcp-oauth").SetAssigned(true)
+	ctx.Flags().Get("skip-mcp-oauth").SetValue("invalid")
+	cause := cmd.Run(ctx, nil)
+	require.EqualError(t, cause, "--skip-mcp-oauth must be true or false")
+
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "direct", err: cause},
+		{name: "wrapped", err: fmt.Errorf("proxy startup failed: %w", cause)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := normalizeAgentError(tc.err, []string{"utils", "mcp-proxy"})
+			var agentErr *cli.AgentError
+			require.ErrorAs(t, got, &agentErr)
+			require.ErrorIs(t, agentErr, cause)
+			require.ErrorIs(t, agentErr, tc.err)
+			require.Equal(t, 1, agentErr.ExitCode())
+			require.Equal(t, cli.AgentErrorEnvelope{
+				Message: "--skip-mcp-oauth must be true or false",
+				Recovery: cli.AgentErrorRecovery{
+					Action: "inspect_command_help",
+					Hint:   "Pass --skip-mcp-oauth without a value, or set it to true or false. Use `aliyun utils mcp-proxy --help` to inspect the command options.",
+				},
+			}, agentErr.Envelope())
+		})
+	}
+}
+
+func TestNormalizeIncompleteMCPAuthenticationError(t *testing.T) {
+	for name, cause := range map[string]*mcpproxy.AuthenticationError{
+		"missing message": {Action: "check_configuration", Hint: "Check the profile."},
+		"missing action":  {Message: "authentication failed", Hint: "Check the profile."},
+		"missing hint":    {Message: "authentication failed", Action: "check_configuration"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.Same(t, cause, normalizeAgentError(cause, []string{"utils", "mcp-proxy"}))
+		})
+	}
 }
 
 func TestKebabProfileCaseMismatchSuggestsLowercaseProfile(t *testing.T) {
