@@ -10,23 +10,21 @@ Collection covers operations such as ordinary commands, credential configuration
 
 ## What information is collected
 
-The following table lists the event fields and their purposes. Some fields are present only for the relevant command or environment. Command, environment, and plugin properties are contained in the event's `attributes` object.
+The following table lists the event fields and their meanings. Some fields are present only for the relevant command or environment. Command, environment, and plugin properties are contained in the event's `attributes` object.
 
-| Category | Fields | Description and purpose |
+| Category | Fields | Description |
 | --- | --- | --- |
-| Event information | `schemaVersion`, `eventId`, `eventType`, `timestamp` | Data format version, a randomly generated ID for each event, event category, and command completion time, used to distinguish events, produce statistics, and investigate issues. |
-| Client information | `clientName`, `clientVersion` | Client name and CLI version, used to analyze version usage and compatibility. |
-| Installation identifier | `instanceId` | Generated randomly on your machine to measure usage of the same installation. It is not derived from an account or hardware information and can be reset with `purge`. |
-| Command information | `commandType`, `command`, `parameterNames` | Command implementation type, command and subcommand names, and named parameter names, used to analyze feature and parameter usage. Business parameter values are not recorded. |
-| Execution results | `status`, `durationMs`, `localErrorCode`, `apiErrorCode`, `httpStatusCode` | Execution outcome, command execution duration, structured error codes, and HTTP status codes, used to analyze reliability and performance. Error message text is not recorded. |
-| System environment | `os`, `arch`, `goVersion`, `linuxDistroName`, `linuxDistroId`, `linuxDistroVersion` | Operating system, CPU architecture, Go runtime version, and Linux distribution information where applicable, used to analyze compatibility. |
-| Terminal environment | `shellType`, `stdinIsTTY`, `locale` | Shell type, whether standard input is connected to a terminal, and language and encoding settings, used to understand interactive and automated usage. |
-| Environment variable names | `environmentVariableNames` | Only names with the `ALIBABA_CLOUD_` prefix that meet format restrictions, used to understand configuration methods. The values of these variables are not recorded. |
+| Event information | `schemaVersion`, `eventId`, `eventType`, `timestamp` | Data format version, a randomly generated ID for each event, event category, and command completion time. |
+| Client information | `clientName`, `clientVersion` | Client name and CLI version. |
+| Installation identifier | `instanceId` | An installation identifier generated randomly on your machine. It is not derived from an account or hardware information and can be reset with `purge`. |
+| Command information | `commandType`, `command`, `parameterNames` | Command implementation type, command and subcommand names, and named parameter names. Business parameter values are not recorded. |
+| Execution results | `status`, `durationMs`, `localErrorCode`, `apiErrorCode`, `httpStatusCode` | Execution outcome, command execution duration, structured error codes, and HTTP status codes. Error message text is not recorded. |
+| System environment | `os`, `arch`, `goVersion`, `linuxDistroName`, `linuxDistroId`, `linuxDistroVersion` | Operating system, CPU architecture, Go runtime version, and Linux distribution information where applicable. |
+| Terminal environment | `shellType`, `stdinIsTTY`, `locale` | Shell type, whether standard input is connected to a terminal, and language and encoding settings. |
+| Environment variable names | `environmentVariableNames` | Only names with the `ALIBABA_CLOUD_` prefix that meet format restrictions. The values of these variables are not recorded. |
 | Configuration and integrations | `authMode`, `authModeSource`, `aiModeEnabled`, `agentName` | Authentication mode, how the mode was selected during configuration, whether AI mode is enabled, and a recognized agent type. These fields do not contain credentials. |
-| Plugin information | `plugin`, `pipeline` | Installed plugin name and version, plus an internal-plugin classification marker where applicable, used to analyze plugin usage. |
+| Plugin information | `plugin`, `pipeline` | Installed plugin name and version, plus an internal-plugin classification marker where applicable. |
 | Plugin management | `operation`, `pluginNames`, `fromVersion`, `toVersion`, `pluginType`, `inner`, `sourceType` | Plugin management operation, relevant plugin names and versions, plugin type and attributes, and installation source category. Package paths, download URLs, and source repository addresses are not recorded. |
-
-Command information records command and parameter names, without business parameter values. Authentication mode, locale, plugin version, and other information listed above are recorded in their corresponding fields.
 
 ## What information is not collected
 
@@ -40,7 +38,7 @@ The structured telemetry events described above do not collect:
 - Session IDs, terminal IDs, parent process IDs, OpenAPI or gateway request IDs, or request IDs returned by the telemetry endpoint.
 - The cloud region configured in the current profile or a client IP address field.
 
-This scope applies to the telemetry events constructed and uploaded by the CLI. It does not cover network access logs or business requests you explicitly send to cloud services. Ordinary CLI credential configuration may still store credentials; see [configuration and credentials](./configuration.md).
+This scope applies to the telemetry events constructed and uploaded by the CLI. It does not cover network access logs or business requests you explicitly send to cloud services.
 
 ## Manage telemetry
 
@@ -62,7 +60,7 @@ Example output from `show`:
 }
 ```
 
-`enabled` is the local setting, `environment_disabled` indicates whether an environment variable disables telemetry, and `config_file` is the configuration file path. The settings allow collection only when `enabled` is `true` and `environment_disabled` is `false`. `show` does not create or read an installation ID and does not scan the cache.
+`enabled` is the local setting, `environment_disabled` indicates whether an environment variable disables telemetry, and `config_file` is the configuration file path. The settings allow collection only when `enabled` is `true` and `environment_disabled` is `false`.
 
 You can also disable telemetry with an environment variable, which is useful for scripts, CI, or environments where you do not want to write configuration.
 
@@ -92,8 +90,6 @@ Remove-Item Env:ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE -ErrorAction SilentlyContinu
 aliyun configure telemetry enable
 ```
 
-Disabling telemetry applies to subsequent collection. It does not recall data already uploaded or stop an upload process that has already started.
-
 ## Local data and cleanup
 
 Telemetry uses the following local files. `~` denotes the user's home directory; on Windows, these files are in the `.aliyun` folder under the user directory.
@@ -104,7 +100,7 @@ Telemetry uses the following local files. `~` denotes the user's home directory;
 | `~/.aliyun/telemetry-instance-id` | Stores the randomly generated installation identifier. |
 | `~/.aliyun/telemetry-cache/` | Stores temporary event files for the background uploader. |
 
-Temporary event files pass data between local processes; they are not complete command logs. The uploader reads a file and attempts to delete it before sending the request. Failed uploads are not retried as a backlog of historical events.
+Temporary event files pass data between local processes; they are not complete command logs.
 
 To clear the local cache and reset the installation identifier:
 
@@ -112,7 +108,7 @@ To clear the local cache and reset the installation identifier:
 aliyun configure telemetry purge
 ```
 
-`purge` preserves your telemetry setting. It does not delete uploaded data or cancel collection or uploads already in progress. If telemetry remains enabled, a later eligible command generates a new random identifier.
+`purge` preserves your telemetry setting. If telemetry remains enabled, a later eligible command generates a new random identifier.
 
 To disable telemetry and clear existing local data, run:
 
