@@ -19,11 +19,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
-	ConfigFileName = "telemetry.json"
-	CacheDirName   = "telemetry-cache"
+	ConfigFileName      = "telemetry.json"
+	CacheDirName        = "telemetry-cache"
+	TelemetryDisableEnv = "ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE"
 )
 
 type Config struct {
@@ -85,4 +87,17 @@ func Save(configDir string, c *Config) error {
 	// Only explicit preference changes write this single-field file. Atomic
 	// replacement keeps concurrent readers safe; the last completed save wins.
 	return atomicWriteFile(GetConfigFilePath(configDir), data, 0600)
+}
+
+func envTruthy(key string) bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	return v == "1" || v == "true" || v == "yes"
+}
+
+func EnvironmentDisabled() bool {
+	return envTruthy(TelemetryDisableEnv)
+}
+
+func Disabled(cfg *Config) bool {
+	return EnvironmentDisabled() || cfg == nil || !cfg.Enabled
 }

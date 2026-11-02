@@ -73,13 +73,13 @@ func TestCommandPartsDoNotPromotePositionalBusinessValues(t *testing.T) {
 		scope Scope
 		want  string
 	}{
-		{"legacy API", []string{"ecs", "DescribeRegions", "/private/file", "private body"}, Scope{CommandToken: "ecs"}, "ecs describeregions"},
+		{"legacy API", []string{"ecs", "DescribeRegions", "/private/file", "private body"}, Scope{CommandToken: "ecs"}, "ecs DescribeRegions"},
 		{"runtime API", []string{"ecs", "describe-regions", "customer-id"}, Scope{CommandToken: "ecs"}, "ecs describe-regions"},
 		{"unresolved route without metadata", []string{"unknown-token", "list", "customer-id", "private body"}, Scope{}, "unknown-token list"},
 		{"path in operation position", []string{"ecs", "/private/file"}, Scope{CommandToken: "ecs"}, "ecs"},
 		{"body in operation position", []string{"ecs", "{\"private\":true}"}, Scope{CommandToken: "ecs"}, "ecs"},
 		{"invalid entry point", []string{"/private/file", "private body"}, Scope{}, ""},
-		{"flag before operation", []string{"ecs", "--region-id:private-region", "DescribeRegions"}, Scope{CommandToken: "ecs"}, "ecs describeregions"},
+		{"flag before operation", []string{"ecs", "--region-id:private-region", "DescribeRegions"}, Scope{CommandToken: "ecs"}, "ecs DescribeRegions"},
 		{"extension hierarchy", []string{"test-extension", "resource", "run", "--path", "/private/file", "--body:private body"}, Scope{CommandToken: "test-extension"}, "test-extension resource run"},
 		{"registered ossutil extension", []string{"ossutil", "ls", "oss://private-bucket/path"}, Scope{CommandToken: "ossutil"}, "ossutil ls"},
 		{"registered ossutil copy", []string{"ossutil", "cp", "/private/file", "oss://private-bucket/path"}, Scope{CommandToken: "ossutil"}, "ossutil cp"},
@@ -96,7 +96,7 @@ func TestCommandPartsDoNotPromotePositionalBusinessValues(t *testing.T) {
 		{"plugin search with flag", []string{"plugin", "--source-base=https://private.example", "search", "private-search-term"}, Scope{CommandToken: "plugin"}, "plugin search"},
 		{"migration path", []string{"go-migrate", "/private/source", "--yes"}, Scope{CommandToken: "go-migrate"}, "go-migrate"},
 		{"migration utility path", []string{"utils", "go-migrate", "/private/source", "--yes"}, Scope{CommandToken: "utils"}, "utils go-migrate"},
-		{"ROA request path", []string{"cs", "GET", "/clusters/private-id"}, Scope{CommandToken: "cs"}, "cs get"},
+		{"ROA request path", []string{"cs", "GET", "/clusters/private-id"}, Scope{CommandToken: "cs"}, "cs GET"},
 		{"ROA path before flag", []string{"cs", "/clusters/private-id", "--roa", "GET"}, Scope{CommandToken: "cs"}, "cs"},
 		{"version", []string{"version"}, Scope{CommandToken: "version"}, "version"},
 		{"known help path", []string{"help", "configure", "get", "region"}, Scope{CommandToken: "help"}, "help configure get"},
@@ -117,7 +117,7 @@ func TestBuildEventOmitsKnownPositionalInputs(t *testing.T) {
 		{"search", []string{"plugin", "search", "private-input-sentinel"}, "plugin search"},
 		{"migration", []string{"go-migrate", "/private-input-sentinel/src", "--yes"}, "go-migrate"},
 		{"migration utility", []string{"utils", "go-migrate", "/private-input-sentinel/src", "--yes"}, "utils go-migrate"},
-		{"ROA path", []string{"cs", "GET", "/clusters/private-input-sentinel"}, "cs get"},
+		{"ROA path", []string{"cs", "GET", "/clusters/private-input-sentinel"}, "cs GET"},
 		{"ROA flag", []string{"cs", "/clusters/private-input-sentinel", "--roa", "GET"}, "cs"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -153,15 +153,50 @@ func TestBuildEventForInstalledPluginPreservesProtocolWithoutValues(t *testing.T
 	require.Equal(t, plugin.PluginTypeGo, scope.PluginType)
 	event, err := BuildEvent(BuildInput{
 		Scope: scope, InstanceID: "instance-id",
-		RootArgs: []string{"private-plugin", "resource", "policy", "list", "--path", "/private/customer.json", "--body=private business body", "--secret:private-secret", "--debug", "--verbose"},
+		RootArgs: []string{"private-plugin", "Resource", "Policy", "List", "--path", "/private/customer.json", "--body=private business body", "--secret:private-secret", "--debug", "--verbose"},
 	})
 	require.NoError(t, err)
 	uploaded := newUploadEvent(event)
-	require.Equal(t, "private-plugin resource policy list", uploaded.Attributes["command"])
+	require.Equal(t, "private-plugin Resource Policy List", uploaded.Attributes["command"])
+	require.Equal(t, CommandTypePluginGo, uploaded.Attributes["commandType"])
 	require.Equal(t, []string{"--path", "--body", "--secret", "--debug", "--verbose"}, uploaded.Attributes["parameterNames"])
 	data, err = json.Marshal(uploaded)
 	require.NoError(t, err)
 	for _, sensitive := range []string{"/private/customer.json", "private business body", "private-secret"} {
 		require.NotContains(t, string(data), sensitive)
+	}
+}
+
+func TestEventCommandPreservesCaseAcrossRoutes(t *testing.T) {
+	previousExtensions := cliExtensions
+	RegisterCLIExtensions(map[string]bool{"ossutil": true})
+	t.Cleanup(func() { cliExtensions = previousExtensions })
+	for _, test := range []struct {
+		name                 string
+		args                 []string
+		command, commandType string
+	}{
+		{"legacy", []string{"ecs", "DescribeRegions", "--RegionId", "private-region"}, "ecs DescribeRegions", CommandTypeOpenAPILegacy},
+		{"runtime", []string{"ecs", "describe-regions", "--region-id=private-region"}, "ecs describe-regions", CommandTypeOpenAPIRuntime},
+		{"product case", []string{"Ecs", "DescribeRegions"}, "Ecs DescribeRegions", CommandTypeOpenAPILegacy},
+		{"ROA", []string{"cs", "GET", "/private/path"}, "cs GET", CommandTypeOpenAPILegacy},
+		{"extension", []string{"ossutil", "ls", "oss://private-bucket/path"}, "ossutil ls", CommandTypeCLIExt},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			event, err := BuildEvent(BuildInput{
+				Scope:    Scope{Active: true, Pipeline: PipelinePublic, CommandToken: test.args[0]},
+				RootArgs: test.args, InstanceID: "instance-id",
+			})
+			require.NoError(t, err)
+			require.Equal(t, test.command, event.Command)
+			uploaded := newUploadEvent(event)
+			require.Equal(t, test.command, uploaded.Attributes["command"])
+			require.Equal(t, test.commandType, uploaded.Attributes["commandType"])
+			data, err := json.Marshal(uploaded)
+			require.NoError(t, err)
+			require.NotContains(t, string(data), "private-region")
+			require.NotContains(t, string(data), "/private/path")
+			require.NotContains(t, string(data), "private-bucket")
+		})
 	}
 }

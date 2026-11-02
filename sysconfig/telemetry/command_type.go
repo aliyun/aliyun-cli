@@ -29,6 +29,20 @@ const (
 	CommandTypePluginMeta     = "plugin-meta"
 )
 
+const (
+	PipelinePublic = "public"
+	PipelineInner  = "inner"
+)
+
+type Scope struct {
+	Active       bool
+	Pipeline     string
+	PluginName   string
+	PluginVer    string
+	PluginType   string
+	CommandToken string
+}
+
 var cliExtensions = map[string]struct{}{}
 
 // RegisterCLIExtensions records the root commands implemented by cliext.
@@ -93,4 +107,58 @@ func classifyCommandType(parts []string, pluginType string) string {
 		return CommandTypeOpenAPIRuntime
 	}
 	return CommandTypeOpenAPILegacy
+}
+
+func scopeFromLocalPlugin(commandToken string, lp *plugin.LocalPlugin) Scope {
+	scope := Scope{
+		Active:       true,
+		Pipeline:     PipelinePublic,
+		CommandToken: commandToken,
+	}
+	if lp == nil {
+		return scope
+	}
+	scope.PluginName = lp.Name
+	scope.PluginVer = lp.Version
+	scope.PluginType = plugin.NormalizePluginType(lp.Type)
+	if lp.Inner {
+		scope.Pipeline = PipelineInner
+	}
+	return scope
+}
+
+func DetectInnerScope(commandToken string) Scope {
+	if commandToken == "" {
+		return Scope{}
+	}
+	if plugin.IsReservedTopLevelCommand(commandToken) {
+		return Scope{}
+	}
+	lp, err := plugin.LookupLocalPlugin(commandToken)
+	if err != nil || lp == nil || !lp.Inner {
+		return Scope{}
+	}
+	return scopeFromLocalPlugin(commandToken, lp)
+}
+
+func SelectScope(commandToken string, cfg *Config) (bool, Scope) {
+	if commandToken == "" || Disabled(cfg) {
+		return false, Scope{}
+	}
+	if plugin.IsReservedTopLevelCommand(commandToken) {
+		return true, scopeFromLocalPlugin(commandToken, nil)
+	}
+	lp, err := plugin.LookupLocalPlugin(commandToken)
+	if err != nil {
+		return true, scopeFromLocalPlugin(commandToken, nil)
+	}
+	return true, scopeFromLocalPlugin(commandToken, lp)
+}
+
+func ShouldCollectInner(commandToken string, cfg *Config) (bool, Scope) {
+	if Disabled(cfg) {
+		return false, Scope{}
+	}
+	scope := DetectInnerScope(commandToken)
+	return scope.Active, scope
 }

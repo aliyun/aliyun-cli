@@ -17,7 +17,18 @@ package telemetry
 import (
 	"strings"
 	"time"
+
+	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
+	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
 )
+
+type BeginInput struct {
+	ConfigDir    string
+	CommandArgs  []string
+	CommandToken string
+	AuthMode     string
+}
 
 type activeCommandExecution struct {
 	configDir      string
@@ -150,4 +161,97 @@ func commandExecutionDurationMs(execution *activeCommandExecution) int64 {
 		return 0
 	}
 	return time.Since(execution.start).Milliseconds()
+}
+
+func Begin(in BeginInput) {
+	defer recoverCollectionPanic()
+	resetExecutionState()
+	// Managing telemetry must not create an ID or emit a new event, especially
+	// immediately after disable or purge.
+	if isTelemetryManagementCommand(in.CommandArgs) {
+		return
+	}
+	cfg, err := Load(in.ConfigDir)
+	if err != nil {
+		return
+	}
+	ok, scope := SelectScope(in.CommandToken, cfg)
+	if !ok {
+		return
+	}
+	aiCfg, _ := aimode.Load(in.ConfigDir)
+	aiOn := aiCfg != nil && aiCfg.Enabled
+	beginCommandExecution(in.ConfigDir, scope, in.CommandArgs, aiOn)
+	SetEffectiveAuthenticationMode(in.AuthMode)
+}
+
+func isTelemetryManagementCommand(args []string) bool {
+	for _, command := range []string{"configure", "telemetry"} {
+		args = sysmock.StripLeadingGlobalFlags(args)
+		// The command parser accepts "help" before any subcommand.
+		for len(args) > 0 && args[0] == "help" {
+			args = sysmock.StripLeadingGlobalFlags(args[1:])
+		}
+		if len(args) == 0 || args[0] != command {
+			return false
+		}
+		args = args[1:]
+	}
+	return true
+}
+
+func End(err error) {
+	flush(nil, err)
+}
+
+func EndWithExitCode(exitCode int) {
+	flush(&exitCode, nil)
+}
+
+func flush(exitCode *int, err error) {
+	defer recoverCollectionPanic()
+	execution, ok := takeCommandExecutionForEnd()
+	if !ok {
+		return
+	}
+	// A command may have disabled telemetry while this invocation was running.
+	cfg, configErr := Load(execution.configDir)
+	if configErr != nil || Disabled(cfg) {
+		return
+	}
+	instanceID, idErr := EnsureInstanceID(execution.configDir)
+	if idErr != nil {
+		return
+	}
+	if classifyResult(err, exitCode) == "Success" {
+		CompletePluginManagement(execution.pluginAction)
+	} else {
+		RemoveUnvalidatedPluginNames(execution.pluginAction)
+	}
+	ev, buildErr := BuildEvent(BuildInput{
+		Scope:          execution.scope,
+		RootArgs:       execution.rootArgs,
+		InstanceID:     instanceID,
+		DurationMs:     commandExecutionDurationMs(execution),
+		Err:            err,
+		ExitCode:       exitCode,
+		AIMode:         execution.aiMode,
+		AuthMode:       execution.authMode,
+		AuthModeSource: execution.authModeSource,
+		PluginAction:   execution.pluginAction,
+	})
+	if buildErr != nil {
+		return
+	}
+	cacheDir := GetCacheDir(execution.configDir, execution.scope.Pipeline)
+	cacheFile, writeErr := WriteEvent(cacheDir, ev)
+	if writeErr != nil {
+		return
+	}
+	spawnUpload(execution.configDir, execution.scope.Pipeline, cacheFile)
+}
+
+// HookEnd is suitable for the root command's AfterExecute callback.
+func HookEnd(_ *cli.Context, _ []string, err error) {
+	End(err)
 }

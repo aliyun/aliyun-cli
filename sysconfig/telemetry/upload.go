@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -203,4 +204,65 @@ func readNDJSON(path string) ([]json.RawMessage, error) {
 		out = append(out, append(json.RawMessage(nil), line...))
 	}
 	return out, sc.Err()
+}
+
+func spawnUpload(configDir, pipeline, cacheFile string) {
+	exe, err := os.Executable()
+	if err != nil {
+		_ = os.Remove(cacheFile)
+		return
+	}
+	cmd := exec.Command(
+		exe,
+		"__telemetry-upload",
+		"--pipeline",
+		pipeline,
+		"--config-dir",
+		configDir,
+		"--cache-file",
+		cacheFile,
+	)
+	detachProcess(cmd)
+	if err := cmd.Start(); err != nil {
+		_ = os.Remove(cacheFile)
+	}
+}
+
+// RunUploadCommand handles the hidden __telemetry-upload entrypoint.
+func RunUploadCommand(args []string) int {
+	configDir := ""
+	cacheFile := ""
+	pipeline := ""
+	for i := 0; i < len(args); i++ {
+		switch {
+		case strings.HasPrefix(args[i], "--config-dir="):
+			configDir = strings.TrimPrefix(args[i], "--config-dir=")
+		case args[i] == "--config-dir":
+			if i+1 < len(args) {
+				configDir = args[i+1]
+				i++
+			}
+		case strings.HasPrefix(args[i], "--pipeline="):
+			pipeline = strings.TrimPrefix(args[i], "--pipeline=")
+		case args[i] == "--pipeline":
+			if i+1 < len(args) {
+				pipeline = args[i+1]
+				i++
+			}
+		case strings.HasPrefix(args[i], "--cache-file="):
+			cacheFile = strings.TrimPrefix(args[i], "--cache-file=")
+		case args[i] == "--cache-file":
+			if i+1 < len(args) {
+				cacheFile = args[i+1]
+				i++
+			}
+		}
+	}
+	if (pipeline != PipelineInner && pipeline != PipelinePublic) ||
+		configDir == "" ||
+		cacheFile == "" {
+		return 0
+	}
+	_ = UploadFile(configDir, pipeline, cacheFile)
+	return 0
 }

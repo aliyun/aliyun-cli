@@ -173,11 +173,11 @@ func normalizeCommand(parts []string) string {
 	if len(parts) == 0 {
 		return ""
 	}
-	// Join argv tokens with spaces so product codes and subcommands that
-	// already contain "-" stay reversible, e.g. "ecs describe-instances".
+	// Join command tokens without changing their case or hyphens, preserving
+	// the distinction between e.g. "ecs DescribeRegions" and "ecs describe-regions".
 	var tokens []string
 	for _, p := range parts {
-		p = strings.ToLower(strings.TrimSpace(p))
+		p = strings.TrimSpace(p)
 		if p == "" {
 			continue
 		}
