@@ -31,6 +31,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	pricingruntime "github.com/aliyun/aliyun-openapi-runtime/runtime"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -44,14 +45,14 @@ func TestBuildEstimateCostParameters(t *testing.T) {
 	req.RegionId = "cn-hangzhou"
 	req.SetContent([]byte(`{"Period": 1, "AutoRenew": true}`))
 
-	parameters, err := buildEstimateCostParameters(req)
+	parameters, err := buildEstimateCostParameters(pricingruntime.PricingParameterInput{Query: req.QueryParams, Form: req.FormParams, Path: req.PathParams, Body: req.Content, Region: req.RegionId})
 	assert.Nil(t, err)
 	assert.Equal(t, "ecs.g6.large", parameters["InstanceType"])
 	assert.Equal(t, "cloud_essd", parameters["SystemDisk.Category"])
 	assert.Equal(t, "from-form", parameters["Description"])
 	assert.Equal(t, "c-123", parameters["ClusterId"])
 	assert.Equal(t, "cn-hangzhou", parameters["RegionId"])
-	assert.Equal(t, float64(1), parameters["Period"])
+	assert.Equal(t, json.Number("1"), parameters["Period"])
 	assert.Equal(t, true, parameters["AutoRenew"])
 	_, ok := parameters["empty"]
 	assert.False(t, ok, "empty-string param should be dropped, otherwise GetApiPrice sees noise")
@@ -65,7 +66,7 @@ func TestBuildEstimateCostParametersRegionNotOverridden(t *testing.T) {
 	req.QueryParams["RegionId"] = "cn-beijing"
 	req.RegionId = "cn-hangzhou"
 
-	parameters, err := buildEstimateCostParameters(req)
+	parameters, err := buildEstimateCostParameters(pricingruntime.PricingParameterInput{Query: req.QueryParams, Form: req.FormParams, Path: req.PathParams, Body: req.Content, Region: req.RegionId})
 	assert.Nil(t, err)
 	assert.Equal(t, "cn-beijing", parameters["RegionId"])
 }
@@ -76,7 +77,7 @@ func TestBuildEstimateCostParametersBadBody(t *testing.T) {
 	req := requests.NewCommonRequest()
 	req.SetContent([]byte(`not-json`))
 
-	_, err := buildEstimateCostParameters(req)
+	_, err := buildEstimateCostParameters(pricingruntime.PricingParameterInput{Query: req.QueryParams, Form: req.FormParams, Path: req.PathParams, Body: req.Content, Region: req.RegionId})
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "JSON object")
 }
@@ -173,6 +174,10 @@ func TestResolveEstimateCostApiNameUsesProductDefaultVersionForPathLookup(t *tes
 // full request path — signing, transport, status handling — is exercised
 // rather than the body classifier alone. Returns the ready command context.
 func quoteServer(t *testing.T, status int, body string) (*cli.Context, *bytes.Buffer, *config.Profile) {
+	for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"} {
+		t.Setenv(key, "")
+	}
+
 	t.Helper()
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -638,8 +643,8 @@ func TestBuildEstimateCostParametersFromOpenapi(t *testing.T) {
 	assert.Equal(t, "2", parameters["shardCount"])
 	assert.Equal(t, "my-project", parameters["project"])
 	assert.Equal(t, "my-store", parameters["logstoreName"])
-	assert.Equal(t, float64(30), parameters["ttl"])
-	assert.Equal(t, float64(7), parameters["hot_ttl"])
+	assert.Equal(t, json.Number("30"), parameters["ttl"])
+	assert.Equal(t, json.Number("7"), parameters["hot_ttl"])
 	// RegionId defaulted from the profile so mapping expressions can rely on it.
 	assert.Equal(t, "cn-hangzhou", parameters["RegionId"])
 }
@@ -667,7 +672,7 @@ func TestBuildEstimateCostParametersFromOpenapiBodyVariants(t *testing.T) {
 	oc.openapiRequest.Body = `{"ttl":15}`
 	parameters, err = buildEstimateCostParametersFromOpenapi(ctx, oc)
 	assert.NoError(t, err)
-	assert.Equal(t, float64(15), parameters["ttl"])
+	assert.Equal(t, json.Number("15"), parameters["ttl"])
 
 	// Non-object body must be rejected, mirroring the RPC/ROA path contract.
 	oc = newOpenapiEstimateCostContext(api)
@@ -769,7 +774,7 @@ func TestBuildEstimateCostParametersFromFlags(t *testing.T) {
 	parameters, err := buildEstimateCostParametersFromFlags(ctx, &profile)
 	assert.NoError(t, err)
 	assert.Equal(t, "ws-123", parameters["WorkspaceId"])
-	assert.Equal(t, float64(2), parameters["Priority"])
+	assert.Equal(t, json.Number("2"), parameters["Priority"])
 	assert.NotNil(t, parameters["TrainingSpec"])
 	assert.Equal(t, "cn-hangzhou", parameters["RegionId"])
 
@@ -892,7 +897,7 @@ func TestBuildEstimateCostParametersFromFlagsBodyAndRegionFallbacks(t *testing.T
 	bodyFlag.SetValue(`{"Period":2}`)
 	params, err := buildEstimateCostParametersFromFlags(ctx, profile)
 	assert.Nil(t, err)
-	assert.Equal(t, float64(2), params["Period"])
+	assert.Equal(t, json.Number("2"), params["Period"])
 	assert.Equal(t, "cn-shanghai", params["RegionId"], "profile region is the last fallback")
 
 	// --body that is not a JSON object fails with the actionable error.
@@ -949,9 +954,9 @@ func TestMergeEstimateCostBodyForms(t *testing.T) {
 
 	// Raw []byte and string forms decode as JSON objects.
 	assert.Nil(t, mergeEstimateCostBody(params, []byte(`{"A":1}`)))
-	assert.Equal(t, float64(1), params["A"])
+	assert.Equal(t, json.Number("1"), params["A"])
 	assert.Nil(t, mergeEstimateCostBody(params, `{"B":2}`))
-	assert.Equal(t, float64(2), params["B"])
+	assert.Equal(t, json.Number("2"), params["B"])
 
 	// Anything else is rejected with the actionable tip.
 	err := mergeEstimateCostBody(params, 42)

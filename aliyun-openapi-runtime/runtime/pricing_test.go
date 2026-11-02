@@ -15,18 +15,21 @@
 package runtime
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
-	"testing/iotest"
+	"time"
 
-	credentialsv2 "github.com/aliyun/credentials-go/credentials"
-
+	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
+	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 )
 
 type pricingTestCredential struct {
@@ -60,10 +63,6 @@ func (c pricingTestCredential) GetType() *string        { return nil }
 func (c pricingTestCredential) GetCredential() (*credentialsv2.CredentialModel, error) {
 	return c.model, c.err
 }
-
-type roundTripFunc func(*http.Request) (*http.Response, error)
-
-func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 func stringPointer(value string) *string { return &value }
 
@@ -113,29 +112,6 @@ func TestStripAPIDryRun(t *testing.T) {
 	}
 }
 
-func TestBuildPriceRequestIncludesPricingContext(t *testing.T) {
-	t.Setenv(pricingPopCodeEnv, "ecs")
-	ec := &ExecContext{Region: "cn-hangzhou"}
-	req := &AssembledRequest{
-		Action:  "RunInstances",
-		Version: "2014-05-26",
-		Query:   map[string]string{"Amount": "1"},
-		Body:    map[string]any{"SpotStrategy": "SpotAsPriceGo"},
-	}
-
-	got := buildPriceRequest(ec, req, map[string]string{"ZoneId": "cn-hangzhou-i"})
-	if got.PopCode != "ecs" || got.PopVersion != req.Version || got.ApiName != req.Action {
-		t.Fatalf("unexpected price request identity: %#v", got)
-	}
-	if got.Parameters["Amount"] != "1" || got.Parameters["SpotStrategy"] != "SpotAsPriceGo" || got.Parameters["RegionId"] != "cn-hangzhou" {
-		t.Fatalf("unexpected price request parameters: %#v", got.Parameters)
-	}
-	context, ok := got.Parameters["PricingContext"].(map[string]interface{})
-	if !ok || context["ZoneId"] != "cn-hangzhou-i" {
-		t.Fatalf("unexpected pricing context: %#v", got.Parameters["PricingContext"])
-	}
-}
-
 func TestPriceModeEnabled(t *testing.T) {
 	for _, test := range []struct {
 		flag bool
@@ -166,230 +142,276 @@ func TestEstimateCostValidatesContext(t *testing.T) {
 	}
 }
 
-func TestEstimateCostSignsAndPostsQuote(t *testing.T) {
-	oldClient := priceHTTPClient
-	t.Cleanup(func() { priceHTTPClient = oldClient })
+func pricingFixtureContext() *ExecContext {
+	return &ExecContext{
+		Credential: pricingTestCredential{model: &credentialsv2.CredentialModel{
+			AccessKeyId: stringPointer("test-ak"), AccessKeySecret: stringPointer("test-secret"), SecurityToken: stringPointer("test-token"),
+		}},
+		API: &meta.API{ProductCode: "ecs"}, Region: "cn-hangzhou", Language: "zh", SkipSecureVerify: true,
+	}
+}
 
-	priceHTTPClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.Method != http.MethodPost || req.URL.Path != pricingQuotePath {
-			t.Errorf("request = %s %s", req.Method, req.URL.Path)
+func pricingTestServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
+	for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"} {
+		t.Setenv(key, "")
+	}
+
+	t.Helper()
+	server := httptest.NewTLSServer(handler)
+	t.Cleanup(server.Close)
+	t.Setenv(pricingEndpointEnv, server.Listener.Addr().String())
+	t.Setenv(pricingHostEnv, "")
+	t.Setenv(pricingPopCodeEnv, "")
+	return server
+}
+
+func quoteResponder(t *testing.T, status int, body string) (*ExecContext, *AssembledRequest) {
+	t.Helper()
+	pricingTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = io.WriteString(w, body)
+	})
+	return pricingFixtureContext(), &AssembledRequest{Action: "EnableBackupPlan", Version: "2017-09-08"}
+}
+
+func TestEstimateCostSignsAndPostsQuote(t *testing.T) {
+	var calls atomic.Int32
+	pricingTestServer(t, func(w http.ResponseWriter, req *http.Request) {
+		calls.Add(1)
+		if req.Method != "POST" || req.URL.Path != pricingQuotePath || req.Host != "pricing.test" {
+			t.Errorf("request = %s %s host=%s", req.Method, req.URL, req.Host)
 		}
-		if req.Host != "pricing.test" {
-			t.Errorf("Host = %q", req.Host)
-		}
-		for _, header := range []string{"Authorization", "Content-MD5", "Date", "x-acs-signature-nonce", "x-acs-security-token", "x-acs-accesskey-id"} {
+		for _, header := range []string{"Date", "x-acs-signature-nonce", "x-acs-security-token", "x-acs-accesskey-id"} {
 			if req.Header.Get(header) == "" {
 				t.Errorf("missing header %s", header)
 			}
 		}
 		if !strings.HasPrefix(req.Header.Get("Authorization"), "acs test-ak:") {
-			t.Errorf("Authorization = %q", req.Header.Get("Authorization"))
+			t.Error("legacy ROA signature missing")
 		}
-		payload, err := io.ReadAll(req.Body)
+		if req.Header.Get("x-acs-version") != pricingApiVersion || req.Header.Get("x-acs-action") != "GetApiPrice" {
+			t.Error("wrong quote identity")
+		}
+		var body map[string]any
+		decoder := json.NewDecoder(req.Body)
+		decoder.UseNumber()
+		if err := decoder.Decode(&body); err != nil {
+			t.Error(err)
+			return
+		}
+		if _, present := body["responseVersion"]; present {
+			t.Error("must not select response version")
+		}
+		if body["language"] != "zh" || body["popCode"] != "ecs" || body["apiName"] != "RunInstances" {
+			t.Errorf("payload=%v", body)
+		}
+		params := body["parameters"].(map[string]any)
+		if params["ClusterId"] != "c-123" || params["ID"] != json.Number("9007199254740993") {
+			t.Errorf("lost parameters: %v", params)
+		}
+		if !reflect.DeepEqual(params["Nested"], map[string]any{"Enabled": true}) || !reflect.DeepEqual(params["List"], []any{json.Number("1"), json.Number("2")}) {
+			t.Errorf("lost JSON structure: %v", params)
+		}
+		if !reflect.DeepEqual(params["PricingContext"], map[string]any{"Traffic": "100"}) {
+			t.Errorf("lost pricing context: %v", params)
+		}
+		_, _ = io.WriteString(w, `{"price":{"success":true,"totalAmount":0.084},"requestId":"r"}`)
+	})
+	t.Setenv(pricingHostEnv, "pricing.test")
+	ec := pricingFixtureContext()
+	ec.Endpoint = "target.must.not.be.called"
+	quote, err := EstimateCost(ec, &AssembledRequest{
+		Action: "RunInstances", Version: "2014-05-26", Endpoint: ec.Endpoint,
+		PathParams: map[string]string{"ClusterId": "c-123"},
+		Body:       `{"ID":9007199254740993,"Nested":{"Enabled":true},"List":[1,2]}`,
+	}, map[string]string{"Traffic": "100"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 1 || !strings.Contains(quote, "\n") {
+		t.Fatalf("calls=%d quote=%s", calls.Load(), quote)
+	}
+}
+
+func TestBuildPricingParameters(t *testing.T) {
+	t.Setenv(pricingPopCodeEnv, "override")
+	for _, body := range []any{
+		map[string]any{"RegionId": "body-region", "Nested": map[string]any{"x": true}, "List": []any{"a"}, "Empty": ""},
+		`{"RegionId":"body-region","Nested":{"x":true},"List":["a"],"Empty":""}`,
+		[]byte(`{"RegionId":"body-region","Nested":{"x":true},"List":["a"],"Empty":""}`),
+	} {
+		params, err := BuildPricingParameters(PricingParameterInput{
+			Query: map[string]string{"Query": "q", "Collision": "query", "RegionId": "query-region"},
+			Form:  map[string]string{"Form": "f", "Collision": "form"}, Path: map[string]string{"Path": "p", "Collision": "path"}, Body: body, Region: "fallback",
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		var fields map[string]json.RawMessage
-		if err := json.Unmarshal(payload, &fields); err != nil {
-			t.Fatal(err)
+		want := map[string]any{"Query": "q", "Form": "f", "Path": "p", "Collision": "path", "RegionId": "body-region", "Nested": map[string]any{"x": true}, "List": []any{"a"}, "Empty": ""}
+		if !reflect.DeepEqual(params, want) {
+			t.Fatalf("parameters=%#v", params)
 		}
-		if _, present := fields["responseVersion"]; present {
-			t.Error("quote requests must not select a response version")
-		}
-		var body priceRequest
-		if err := json.Unmarshal(payload, &body); err != nil {
-			t.Errorf("decode request: %v", err)
-		}
-		if body.Language != "zh" || body.PopCode != "ecs" || body.PopVersion != "v1" || body.ApiName != "RunInstances" {
-			t.Errorf("request body = %#v", body)
-		}
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Header:     make(http.Header),
-			Body:       io.NopCloser(strings.NewReader(`{"Price":1,"Currency":"CNY"}`)),
-			Request:    req,
-		}, nil
-	})}
-	t.Setenv(pricingEndpointEnv, "pricing.example.com")
-	t.Setenv(pricingHostEnv, "pricing.test")
-
-	credential := pricingTestCredential{model: &credentialsv2.CredentialModel{
-		AccessKeyId:     stringPointer("test-ak"),
-		AccessKeySecret: stringPointer("test-secret"),
-		SecurityToken:   stringPointer("test-token"),
-	}}
-	quote, err := EstimateCost(
-		&ExecContext{Credential: credential, API: &meta.API{ProductCode: "ecs"}, Language: "zh"},
-		&AssembledRequest{Action: "RunInstances", Version: "v1", Query: map[string]string{"Amount": "1"}},
-		nil,
-	)
+	}
+	got, err := buildPriceRequest(pricingFixtureContext(), &AssembledRequest{Action: "Run", Version: "v1", Query: map[string]string{"Amount": "1"}}, map[string]string{"Expr": "a==b"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(quote, "\n") || !strings.Contains(quote, `"Currency": "CNY"`) {
-		t.Fatalf("quote = %q, want pretty JSON", quote)
+	if got.PopCode != "override" || got.Parameters["RegionId"] != "cn-hangzhou" || got.Parameters["Amount"] != "1" {
+		t.Fatalf("request=%+v", got)
 	}
-}
-
-func TestPriceRequestHelpers(t *testing.T) {
-	t.Setenv(pricingPopCodeEnv, "")
-	ec := &ExecContext{API: &meta.API{ProductCode: "ecs"}, Region: "cn-test"}
-	req := &AssembledRequest{
-		Action: "Quote", Version: "v1",
-		Query: map[string]string{"RegionId": "explicit"},
-		Body: map[string]any{
-			"String": "value", "Bool": true, "Float": 1.5, "Int": 2,
-			"Int64": int64(3), "Number": json.Number("4"), "Ignored": []string{"x"},
-		},
+	if got.Parameters["PricingContext"].(map[string]any)["Expr"] != "a==b" {
+		t.Fatal("context changed")
 	}
-	got := buildPriceRequest(ec, req, nil)
-	if got.PopCode != "ecs" || got.Parameters["RegionId"] != "explicit" || got.Parameters["Bool"] != "true" || got.Parameters["Ignored"] != nil {
-		t.Fatalf("buildPriceRequest() = %#v", got)
-	}
-
-	for value, want := range map[any]string{
-		"text": "text", true: "true", float64(1.25): "1.25", int(2): "2", int64(3): "3", json.Number("4.5"): "4.5",
-	} {
-		if actual, ok := priceScalarString(value); !ok || actual != want {
-			t.Fatalf("priceScalarString(%#v) = %q, %v", value, actual, ok)
+	for _, body := range []any{`null`, `[1]`, `1`, `{bad`, `{"x":1} {"x":2}`, 42} {
+		_, err := BuildPricingParameters(PricingParameterInput{Body: body})
+		if err == nil || !strings.Contains(err.Error(), "JSON object") {
+			t.Fatalf("body=%v error=%v", body, err)
 		}
 	}
-	if _, ok := priceScalarString([]string{"x"}); ok {
-		t.Fatal("priceScalarString accepted composite value")
-	}
-
-	t.Setenv(pricingEndpointEnv, "custom.example.com")
-	if pricingEndpoint() != "custom.example.com" {
-		t.Fatalf("pricingEndpoint() = %q", pricingEndpoint())
-	}
-	t.Setenv(pricingEndpointEnv, "")
-	if pricingEndpoint() != defaultPricingEndpoint {
-		t.Fatalf("default pricingEndpoint() = %q", pricingEndpoint())
-	}
-	if prettyJSON([]byte("not-json")) != "not-json" {
-		t.Fatal("prettyJSON should preserve invalid JSON")
-	}
-	if got := md5Base64([]byte("abc")); got != "kAFQmDzST7DWlj99KOF/cg==" {
-		t.Fatalf("md5Base64() = %q", got)
-	}
-	if _, err := base64.StdEncoding.DecodeString(hmacSHA1Base64("key", "data")); err != nil {
-		t.Fatalf("hmacSHA1Base64() returned invalid base64: %v", err)
-	}
-	if got := randomHex(8); len(got) != 16 {
-		t.Fatalf("randomHex(8) length = %d", len(got))
-	}
 }
 
-func TestPostPriceQuoteSignedFailures(t *testing.T) {
-	request := &priceRequest{Parameters: map[string]interface{}{}}
-	credentialFailure := pricingTestCredential{err: errors.New("credential failed")}
-	if _, err := postPriceQuoteSigned(credentialFailure, "example.com", request, "en"); err == nil || !strings.Contains(err.Error(), "get credential") {
-		t.Fatalf("credential error = %v", err)
-	}
-
-	credential := pricingTestCredential{model: &credentialsv2.CredentialModel{
-		AccessKeyId: stringPointer("ak"), AccessKeySecret: stringPointer("secret"),
-	}}
-	request.Parameters["bad"] = make(chan int)
-	if _, err := postPriceQuoteSigned(credential, "example.com", request, "en"); err == nil {
-		t.Fatal("unmarshalable request succeeded")
-	}
-	delete(request.Parameters, "bad")
-	if _, err := postPriceQuoteSigned(credential, "%", request, "en"); err == nil {
-		t.Fatal("invalid endpoint succeeded")
-	}
-
-	oldClient := priceHTTPClient
-	t.Cleanup(func() { priceHTTPClient = oldClient })
-	priceHTTPClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
-		return nil, errors.New("transport failed")
-	})}
-	if _, err := postPriceQuoteSigned(credential, "example.com", request, "en"); err == nil || !strings.Contains(err.Error(), "call pricing service") {
-		t.Fatalf("transport error = %v", err)
-	}
-}
-
-func TestBuildROAStringToSignAndPricingErrors(t *testing.T) {
-	req, err := http.NewRequest(http.MethodPost, "https://example.com/path", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("x-acs-z", "last")
-	req.Header.Set("x-acs-a", "first")
-	req.Header.Set("ignored", "value")
-	got := buildROAStringToSign(req, "/path", "md5", "application/json", "date")
-	if !strings.Contains(got, "x-acs-a:first\nx-acs-z:last") || strings.Contains(got, "ignored") {
-		t.Fatalf("string to sign = %q", got)
-	}
-
-	pr := &priceRequest{PopCode: "ecs", PopVersion: "v1", ApiName: "Run"}
-	tests := []struct {
-		name string
-		raw  string
-		want string
+func TestPricingClientRetriesAndBusinessErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name                   string
+		status, retries, calls int
+		body                   string
+		success                bool
 	}{
-		{"unsupported", `{"Code":"PricingNotSupported","RequestId":"req-1"}`, "PricingNotSupported"},
-		{"unsupported, business envelope", `{"errorCode":"PricingNotSupported","requestId":"req-1"}`, "PricingNotSupported"},
-		{"detailed", `{"Code":"BadRequest","Message":"bad input","RequestId":"req-2","Recommend":"fix it"}`, "BadRequest — bad input"},
-		{"detailed, business envelope", `{"errorCode":"BadRequest","errorMsg":"bad input","requestId":"req-2"}`, "BadRequest — bad input"},
-		{"code only", `{"Code":"BadRequest"}`, "BadRequest"},
-		{"message only", `{"errorMsg":"bad input"}`, "bad input"},
-		{"plain", "service unavailable", "HTTP 503: service unavailable"},
-		{"truncated", strings.Repeat("x", 300), "…"},
-	}
-	for _, test := range tests {
-		err := parsePricingHTTPError(pr, 503, []byte(test.raw))
-		if !strings.Contains(err.Error(), test.want) {
-			t.Fatalf("%s: error = %q, want substring %q", test.name, err, test.want)
-		}
+		{"server retries", 500, 2, 3, `{"Code":"InternalError","Message":"try later","RequestId":"r"}`, false},
+		{"retries disabled", 500, 0, 1, `{"Code":"InternalError","Message":"try later","RequestId":"r"}`, false},
+		{"forbidden", 403, 2, 1, `{"Code":"Forbidden","Message":"denied","RequestId":"r"}`, false},
+		{"throttled", 429, 2, 1, `{"Code":"Throttling","Message":"slow down","RequestId":"r"}`, false},
+		{"free", 400, 2, 1, `{"Code":"PricingNotRequired","Message":"server free","RequestId":"r"}`, true},
+		{"unsupported", 400, 2, 1, `{"Code":"PricingNotSupported","Message":"server unsupported","RequestId":"r"}`, true},
+		{"direct backend", 400, 0, 1, `{"errorCode":"PricingNotSupported","errorMsg":"server unsupported","requestId":"r"}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls atomic.Int32
+			pricingTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				w.WriteHeader(tc.status)
+				_, _ = io.WriteString(w, tc.body)
+			})
+			ec := pricingFixtureContext()
+			ec.RetryCount = tc.retries
+			raw, err := EstimateCost(ec, &AssembledRequest{Action: "Run", Version: "v1"}, nil)
+			if (err == nil) != tc.success || int(calls.Load()) != tc.calls {
+				t.Fatalf("calls=%d error=%v raw=%s", calls.Load(), err, raw)
+			}
+			if tc.success {
+				var before, after any
+				_ = json.Unmarshal([]byte(tc.body), &before)
+				_ = json.Unmarshal([]byte(raw), &after)
+				if !reflect.DeepEqual(before, after) {
+					t.Fatalf("changed server envelope: %s", raw)
+				}
+			} else if !strings.Contains(err.Error(), "r") {
+				t.Fatalf("missing diagnostics: %v", err)
+			}
+		})
 	}
 }
 
-// quoteResponder points the price client at a stub that answers every quote
-// with the given status and body, so the classification is asserted on the
-// real request path (signing, transport, status handling) rather than on the
-// body parser alone.
-func quoteResponder(t *testing.T, status int, body string) (*ExecContext, *AssembledRequest) {
-	t.Helper()
-	oldClient := priceHTTPClient
-	t.Cleanup(func() { priceHTTPClient = oldClient })
-	priceHTTPClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: status,
-			Header:     make(http.Header),
-			Body:       io.NopCloser(strings.NewReader(body)),
-			Request:    req,
-		}, nil
-	})}
-	credential := pricingTestCredential{model: &credentialsv2.CredentialModel{
-		AccessKeyId: stringPointer("ak"), AccessKeySecret: stringPointer("secret"),
-	}}
-	ec := &ExecContext{Credential: credential, API: &meta.API{ProductCode: "hbr"}}
-	return ec, &AssembledRequest{Action: "EnableBackupPlan", Version: "2017-09-08"}
+func TestPricingClientTimeoutAndTLS(t *testing.T) {
+	for _, host := range []string{"", "pricing.test"} {
+		t.Run("host="+host, func(t *testing.T) {
+			pricingTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				time.Sleep(200 * time.Millisecond)
+				_, _ = io.WriteString(w, `{}`)
+			})
+			t.Setenv(pricingHostEnv, host)
+			ec := pricingFixtureContext()
+			ec.ReadTimeout = 20 * time.Millisecond
+			ec.ConnectTimeout = 20 * time.Millisecond
+			_, err := EstimateCost(ec, &AssembledRequest{Action: "Run", Version: "v1"}, nil)
+			if err == nil {
+				t.Fatal("read timeout was ignored")
+			}
+			ec.ReadTimeout = time.Second
+			ec.ConnectTimeout = time.Second
+			ec.SkipSecureVerify = false
+			_, err = EstimateCost(ec, &AssembledRequest{Action: "Run", Version: "v1"}, nil)
+			if err == nil || !strings.Contains(err.Error(), "certificate") {
+				t.Fatalf("TLS validation error=%v", err)
+			}
+		})
+	}
 }
 
 func TestEstimateCostSurfacesShortRead(t *testing.T) {
-	// The body decides success vs failure, so a truncated read must fail
-	// loudly rather than be classified as "cannot be quoted".
-	oldClient := priceHTTPClient
-	t.Cleanup(func() { priceHTTPClient = oldClient })
-	priceHTTPClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: http.StatusBadRequest,
-			Header:     make(http.Header),
-			Body:       io.NopCloser(iotest.ErrReader(errors.New("connection reset"))),
-			Request:    req,
-		}, nil
-	})}
-	credential := pricingTestCredential{model: &credentialsv2.CredentialModel{
-		AccessKeyId: stringPointer("ak"), AccessKeySecret: stringPointer("secret"),
-	}}
-	_, err := EstimateCost(
-		&ExecContext{Credential: credential, API: &meta.API{ProductCode: "hbr"}},
-		&AssembledRequest{Action: "EnableBackupPlan", Version: "2017-09-08"},
-		nil,
-	)
-	if err == nil || !strings.Contains(err.Error(), "read pricing service response") {
-		t.Fatalf("short read error = %v", err)
+	for _, status := range []int{200, 400} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			pricingTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Length", "1000")
+				w.WriteHeader(status)
+				_, _ = io.WriteString(w, `{"Code":"PricingNotRequired"}`)
+			})
+			_, err := EstimateCost(pricingFixtureContext(), &AssembledRequest{Action: "Run", Version: "v1"}, nil)
+			if err == nil {
+				t.Fatal("short response must fail")
+			}
+		})
+	}
+}
+
+func TestPricingClientValidation(t *testing.T) {
+	if _, err := NewPricingClient(PricingClientOptions{}); err == nil {
+		t.Fatal("nil credential accepted")
+	}
+	client, err := NewPricingClient(PricingClientOptions{Credential: pricingFixtureContext().Credential})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = client.Quote(PricingRequest{Parameters: map[string]any{"bad": make(chan int)}}); err == nil {
+		t.Fatal("unmarshalable payload accepted")
+	}
+	failure := errors.New("credential failed")
+	client, err = NewPricingClient(PricingClientOptions{Credential: pricingTestCredential{err: failure}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = client.Quote(PricingRequest{}); !errors.Is(err, failure) {
+		t.Fatalf("credential error=%v", err)
+	}
+	t.Setenv(pricingEndpointEnv, "")
+	if PricingEndpoint() != defaultPricingEndpoint {
+		t.Fatal("wrong default endpoint")
+	}
+	if prettyJSON([]byte("not-json")) != "not-json" {
+		t.Fatal("invalid response changed")
+	}
+}
+
+type rotatingPricingCredential struct {
+	pricingTestCredential
+	count int
+}
+
+func (c *rotatingPricingCredential) GetCredential() (*credentialsv2.CredentialModel, error) {
+	c.count++
+	return &credentialsv2.CredentialModel{AccessKeyId: tea.String("ak"), AccessKeySecret: tea.String("secret"), SecurityToken: tea.String(fmt.Sprintf("token-%d", c.count))}, nil
+}
+
+func TestPricingClientRefreshesCredentials(t *testing.T) {
+	var calls atomic.Int32
+	pricingTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		want := fmt.Sprintf("token-%d", calls.Add(1))
+		if r.Header.Get("x-acs-security-token") != want {
+			t.Errorf("stale credential: %s", r.Header.Get("x-acs-security-token"))
+		}
+		_, _ = io.WriteString(w, `{"price":{"success":true}}`)
+	})
+	client, err := NewPricingClient(PricingClientOptions{Credential: &rotatingPricingCredential{}, SkipSecureVerify: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := client.Quote(PricingRequest{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls.Load() != 2 {
+		t.Fatal("missing quote requests")
 	}
 }

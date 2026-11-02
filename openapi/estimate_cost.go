@@ -14,15 +14,12 @@
 package openapi
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"regexp"
+	"time"
 
-	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -46,14 +43,6 @@ const (
 	estimateCostProductCode = "cloudcontrol"
 )
 
-type estimateCostRequest struct {
-	Language   string                 `json:"language"`
-	PopCode    string                 `json:"popCode"`
-	PopVersion string                 `json:"popVersion"`
-	ApiName    string                 `json:"apiName"`
-	Parameters map[string]interface{} `json:"parameters"`
-}
-
 // processEstimateCost handles --estimate-cost for both RPC and ROA(restful)
 // invokers. Must be called after invoker.Prepare(ctx) so the CommonRequest
 // carries the fully assembled parameters; otherwise required params from
@@ -66,7 +55,10 @@ func (c *Commando) processEstimateCost(ctx *cli.Context, inv Invoker) error {
 		return err
 	}
 
-	parameters, err := buildEstimateCostParameters(req)
+	parameters, err := buildEstimateCostParameters(pricingruntime.PricingParameterInput{
+		Query: req.QueryParams, Form: req.FormParams, Path: req.PathParams,
+		Body: req.Content, Region: req.RegionId,
+	})
 	if err != nil {
 		return err
 	}
@@ -272,34 +264,14 @@ func buildEstimateCostParametersFromOpenapi(ctx *cli.Context, oc *OpenapiContext
 // raw `--body` bytes/string, which must decode to a JSON object — same
 // contract as the RPC/ROA path in buildEstimateCostParameters.
 func mergeEstimateCostBody(parameters map[string]interface{}, rawBody interface{}) error {
-	switch body := rawBody.(type) {
-	case map[string]interface{}:
-		for k, v := range body {
-			parameters[k] = v
-		}
-		return nil
-	case []byte:
-		return mergeEstimateCostJSONBody(parameters, body)
-	case string:
-		return mergeEstimateCostJSONBody(parameters, []byte(body))
-	default:
-		return cli.NewErrorWithTip(
-			fmt.Errorf("--estimate-cost cannot read the request body of type %T", rawBody),
-			"cost estimation merges the JSON body into pricing parameters, please pass `--body` as a JSON object")
+	if err := pricingruntime.MergePricingBody(parameters, rawBody); err != nil {
+		return cli.NewErrorWithTip(err, "cost estimation merges the JSON body into pricing parameters, please pass `--body` as a JSON object")
 	}
+	return nil
 }
 
 func mergeEstimateCostJSONBody(parameters map[string]interface{}, raw []byte) error {
-	body := make(map[string]interface{})
-	if err := json.Unmarshal(raw, &body); err != nil {
-		return cli.NewErrorWithTip(
-			fmt.Errorf("--estimate-cost requires the request body to be a JSON object: %v", err),
-			"cost estimation merges the JSON body into pricing parameters, please pass `--body` as a JSON object")
-	}
-	for k, v := range body {
-		parameters[k] = v
-	}
-	return nil
+	return mergeEstimateCostBody(parameters, raw)
 }
 
 // resolveEstimateCostApiName returns the action name of the call being
@@ -328,41 +300,11 @@ func resolveEstimateCostApiName(library *Library, inv Invoker) (string, error) {
 	return "", fmt.Errorf("--estimate-cost cannot resolve the api name for this call")
 }
 
-// buildEstimateCostParameters flattens every parameter slot of the prepared
-// request (query / form-or-body / path / JSON body) into one map. Values stay
-// strings — CLI semantics; the server normalizes dotted keys like `DataDisk.1.Size`.
-func buildEstimateCostParameters(req *requests.CommonRequest) (map[string]interface{}, error) {
-	parameters := make(map[string]interface{})
-	for k, v := range req.QueryParams {
-		if k != "" && v != "" {
-			parameters[k] = v
-		}
-	}
-	for k, v := range req.FormParams {
-		if k != "" && v != "" {
-			parameters[k] = v
-		}
-	}
-	for k, v := range req.PathParams {
-		if k != "" && v != "" {
-			parameters[k] = v
-		}
-	}
-	if len(req.Content) > 0 {
-		body := make(map[string]interface{})
-		if err := json.Unmarshal(req.Content, &body); err != nil {
-			return nil, cli.NewErrorWithTip(
-				fmt.Errorf("--estimate-cost requires the request body to be a JSON object: %v", err),
-				"cost estimation merges the JSON body into pricing parameters, please pass `--body` as a JSON object")
-		}
-		for k, v := range body {
-			parameters[k] = v
-		}
-	}
-	if req.RegionId != "" {
-		if _, ok := parameters["RegionId"]; !ok {
-			parameters["RegionId"] = req.RegionId
-		}
+// buildEstimateCostParameters adapts SDK-independent prepared parameter slots.
+func buildEstimateCostParameters(input pricingruntime.PricingParameterInput) (map[string]interface{}, error) {
+	parameters, err := pricingruntime.BuildPricingParameters(input)
+	if err != nil {
+		return nil, cli.NewErrorWithTip(err, "cost estimation merges the JSON body into pricing parameters, please pass `--body` as a JSON object")
 	}
 	return parameters, nil
 }
@@ -392,70 +334,55 @@ func buildPricingContext(ctx *cli.Context) (map[string]interface{}, error) {
 }
 
 func estimateCostEndpoint() string {
-	if v := os.Getenv(estimateCostEndpointEnv); v != "" {
-		return v
-	}
-	return defaultEstimateCostHost
+	return pricingruntime.PricingEndpoint()
 }
 
-func setEstimateCostEndpoint(request *requests.CommonRequest) {
-	request.Domain = estimateCostEndpoint()
-	// The legacy SDK appends Port when building the URL, so an explicit
-	// endpoint port must be kept separate from Domain.
-	if host, port, err := net.SplitHostPort(request.Domain); err == nil {
-		request.Domain = host
-		request.Port = port
+func newPricingClient(ctx *cli.Context, profile *config.Profile) (*pricingruntime.PricingClient, error) {
+	// Preserve the existing main-CLI credential modes and region requirement.
+	if profile.Mode == config.Anonymous {
+		return nil, fmt.Errorf("price mode requires authenticated credentials")
 	}
-}
-
-// invokeEstimateCost issues the signed quote request and returns the raw
-// response body. Reuses the standard authenticated client so signing and
-// credential refresh behave identically to a real OpenAPI call.
-func invokeEstimateCost(ctx *cli.Context, profile *config.Profile, popCode string, popVersion string, apiName string, parameters map[string]interface{}) (string, error) {
-	client, err := GetClient(profile, ctx)
+	if profile.Mode == config.BearerToken {
+		return nil, config.ErrBearerTokenRequiresPlugin("")
+	}
+	if profile.RegionId == "" {
+		return nil, fmt.Errorf("default RegionId is empty! run `aliyun configure` first")
+	}
+	credential, err := profile.GetCredential(ctx, nil)
 	if err != nil {
-		return "", fmt.Errorf("init estimate-cost client failed: %s", err)
+		return nil, err
 	}
+	readTimeout, connectTimeout := 10*time.Second, 5*time.Second
+	if profile.ReadTimeout > 0 {
+		readTimeout = time.Duration(profile.ReadTimeout) * time.Second
+	}
+	if profile.ConnectTimeout > 0 {
+		connectTimeout = time.Duration(profile.ConnectTimeout) * time.Second
+	}
+	return pricingruntime.NewPricingClient(pricingruntime.PricingClientOptions{
+		Credential: credential, Region: profile.RegionId,
+		ReadTimeout: readTimeout, ConnectTimeout: connectTimeout,
+		RetryCount:       profile.RetryCount,
+		SkipSecureVerify: config.SkipSecureVerify(ctx.Flags()).IsAssigned(),
+		UserAgent:        os.Getenv("ALIYUN_USER_AGENT"),
+	})
+}
 
+// invokeEstimateCost issues only the quote-service request through SDK v2.
+func invokeEstimateCost(ctx *cli.Context, profile *config.Profile, popCode string, popVersion string, apiName string, parameters map[string]interface{}) (string, error) {
+	client, err := newPricingClient(ctx, profile)
+	if err != nil {
+		return "", fmt.Errorf("init estimate-cost client failed: %w", err)
+	}
+	defer client.Close()
 	language := profile.Language
 	if language == "" {
 		language = i18n.GetLanguage()
 	}
-	content, err := json.Marshal(estimateCostRequest{
-		Language:   language,
-		PopCode:    popCode,
-		PopVersion: popVersion,
-		ApiName:    apiName,
-		Parameters: parameters,
+	return client.Quote(pricingruntime.PricingRequest{
+		Language: language, PopCode: popCode, PopVersion: popVersion,
+		ApiName: apiName, Parameters: parameters,
 	})
-	if err != nil {
-		return "", err
-	}
-
-	request := requests.NewCommonRequest()
-	request.Product = estimateCostProductCode
-	request.Version = estimateCostApiVersion
-	request.Method = "POST"
-	request.PathPattern = estimateCostQuotePath
-	setEstimateCostEndpoint(request)
-	request.Scheme = "https"
-	if host := os.Getenv(estimateCostHostEnv); host != "" {
-		request.Headers["Host"] = host
-	}
-	request.SetContent(content)
-	request.SetContentType("application/json")
-
-	resp, err := client.ProcessCommonRequest(request)
-	if err != nil {
-		// Older servers still return the two business outcomes as HTTP 400.
-		// Preserve their complete server envelope during rolling upgrades.
-		if serverErr, ok := err.(*sdkerrors.ServerError); ok && resp != nil &&
-			(serverErr.ErrorCode() == "PricingNotRequired" || serverErr.ErrorCode() == "PricingNotSupported") {
-			return resp.GetHttpContentString(), nil
-		}
-		return "", err
-	}
-	return resp.GetHttpContentString(), nil
 }
 
 // printEstimateCostResult reuses the standard output pipeline so `--quiet`,
