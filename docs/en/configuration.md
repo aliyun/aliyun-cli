@@ -76,44 +76,6 @@ aliyun configure set \
 
 Do not put real secrets in scripts, shell history, source control, or issue reports. Prefer environment injection from a secret manager, a workload identity, or a temporary credential mode.
 
-## Signature version (kebab-case commands)
-
-Only kebab-case commands are supported (for example `aliyun ecs describe-instances`). `--cli-sign-version` / profile `signature_version` / `ALIBABA_CLOUD_SIGNATURE_VERSION` currently accept:
-
-| Value | Behavior |
-| --- | --- |
-| `v4` | Use signature V4 |
-| empty | Clear a configured value and restore the default signing path |
-
-Any other value is rejected. Precedence: command flag > environment variable > profile. An empty value follows the same precedence and can override a profile-level `v4`.
-
-Enable it for one command:
-
-```sh
-aliyun ecs describe-instances --cli-sign-version v4
-```
-
-Save it as the profile default (same flag):
-
-```sh
-aliyun configure set --profile default --cli-sign-version v4
-```
-
-Clear the profile value and restore the default:
-
-```sh
-aliyun configure set --profile default --cli-sign-version ''
-```
-
-Or set / clear the environment variable for the current process:
-
-```sh
-export ALIBABA_CLOUD_SIGNATURE_VERSION=v4
-export ALIBABA_CLOUD_SIGNATURE_VERSION=
-```
-
-When none are set, signing behavior stays unchanged.
-
 ## Temporary STS credentials
 
 Use `StsToken` when all three credential values have already been issued:
@@ -426,6 +388,46 @@ The endpoint must return HTTP 200 with a credential response such as:
 Any non-200 response or malformed/missing credential field is treated as a credential retrieval failure.
 
 Set `ALIBABA_CLOUD_DISABLE_EXTERNAL_PROCESS=true` to block both external process execution and CredentialsURI fetching in a restricted environment.
+
+## Request configuration
+
+### Signature version (kebab-case commands)
+
+Only kebab-case commands are supported (for example `aliyun ecs describe-instances`). `--cli-sign-version` / profile `signature_version` / `ALIBABA_CLOUD_SIGNATURE_VERSION` currently accept:
+
+| Value | Behavior |
+| --- | --- |
+| `v4` | Use signature V4 |
+| empty | Clear a configured value and restore the default signing path |
+
+Any other value is rejected. Precedence: command flag > environment variable > profile. An empty value follows the same precedence and can override a profile-level `v4`.
+
+Enable it for one command:
+
+```sh
+aliyun ecs describe-instances --cli-sign-version v4
+```
+
+Save it as the profile default (same flag):
+
+```sh
+aliyun configure set --profile default --cli-sign-version v4
+```
+
+Clear the profile value and restore the default:
+
+```sh
+aliyun configure set --profile default --cli-sign-version ''
+```
+
+Or set / clear the environment variable for the current process:
+
+```sh
+export ALIBABA_CLOUD_SIGNATURE_VERSION=v4
+export ALIBABA_CLOUD_SIGNATURE_VERSION=
+```
+
+When none are set, signing behavior stays unchanged.
 
 ## Environment variables
 

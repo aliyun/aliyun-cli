@@ -727,9 +727,9 @@ func NewCliSignVersionFlag() *cli.Flag {
 		Persistent:   true,
 		Short: i18n.T(
 			"OpenAPI signature version for kebab-case commands: only v4; set empty to clear and use default (also persists via `aliyun configure set`)",
-			"中划线式命令的 OpenAPI 签名版本：当前仅支持 v4；设为空值可清空并恢复默认签名（`aliyun configure set` 可写入 Profile）"),
+			"短横线命令的 OpenAPI 签名版本：当前仅支持 v4；设为空值可清空并恢复默认签名（`aliyun configure set` 可写入 Profile）"),
 		Long: i18n.T(
 			"Select the OpenAPI signature version for kebab-case commands. Currently only `v4` is supported. Set an empty value (`--cli-sign-version ''`, `aliyun configure set --cli-sign-version ''`, or `ALIBABA_CLOUD_SIGNATURE_VERSION=`) to clear a previously configured value and fall back to the default signing path. Any other value is rejected.",
-			"选择中划线式命令的 OpenAPI 签名版本。当前仅支持 `v4`。设置空值（`--cli-sign-version ''`、`aliyun configure set --cli-sign-version ''`，或 `ALIBABA_CLOUD_SIGNATURE_VERSION=`）可清空已配置的值并恢复默认签名。其他值会报错不支持。"),
+			"选择短横线命令的 OpenAPI 签名版本。当前仅支持 `v4`。设置空值（`--cli-sign-version ''`、`aliyun configure set --cli-sign-version ''`，或 `ALIBABA_CLOUD_SIGNATURE_VERSION=`）可清空已配置的值并恢复默认签名。其他值会报错不支持。"),
 	}
 }

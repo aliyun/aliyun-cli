@@ -76,44 +76,6 @@ aliyun configure set \
 
 不要把真实密钥写进脚本、Shell 历史、源码仓库或 Issue。优先使用密钥管理系统注入、工作负载身份或临时凭证。
 
-## 签名版本（中划线式命令）
-
-仅支持中划线式命令（例如 `aliyun ecs describe-instances`）。`--cli-sign-version` / Profile `signature_version` / `ALIBABA_CLOUD_SIGNATURE_VERSION` 当前仅支持：
-
-| 值 | 行为 |
-| --- | --- |
-| `v4` | 使用签名 V4 |
-| 空值 | 清空已配置的签名版本，恢复默认签名 |
-
-其他值会报错不支持。优先级：命令行 flag > 环境变量 > Profile。空值同样遵循该优先级，可用于覆盖 Profile 中的 `v4`。
-
-单次命令开启：
-
-```sh
-aliyun ecs describe-instances --cli-sign-version v4
-```
-
-在 Profile 中设为默认（复用同一 flag）：
-
-```sh
-aliyun configure set --profile default --cli-sign-version v4
-```
-
-清空 Profile 中的签名版本，恢复默认：
-
-```sh
-aliyun configure set --profile default --cli-sign-version ''
-```
-
-或仅对当前进程设置 / 清空环境变量：
-
-```sh
-export ALIBABA_CLOUD_SIGNATURE_VERSION=v4
-export ALIBABA_CLOUD_SIGNATURE_VERSION=
-```
-
-未设置时，签名行为与现在一致。
-
 ## STS 临时凭证
 
 已经获得三个临时凭证字段时，可以使用 `StsToken`：
@@ -438,6 +400,46 @@ Saving profile[uri] ...Done.
 非 200 响应、响应格式错误或缺少凭证字段时，CLI 会将其视为凭证获取失败。
 
 在受限环境中设置 `ALIBABA_CLOUD_DISABLE_EXTERNAL_PROCESS=true`，可以同时禁止外部进程执行和 CredentialsURI 请求。
+
+## 请求配置
+
+### 签名版本（短横线命令）
+
+仅支持短横线命令（例如 `aliyun ecs describe-instances`）。`--cli-sign-version` / Profile `signature_version` / `ALIBABA_CLOUD_SIGNATURE_VERSION` 当前仅支持：
+
+| 值 | 行为 |
+| --- | --- |
+| `v4` | 使用签名 V4 |
+| 空值 | 清空已配置的签名版本，恢复默认签名 |
+
+其他值会报错不支持。优先级：命令行 flag > 环境变量 > Profile。空值同样遵循该优先级，可用于覆盖 Profile 中的 `v4`。
+
+单次命令开启：
+
+```sh
+aliyun ecs describe-instances --cli-sign-version v4
+```
+
+在 Profile 中设为默认（复用同一 flag）：
+
+```sh
+aliyun configure set --profile default --cli-sign-version v4
+```
+
+清空 Profile 中的签名版本，恢复默认：
+
+```sh
+aliyun configure set --profile default --cli-sign-version ''
+```
+
+或仅对当前进程设置 / 清空环境变量：
+
+```sh
+export ALIBABA_CLOUD_SIGNATURE_VERSION=v4
+export ALIBABA_CLOUD_SIGNATURE_VERSION=
+```
+
+未设置时，签名行为与现在一致。
 
 ## 环境变量
 
