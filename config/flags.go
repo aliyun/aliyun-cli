@@ -713,10 +713,9 @@ func CliSignVersionFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(CliSignVersionFlagName)
 }
 
-// NewCliSignVersionFlag selects the OpenAPI signature version.
+// NewCliSignVersionFlag selects the OpenAPI signature version (v2 / v3 / v4).
 // Reused by both invoke (`aliyun ecs describe-instances --cli-sign-version v4`)
 // and `aliyun configure set --cli-sign-version v4` (persists profile.signature_version).
-// Name matches the SLS plugin hook flag so plugins and the core CLI stay aligned.
 func NewCliSignVersionFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "caller",
@@ -724,7 +723,7 @@ func NewCliSignVersionFlag() *cli.Flag {
 		AssignedMode: cli.AssignedOnce,
 		Persistent:   true,
 		Short: i18n.T(
-			"use `--cli-sign-version v4` to sign kebab-case OpenAPI requests with signature V4 (also persists via `aliyun configure set`)",
-			"使用 `--cli-sign-version v4` 让中划线式 OpenAPI 请求使用签名 V4（`aliyun configure set` 可写入 Profile）"),
+			"OpenAPI signature version for kebab-case commands: v2, v3 (default), or v4 (also persists via `aliyun configure set`)",
+			"中划线式命令的 OpenAPI 签名版本：v2、v3（默认）或 v4（`aliyun configure set` 可写入 Profile）"),
 	}
 }

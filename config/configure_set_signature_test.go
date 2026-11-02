@@ -73,6 +73,14 @@ func TestDoConfigureSet_CliSignVersion(t *testing.T) {
 	assert.Equal(t, SignatureVersionV4, saved.SignatureVersion)
 
 	f.SetValue("v3")
+	require.NoError(t, doConfigureSet(ctx))
+	assert.Equal(t, SignatureVersionV3, saved.SignatureVersion)
+
+	f.SetValue("v2")
+	require.NoError(t, doConfigureSet(ctx))
+	assert.Equal(t, SignatureVersionV2, saved.SignatureVersion)
+
+	f.SetValue("v1")
 	err := doConfigureSet(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported signature_version")

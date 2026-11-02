@@ -26,8 +26,31 @@ import (
 // When set, it overrides profile signature_version but loses to --cli-sign-version.
 const EnvSignatureVersion = "ALIBABA_CLOUD_SIGNATURE_VERSION"
 
-// SignatureVersionV4 is the only non-default signature version supported in phase 1.
-const SignatureVersionV4 = "v4"
+// Supported OpenAPI signature_version values for --cli-sign-version / env / profile.
+const (
+	// SignatureVersionV2 maps to conf.SignatureAlgorithm = "v2" (legacy RPC signing).
+	SignatureVersionV2 = "v2"
+	// SignatureVersionV3 is the default ACS3 path; no SignatureVersion/SignatureAlgorithm override.
+	SignatureVersionV3 = "v3"
+	// SignatureVersionV4 enables ACS4-HMAC-SHA256 via SignatureVersion = "v4".
+	SignatureVersionV4 = "v4"
+)
+
+// NormalizeSignatureVersion validates and canonicalizes a signature version.
+// Empty means unset (same runtime behavior as v3). Supported: v2, v3, v4.
+func NormalizeSignatureVersion(v string) (string, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "", nil
+	}
+	switch strings.ToLower(v) {
+	case SignatureVersionV2, SignatureVersionV3, SignatureVersionV4:
+		return strings.ToLower(v), nil
+	default:
+		return "", fmt.Errorf("unsupported signature_version %q; supported values: %q, %q, %q",
+			v, SignatureVersionV2, SignatureVersionV3, SignatureVersionV4)
+	}
+}
 
 // CliSignVersionFromFlags returns the --cli-sign-version value for this invocation.
 // Empty means the flag was not set.
@@ -46,9 +69,8 @@ func CliSignVersionFromFlags(fs *cli.FlagSet) string {
 	return strings.TrimSpace(v)
 }
 
-// EffectiveSignatureVersion returns the active signature version.
-// Precedence matches the SLS plugin hook: --cli-sign-version >
-// ALIBABA_CLOUD_SIGNATURE_VERSION > profile.signature_version.
+// EffectiveSignatureVersion returns the active signature version string (unvalidated).
+// Precedence: --cli-sign-version > ALIBABA_CLOUD_SIGNATURE_VERSION > profile.signature_version.
 func (cp *Profile) EffectiveSignatureVersion(cliSignVersion string) string {
 	if v := strings.TrimSpace(cliSignVersion); v != "" {
 		return v
@@ -62,16 +84,18 @@ func (cp *Profile) EffectiveSignatureVersion(cliSignVersion string) string {
 	return strings.TrimSpace(cp.SignatureVersion)
 }
 
+// ResolvedSignatureVersion returns the normalized active signature version.
+func (cp *Profile) ResolvedSignatureVersion(cliSignVersion string) (string, error) {
+	return NormalizeSignatureVersion(cp.EffectiveSignatureVersion(cliSignVersion))
+}
+
 // UseSignatureV4 reports whether OpenAPI calls should use signature V4.
-// Empty means keep the current (ACS3 / legacy) behavior.
+// Empty / v3 keep the default ACS3 path; v2 selects legacy SignatureAlgorithm.
 // Unsupported values return an error so callers do not silently fall back.
 func (cp *Profile) UseSignatureV4(cliSignVersion string) (bool, error) {
-	v := strings.TrimSpace(cp.EffectiveSignatureVersion(cliSignVersion))
-	if v == "" {
-		return false, nil
+	v, err := cp.ResolvedSignatureVersion(cliSignVersion)
+	if err != nil {
+		return false, err
 	}
-	if strings.EqualFold(v, SignatureVersionV4) {
-		return true, nil
-	}
-	return false, fmt.Errorf("unsupported signature_version %q; only %q is supported", v, SignatureVersionV4)
+	return v == SignatureVersionV4, nil
 }

@@ -57,6 +57,74 @@ func TestPrepareCallEnablesSignatureV4(t *testing.T) {
 	}
 }
 
+func TestPrepareCallSignatureV3IsDefault(t *testing.T) {
+	ec := &ExecContext{
+		API: &meta.API{
+			ProductCode: "Ecs",
+			Name:        "DescribeInstances",
+			Version:     "2014-05-26",
+		},
+		Credential:       staticAKCredential(t),
+		SignatureVersion: SignatureVersionV3,
+		Region:           "cn-hangzhou",
+	}
+	req := &AssembledRequest{
+		Action:   "DescribeInstances",
+		Version:  "2014-05-26",
+		Method:   "POST",
+		Protocol: "HTTPS",
+		Style:    "RPC",
+		Endpoint: "ecs.cn-hangzhou.aliyuncs.com",
+	}
+	call, err := prepareCall(ec, req)
+	if err != nil {
+		t.Fatalf("prepareCall: %v", err)
+	}
+	if call.client.SignatureVersion != nil && tea.StringValue(call.client.SignatureVersion) != "" {
+		t.Fatalf("unexpected SignatureVersion %q", tea.StringValue(call.client.SignatureVersion))
+	}
+	if call.client.SignatureAlgorithm != nil && tea.StringValue(call.client.SignatureAlgorithm) != "" {
+		t.Fatalf("unexpected SignatureAlgorithm %q", tea.StringValue(call.client.SignatureAlgorithm))
+	}
+	if call.client.Spi != nil {
+		t.Fatalf("v3 must not install gateway, got %T", call.client.Spi)
+	}
+}
+
+func TestPrepareCallSignatureV2SetsAlgorithm(t *testing.T) {
+	ec := &ExecContext{
+		API: &meta.API{
+			ProductCode: "Ecs",
+			Name:        "DescribeInstances",
+			Version:     "2014-05-26",
+		},
+		Credential:       staticAKCredential(t),
+		SignatureVersion: SignatureVersionV2,
+		Region:           "cn-hangzhou",
+	}
+	req := &AssembledRequest{
+		Action:   "DescribeInstances",
+		Version:  "2014-05-26",
+		Method:   "POST",
+		Protocol: "HTTPS",
+		Style:    "RPC",
+		Endpoint: "ecs.cn-hangzhou.aliyuncs.com",
+	}
+	call, err := prepareCall(ec, req)
+	if err != nil {
+		t.Fatalf("prepareCall: %v", err)
+	}
+	if tea.StringValue(call.client.SignatureAlgorithm) != "v2" {
+		t.Fatalf("SignatureAlgorithm = %q, want v2", tea.StringValue(call.client.SignatureAlgorithm))
+	}
+	if call.client.SignatureVersion != nil && tea.StringValue(call.client.SignatureVersion) != "" {
+		t.Fatalf("v2 must not set SignatureVersion, got %q", tea.StringValue(call.client.SignatureVersion))
+	}
+	if call.client.Spi != nil {
+		t.Fatalf("v2 must not install gateway, got %T", call.client.Spi)
+	}
+}
+
 func TestPrepareCallRejectsUnsupportedSignatureVersion(t *testing.T) {
 	ec := &ExecContext{
 		API: &meta.API{
@@ -65,7 +133,7 @@ func TestPrepareCallRejectsUnsupportedSignatureVersion(t *testing.T) {
 			Version:     "2014-05-26",
 		},
 		Credential:       staticAKCredential(t),
-		SignatureVersion: "v3",
+		SignatureVersion: "v1",
 		Region:           "cn-hangzhou",
 	}
 	req := &AssembledRequest{

@@ -145,7 +145,7 @@ func TestGetOpenapiClientSlsUsesSignatureV4(t *testing.T) {
 	assert.Empty(t, tea.StringValue(client.ProductId))
 }
 
-func TestGetOpenapiClientSignatureV4Unsupported(t *testing.T) {
+func TestGetOpenapiClientSignatureV3IsDefault(t *testing.T) {
 	t.Setenv(config.EnvSignatureVersion, "")
 	_, ctx, _, _ := newCanonicalHelpTestContext(t)
 	config.AddFlags(ctx.Flags())
@@ -154,7 +154,43 @@ func TestGetOpenapiClientSignatureV4Unsupported(t *testing.T) {
 		AccessKeyId:      "id",
 		AccessKeySecret:  "secret",
 		RegionId:         "cn-hangzhou",
-		SignatureVersion: "v3",
+		SignatureVersion: config.SignatureVersionV3,
+	}
+	client, err := GetOpenapiClient(profile, ctx, &meta.Product{Code: "Ecs", GlobalEndpoint: "ecs.cn-hangzhou.aliyuncs.com"})
+	require.NoError(t, err)
+	assert.Empty(t, tea.StringValue(client.SignatureVersion))
+	assert.Empty(t, tea.StringValue(client.SignatureAlgorithm))
+	assert.Nil(t, client.Spi)
+}
+
+func TestGetOpenapiClientSignatureV2SetsAlgorithm(t *testing.T) {
+	t.Setenv(config.EnvSignatureVersion, "")
+	_, ctx, _, _ := newCanonicalHelpTestContext(t)
+	config.AddFlags(ctx.Flags())
+	profile := &config.Profile{
+		Mode:             config.AK,
+		AccessKeyId:      "id",
+		AccessKeySecret:  "secret",
+		RegionId:         "cn-hangzhou",
+		SignatureVersion: config.SignatureVersionV2,
+	}
+	client, err := GetOpenapiClient(profile, ctx, &meta.Product{Code: "Ecs", GlobalEndpoint: "ecs.cn-hangzhou.aliyuncs.com"})
+	require.NoError(t, err)
+	assert.Equal(t, "v2", tea.StringValue(client.SignatureAlgorithm))
+	assert.Empty(t, tea.StringValue(client.SignatureVersion))
+	assert.Nil(t, client.Spi)
+}
+
+func TestGetOpenapiClientSignatureVersionUnsupported(t *testing.T) {
+	t.Setenv(config.EnvSignatureVersion, "")
+	_, ctx, _, _ := newCanonicalHelpTestContext(t)
+	config.AddFlags(ctx.Flags())
+	profile := &config.Profile{
+		Mode:             config.AK,
+		AccessKeyId:      "id",
+		AccessKeySecret:  "secret",
+		RegionId:         "cn-hangzhou",
+		SignatureVersion: "v1",
 	}
 	_, err := GetOpenapiClient(profile, ctx, &meta.Product{Code: "Ecs", GlobalEndpoint: "ecs.cn-hangzhou.aliyuncs.com"})
 	require.Error(t, err)
@@ -190,7 +226,7 @@ func TestProcessInvokeRejectsUnsupportedSignatureVersion(t *testing.T) {
 		AccessKeyId:      "id",
 		AccessKeySecret:  "secret",
 		RegionId:         "cn-hangzhou",
-		SignatureVersion: "v2",
+		SignatureVersion: "v1",
 	}}
 	err := c.processInvoke(ctx, "ecs", "DescribeInstances", "")
 	require.Error(t, err)

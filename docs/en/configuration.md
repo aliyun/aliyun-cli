@@ -76,9 +76,15 @@ aliyun configure set \
 
 Do not put real secrets in scripts, shell history, source control, or issue reports. Prefer environment injection from a secret manager, a workload identity, or a temporary credential mode.
 
-## Signature V4 (kebab-case commands)
+## Signature version (kebab-case commands)
 
-Only kebab-case commands are supported (for example `aliyun ecs describe-instances`).
+Only kebab-case commands are supported (for example `aliyun ecs describe-instances`). `--cli-sign-version` / `signature_version` / `ALIBABA_CLOUD_SIGNATURE_VERSION` accept:
+
+| Value | Behavior |
+| --- | --- |
+| `v2` | Legacy signing via `SignatureAlgorithm=v2` |
+| `v3` | Default ACS3 path (same as unset) |
+| `v4` | Signature V4 (`SignatureVersion=v4`) |
 
 Precedence: command flag > environment variable > profile.
 
@@ -430,7 +436,7 @@ Environment variables can select a profile or fill fields not supplied by flags/
 | `ALIBABA_CLOUD_REGION_ID` | Default region |
 | `ALIBABA_CLOUD_STS_ENDPOINT` | Override the STS endpoint |
 | `ALIBABA_CLOUD_ENDPOINT` | Override the product endpoint |
-| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI signature version; set to `v4` so kebab-case commands use signature V4 (overrides profile `signature_version`) |
+| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI signature version: `v2` / `v3` / `v4` (overrides profile `signature_version`) |
 | `ALIBABA_CLOUD_CREDENTIALS_URI` | CredentialsURI source |
 | `ALIBABA_CLOUD_OIDC_PROVIDER_ARN` | OIDC provider ARN |
 | `ALIBABA_CLOUD_OIDC_TOKEN_FILE` | OIDC token file |

@@ -76,9 +76,15 @@ aliyun configure set \
 
 不要把真实密钥写进脚本、Shell 历史、源码仓库或 Issue。优先使用密钥管理系统注入、工作负载身份或临时凭证。
 
-## 签名 V4（中划线式命令）
+## 签名版本（中划线式命令）
 
-仅支持中划线式命令（例如 `aliyun ecs describe-instances`）。
+仅支持中划线式命令（例如 `aliyun ecs describe-instances`）。`--cli-sign-version` / `signature_version` / `ALIBABA_CLOUD_SIGNATURE_VERSION` 支持：
+
+| 值 | 行为 |
+| --- | --- |
+| `v2` | 使用历史 `SignatureAlgorithm=v2` 签名 |
+| `v3` | 默认 ACS3 路径（与未设置相同） |
+| `v4` | 使用签名 V4（`SignatureVersion=v4`） |
 
 优先级：命令行 flag > 环境变量 > Profile。
 
@@ -442,7 +448,7 @@ Saving profile[uri] ...Done.
 | `ALIBABA_CLOUD_REGION_ID` | 默认地域 |
 | `ALIBABA_CLOUD_STS_ENDPOINT` | 覆盖 STS Endpoint |
 | `ALIBABA_CLOUD_ENDPOINT` | 覆盖产品 Endpoint |
-| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI 签名版本；设为 `v4` 时，中划线式命令使用签名 V4（优先于 Profile 中的 `signature_version`） |
+| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI 签名版本：`v2` / `v3` / `v4`（优先于 Profile 中的 `signature_version`） |
 | `ALIBABA_CLOUD_CREDENTIALS_URI` | CredentialsURI 地址 |
 | `ALIBABA_CLOUD_OIDC_PROVIDER_ARN` | OIDC Provider ARN |
 | `ALIBABA_CLOUD_OIDC_TOKEN_FILE` | OIDC Token 文件 |

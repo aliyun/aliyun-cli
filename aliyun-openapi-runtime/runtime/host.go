@@ -67,7 +67,7 @@ type Settings struct {
 	UserAgent string
 
 	// SignatureVersion selects the OpenAPI signature version for this call.
-	// Empty keeps ACS3 / legacy behavior; "v4" enables ACS4 via the POP gateway SPI.
+	// Empty/v3 keep ACS3; v2 sets SignatureAlgorithm="v2"; v4 enables ACS4 via POP.
 	SignatureVersion string
 }
 

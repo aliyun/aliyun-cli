@@ -46,8 +46,29 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 )
 
-// SignatureVersionV4 enables ACS4-HMAC-SHA256 via the POP gateway SPI.
-const SignatureVersionV4 = "v4"
+// Supported signature_version values forwarded from the host settings.
+const (
+	// SignatureVersionV2 maps to conf.SignatureAlgorithm = "v2" (legacy RPC signing).
+	SignatureVersionV2 = "v2"
+	// SignatureVersionV3 is the default ACS3 path; no SignatureVersion/SignatureAlgorithm override.
+	SignatureVersionV3 = "v3"
+	// SignatureVersionV4 enables ACS4-HMAC-SHA256 via the POP gateway SPI.
+	SignatureVersionV4 = "v4"
+)
+
+func normalizeSignatureVersion(v string) (string, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "", nil
+	}
+	switch strings.ToLower(v) {
+	case SignatureVersionV2, SignatureVersionV3, SignatureVersionV4:
+		return strings.ToLower(v), nil
+	default:
+		return "", fmt.Errorf("runtime: unsupported signature_version %q; supported values: %q, %q, %q",
+			v, SignatureVersionV2, SignatureVersionV3, SignatureVersionV4)
+	}
+}
 
 // Executor runs one API call end-to-end.
 type Executor interface {
@@ -111,7 +132,7 @@ type ExecContext struct {
 	SkipSecureVerify bool
 	CLIVersion       string
 	UserAgent        string // host suffixes only; composed with base in send
-	// SignatureVersion selects ACS4 ("v4") when set; empty keeps ACS3 / legacy.
+	// SignatureVersion is v2 / v3 / v4 (or empty for default ACS3).
 	SignatureVersion string
 
 	// MetadataPluginName and MetadataPluginVersion identify the user/override metadata package that supplied this API.
@@ -560,19 +581,20 @@ func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) 
 	}
 
 	conf := &openapiClient.Config{Credential: ec.Credential}
-	signVersion := strings.TrimSpace(ec.SignatureVersion)
-	useV4 := strings.EqualFold(signVersion, SignatureVersionV4)
-	if signVersion != "" && !useV4 {
-		return nil, fmt.Errorf("runtime: unsupported signature_version %q; only %q is supported", signVersion, SignatureVersionV4)
+	signVersion, err := normalizeSignatureVersion(ec.SignatureVersion)
+	if err != nil {
+		return nil, err
 	}
 	// Legacy RPC signing (e.g. FNF) takes precedence over signature V4: CallApi
 	// routes on SignatureVersion first, so never set v4 for these products.
+	// Explicit v2 uses the historical SignatureAlgorithm="v2" mapping.
+	useV4 := false
 	legacy := usesLegacySignature(ec.API.ProductCode)
-	if legacy {
+	if legacy || signVersion == SignatureVersionV2 {
 		conf.SignatureAlgorithm = tea.String("v2")
-		useV4 = false
-	} else if useV4 {
+	} else if signVersion == SignatureVersionV4 {
 		conf.SignatureVersion = tea.String(SignatureVersionV4)
+		useV4 = true
 	}
 	if ec.Region != "" {
 		conf.RegionId = tea.String(ec.Region)

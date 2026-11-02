@@ -23,6 +23,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestNormalizeSignatureVersion(t *testing.T) {
+	got, err := NormalizeSignatureVersion("")
+	require.NoError(t, err)
+	assert.Empty(t, got)
+
+	got, err = NormalizeSignatureVersion(" V2 ")
+	require.NoError(t, err)
+	assert.Equal(t, SignatureVersionV2, got)
+
+	got, err = NormalizeSignatureVersion("v3")
+	require.NoError(t, err)
+	assert.Equal(t, SignatureVersionV3, got)
+
+	got, err = NormalizeSignatureVersion("V4")
+	require.NoError(t, err)
+	assert.Equal(t, SignatureVersionV4, got)
+
+	_, err = NormalizeSignatureVersion("v1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported signature_version")
+}
+
 func TestEffectiveSignatureVersionPrecedence(t *testing.T) {
 	t.Setenv(EnvSignatureVersion, "")
 	p := &Profile{SignatureVersion: SignatureVersionV4}
@@ -56,9 +78,13 @@ func TestUseSignatureV4(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, ok)
 
-	_, err = (&Profile{SignatureVersion: "v3"}).UseSignatureV4("")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported signature_version")
+	ok, err = (&Profile{SignatureVersion: "v3"}).UseSignatureV4("")
+	require.NoError(t, err)
+	assert.False(t, ok)
+
+	ok, err = (&Profile{SignatureVersion: "v2"}).UseSignatureV4("")
+	require.NoError(t, err)
+	assert.False(t, ok)
 
 	t.Setenv(EnvSignatureVersion, "v4")
 	ok, err = (&Profile{SignatureVersion: "v3"}).UseSignatureV4("")
@@ -100,7 +126,7 @@ func TestEffectiveSignatureVersionNilProfile(t *testing.T) {
 }
 
 func TestUseSignatureV4UnsupportedEnv(t *testing.T) {
-	t.Setenv(EnvSignatureVersion, "v2")
+	t.Setenv(EnvSignatureVersion, "v1")
 	_, err := (&Profile{}).UseSignatureV4("")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported signature_version")

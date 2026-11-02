@@ -154,11 +154,10 @@ func doConfigureSet(ctx *cli.Context) error {
 	if f := CliSignVersionFlag(flags); f != nil && f.IsAssigned() {
 		profile.SignatureVersion = f.GetStringOrDefault(profile.SignatureVersion)
 	}
-	if v := strings.TrimSpace(profile.SignatureVersion); v != "" && !strings.EqualFold(v, SignatureVersionV4) {
-		return fmt.Errorf("fail to set configuration: unsupported signature_version %q; only %q is supported", v, SignatureVersionV4)
-	}
-	if strings.EqualFold(strings.TrimSpace(profile.SignatureVersion), SignatureVersionV4) {
-		profile.SignatureVersion = SignatureVersionV4
+	if normalized, err := NormalizeSignatureVersion(profile.SignatureVersion); err != nil {
+		return fmt.Errorf("fail to set configuration: %w", err)
+	} else {
+		profile.SignatureVersion = normalized
 	}
 
 	if autoPluginInstallFlag := AutoPluginInstallFlag(flags); autoPluginInstallFlag != nil && autoPluginInstallFlag.IsAssigned() {

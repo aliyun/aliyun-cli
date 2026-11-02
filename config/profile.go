@@ -138,7 +138,7 @@ type Profile struct {
 	AutoPluginInstallEnablePre bool             `json:"auto_plugin_install_enable_pre,omitempty"` // install latest version (including pre-release) when true
 	BearerTokenValue           string           `json:"bearer_token,omitempty"`
 	BearerTokenHeaderKey       string           `json:"bearer_token_header_key,omitempty"`
-	SignatureVersion           string           `json:"signature_version,omitempty"` // empty (default ACS3) or "v4"
+	SignatureVersion           string           `json:"signature_version,omitempty"` // empty/v3 (ACS3), v2 (legacy), or v4
 	parent                     *Configuration   //`json:"-"`
 }
 
