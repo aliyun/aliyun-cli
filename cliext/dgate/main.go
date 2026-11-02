@@ -16,21 +16,9 @@ func NewDgateCommand() *cli.Command {
 		),
 		Usage:             "aliyun dgate [command] [args...]",
 		EnableUnknownFlag: true,
-		KeepArgs:          true,
+		RawArgs:           true,
 		SkipDefaultHelp:   true,
 		Run: func(ctx *cli.Context, args []string) error {
-			if ctx.IsHelp() {
-				hasHelp := false
-				for _, a := range args {
-					if a == "--help" || a == "-h" {
-						hasHelp = true
-						break
-					}
-				}
-				if !hasHelp {
-					args = append(args, "--help")
-				}
-			}
 			if err := NewContext(ctx).Run(args); err != nil {
 				if exitErr, ok := err.(*ExitError); ok {
 					cli.Exit(exitErr.Code)

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -146,7 +147,11 @@ func TestExternalBinarySkipsDownload(t *testing.T) {
 func TestUpdateFailureDoesNotBlock(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(execPathEnv, "")
-	if err := os.WriteFile(filepath.Join(dir, "dgate"), []byte("old"), 0755); err != nil {
+	installed := "dgate"
+	if runtime.GOOS == "windows" {
+		installed += ".exe"
+	}
+	if err := os.WriteFile(filepath.Join(dir, installed), []byte("old"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, ".dgate_version"), []byte("0.6.1"), 0644); err != nil {
