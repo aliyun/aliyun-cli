@@ -511,3 +511,163 @@ func TestInstallRenameFallback(t *testing.T) {
 		t.Fatalf("err %v", err)
 	}
 }
+
+type errReader struct{}
+
+func (errReader) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestRunSurfacesInitAndInstallErrors(t *testing.T) {
+	t.Setenv(execPathEnv, "")
+	prevOS := runtimeGOOSFunc
+	prevArch := runtimeGOARCHFunc
+	runtimeGOOSFunc = func() string { return "js" }
+	runtimeGOARCHFunc = func() string { return "wasm" }
+	t.Cleanup(func() {
+		runtimeGOOSFunc = prevOS
+		runtimeGOARCHFunc = prevArch
+	})
+	if err := NewContext(nil).Run(nil); err == nil || !strings.Contains(err.Error(), "not supported") {
+		t.Fatalf("init err %v", err)
+	}
+
+	runtimeGOOSFunc = func() string { return "linux" }
+	runtimeGOARCHFunc = func() string { return "amd64" }
+	t.Setenv(execPathEnv, filepath.Join(t.TempDir(), "missing"))
+	if err := NewContext(nil).Run(nil); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("install err %v", err)
+	}
+}
+
+func TestInstallPermissionAndDirectoryErrors(t *testing.T) {
+	prevOS := runtimeGOOSFunc
+	prevDL := downloadBinaryFunc
+	prevHTTP := httpDoFunc
+	t.Cleanup(func() {
+		runtimeGOOSFunc = prevOS
+		downloadBinaryFunc = prevDL
+		httpDoFunc = prevHTTP
+	})
+	runtimeGOOSFunc = func() string { return "linux" }
+	downloadBinaryFunc = func(string, string) error { return nil }
+	httpDoFunc = func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader(""))}, nil
+	}
+
+	c := NewContext(nil)
+	c.versionRemote = "1.2.3"
+	c.execFilePath = filepath.Join(t.TempDir(), "dgate")
+	if err := c.install(); err == nil || !strings.Contains(err.Error(), "exec permission") {
+		t.Fatalf("chmod err %v", err)
+	}
+
+	runtimeGOOSFunc = func() string { return "windows" }
+	parent := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(parent, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	c.execFilePath = filepath.Join(parent, "dgate.exe")
+	if err := c.install(); err == nil {
+		t.Fatal("expected mkdir failure")
+	}
+}
+
+func TestVersionCacheUnreadable(t *testing.T) {
+	dir := t.TempDir()
+	cache := filepath.Join(dir, "cache")
+	if err := os.Mkdir(cache, 0755); err != nil {
+		t.Fatal(err)
+	}
+	c := NewContext(nil)
+	c.checkVersionCacheFilePath = cache
+	if !c.needCheckVersion() {
+		t.Fatal("unreadable cache should check")
+	}
+}
+
+func TestRemoteAndDownloadFailureBranches(t *testing.T) {
+	prev := httpDoFunc
+	t.Cleanup(func() { httpDoFunc = prev })
+	httpDoFunc = func(*http.Request) (*http.Response, error) { return nil, io.ErrUnexpectedEOF }
+	if _, err := getRemoteVersion("https://example.test/latest.txt"); err == nil {
+		t.Fatal("expected transport error")
+	}
+	if err := verifySHA256("https://example.test/sum", filepath.Join(t.TempDir(), "missing")); err == nil {
+		t.Fatal("expected checksum transport error")
+	}
+
+	httpDoFunc = func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(errReader{})}, nil
+	}
+	if _, err := getRemoteVersion("https://example.test/latest.txt"); err == nil {
+		t.Fatal("expected body error")
+	}
+	file := filepath.Join(t.TempDir(), "bin")
+	if err := os.WriteFile(file, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifySHA256("https://example.test/sum", file); err == nil {
+		t.Fatal("expected checksum body error")
+	}
+
+	httpDoFunc = func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("abc\n"))}, nil
+	}
+	if err := verifySHA256("https://example.test/sum", filepath.Join(t.TempDir(), "absent")); err == nil {
+		t.Fatal("expected missing file")
+	}
+	dir := t.TempDir()
+	if err := verifySHA256("https://example.test/sum", dir); err == nil {
+		t.Fatal("expected directory read error")
+	}
+
+	if err := downloadBinary("http://\x7f", filepath.Join(t.TempDir(), "out")); err == nil {
+		t.Fatal("expected bad download url")
+	}
+	prevClient := httpClient
+	t.Cleanup(func() { httpClient = prevClient })
+	httpClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, io.ErrUnexpectedEOF
+	})}
+	if err := downloadBinary("https://example.test/dgate", filepath.Join(t.TempDir(), "out")); err == nil {
+		t.Fatal("expected download transport error")
+	}
+	httpClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(errReader{}), Header: make(http.Header)}, nil
+	})}
+	if err := downloadBinary("https://example.test/dgate", filepath.Join(t.TempDir(), "out")); err == nil {
+		t.Fatal("expected download body error")
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("hi"))
+	}))
+	t.Cleanup(srv.Close)
+	if err := downloadBinary(srv.URL, t.TempDir()); err == nil {
+		t.Fatal("expected create failure")
+	}
+}
+
+func TestDownloadRejectsOversizedBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf := make([]byte, 1<<20)
+		left := maxDownloadSize + 1
+		for left > 0 {
+			n := len(buf)
+			if left < n {
+				n = left
+			}
+			if _, err := w.Write(buf[:n]); err != nil {
+				return
+			}
+			left -= n
+		}
+	}))
+	t.Cleanup(srv.Close)
+	err := downloadBinary(srv.URL, filepath.Join(t.TempDir(), "big"))
+	if err == nil || !strings.Contains(err.Error(), "exceeds limit") {
+		t.Fatalf("err %v", err)
+	}
+}
