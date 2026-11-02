@@ -63,6 +63,10 @@ type PricingClient struct {
 }
 
 func NewPricingClient(options PricingClientOptions) (*PricingClient, error) {
+	return newPricingClient(options, openapi.NewClient)
+}
+
+func newPricingClient(options PricingClientOptions, createClient func(*openapi.Config) (*openapi.Client, error)) (*PricingClient, error) {
 	if options.Credential == nil {
 		return nil, fmt.Errorf("price mode requires resolved credentials; run `aliyun configure` to configure credentials")
 	}
@@ -88,7 +92,7 @@ func NewPricingClient(options PricingClientOptions) (*PricingClient, error) {
 	}
 	// Own the retry boundary: SDK v2's default fallback also retries 4xx.
 	conf.RetryOptions = &dara.RetryOptions{Retryable: false}
-	client, err := openapi.NewClient(conf)
+	client, err := createClient(conf)
 	if err != nil {
 		return nil, err
 	}
@@ -141,16 +145,8 @@ func (c *PricingClient) Quote(request PricingRequest) (string, error) {
 	if strings.TrimSpace(request.Language) == "" {
 		request.Language = "en"
 	}
-	// Validate before entering the SDK, whose JSON stringifier ignores marshal
-	// errors. A struct also needs conversion to a JSON object for the SDK.
-	raw, err := json.Marshal(request)
+	body, err := pricingRequestBody(request)
 	if err != nil {
-		return "", fmt.Errorf("encode pricing request: %w", err)
-	}
-	var body map[string]any
-	decoder := json.NewDecoder(strings.NewReader(string(raw)))
-	decoder.UseNumber()
-	if err := decoder.Decode(&body); err != nil {
 		return "", err
 	}
 	out, err := c.call("GetApiPrice", "POST", pricingQuotePath, nil, body)
@@ -169,6 +165,23 @@ func (c *PricingClient) Quote(request PricingRequest) (string, error) {
 		}
 	}
 	return "", err
+}
+
+// pricingRequestBody validates JSON before entering the SDK, whose JSON
+// stringifier ignores marshal errors, and converts structs to JSON objects
+// without rounding integer parameters through float64.
+func pricingRequestBody(request any) (map[string]any, error) {
+	raw, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("encode pricing request: %w", err)
+	}
+	var body map[string]any
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&body); err != nil {
+		return nil, err
+	}
+	return body, nil
 }
 
 // ListSupportedAPIs returns one page; the CLI owns aggregation and filtering.

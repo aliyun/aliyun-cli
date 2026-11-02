@@ -16,6 +16,7 @@ package runtime
 
 import (
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -23,7 +24,35 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 )
+
+func TestPricingClientPreservesSDKInitializationError(t *testing.T) {
+	want := errors.New("SDK initialization failed")
+	credential := pricingFixtureContext().Credential
+	calls := 0
+	client, err := newPricingClient(PricingClientOptions{Credential: credential}, func(conf *openapi.Config) (*openapi.Client, error) {
+		calls++
+		if conf.Credential != credential {
+			t.Error("SDK constructor did not receive the resolved credential")
+		}
+		return nil, want
+	})
+	if !errors.Is(err, want) || client != nil || calls != 1 {
+		t.Fatalf("SDK initialization failure must propagate without a usable client: client=%v err=%v calls=%d", client, err, calls)
+	}
+}
+
+func TestPricingRequestBodyRequiresJSONObject(t *testing.T) {
+	for _, value := range []any{[]int{1}, "not an object", true, 42} {
+		body, err := pricingRequestBody(value)
+		var mismatch *json.UnmarshalTypeError
+		if !errors.As(err, &mismatch) || body != nil {
+			t.Fatalf("non-object request must preserve the JSON type error: body=%#v err=%v", body, err)
+		}
+	}
+}
 
 func TestPricingClientListPreservesPaginationTokens(t *testing.T) {
 	const token = "next+a/b=?&"
