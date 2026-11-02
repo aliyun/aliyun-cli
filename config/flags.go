@@ -719,8 +719,8 @@ func CliSignVersionFlag(fs *cli.FlagSet) *cli.Flag {
 // `aliyun configure set` (persists profile.signature_version).
 func NewCliSignVersionFlag() *cli.Flag {
 	return &cli.Flag{
-		Category:     "caller",
-		Name:         CliSignVersionFlagName,
+		Category: "caller",
+		Name:     CliSignVersionFlagName,
 		// AssignedDefault allows `--cli-sign-version` / `--cli-sign-version=` to
 		// clear the effective version (AssignedOnce rejects empty values).
 		AssignedMode: cli.AssignedDefault,
