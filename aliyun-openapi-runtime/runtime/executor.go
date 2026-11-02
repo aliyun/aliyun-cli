@@ -565,10 +565,14 @@ func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) 
 	if signVersion != "" && !useV4 {
 		return nil, fmt.Errorf("runtime: unsupported signature_version %q; only %q is supported", signVersion, SignatureVersionV4)
 	}
-	if useV4 {
-		conf.SignatureVersion = tea.String(SignatureVersionV4)
-	} else if usesLegacySignature(ec.API.ProductCode) {
+	// Legacy RPC signing (e.g. FNF) takes precedence over signature V4: CallApi
+	// routes on SignatureVersion first, so never set v4 for these products.
+	legacy := usesLegacySignature(ec.API.ProductCode)
+	if legacy {
 		conf.SignatureAlgorithm = tea.String("v2")
+		useV4 = false
+	} else if useV4 {
+		conf.SignatureVersion = tea.String(SignatureVersionV4)
 	}
 	if ec.Region != "" {
 		conf.RegionId = tea.String(ec.Region)

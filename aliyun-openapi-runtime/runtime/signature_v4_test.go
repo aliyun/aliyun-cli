@@ -205,3 +205,37 @@ func TestPrepareCallSignatureV4EmptyMeansLegacy(t *testing.T) {
 		t.Fatalf("unexpected SignatureVersion %q", tea.StringValue(call.client.SignatureVersion))
 	}
 }
+
+func TestPrepareCallLegacySignatureOverridesV4(t *testing.T) {
+	ec := &ExecContext{
+		API: &meta.API{
+			ProductCode: "fnf",
+			Name:        "ListFlows",
+			Version:     "2019-03-15",
+		},
+		Credential:       staticAKCredential(t),
+		SignatureVersion: SignatureVersionV4,
+		Region:           "cn-hangzhou",
+	}
+	req := &AssembledRequest{
+		Action:   "ListFlows",
+		Version:  "2019-03-15",
+		Method:   "GET",
+		Protocol: "HTTPS",
+		Style:    "RPC",
+		Endpoint: "fnf.cn-hangzhou.aliyuncs.com",
+	}
+	call, err := prepareCall(ec, req)
+	if err != nil {
+		t.Fatalf("prepareCall: %v", err)
+	}
+	if tea.StringValue(call.client.SignatureAlgorithm) != "v2" {
+		t.Fatalf("SignatureAlgorithm = %q, want v2", tea.StringValue(call.client.SignatureAlgorithm))
+	}
+	if call.client.SignatureVersion != nil && tea.StringValue(call.client.SignatureVersion) != "" {
+		t.Fatalf("legacy product must not set SignatureVersion, got %q", tea.StringValue(call.client.SignatureVersion))
+	}
+	if call.client.Spi != nil {
+		t.Fatalf("legacy product must not install POP/SLS gateway, got %T", call.client.Spi)
+	}
+}
