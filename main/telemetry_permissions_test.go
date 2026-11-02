@@ -85,6 +85,9 @@ func TestMainTelemetryWritePermissionFailurePreservesCommand(t *testing.T) {
 					denyTelemetryWrites(t, deniedPath)
 					verifyTelemetryWriteDenied(t, deniedPath)
 				}
+				if scenario == "cannot_create_cache_directory" {
+					verifyTelemetryDirectoryCreationDenied(t, filepath.Join(dir, telemetry.CacheDirName))
+				}
 				if scenario == "cannot_publish_instance_id" {
 					// Acquiring the existing lock must still work: this case
 					// exercises failure to create the ID's temporary file.
@@ -174,16 +177,7 @@ func TestMainTelemetryMissingUncreatableConfigDirectoryPreservesStartupFailure(t
 			denyTelemetryWrites(t, home)
 			require.NoDirExists(t, dir)
 
-			// Verify directory creation itself is denied, including on Windows
-			// where creating a file and a subdirectory use different ACL bits.
-			err := os.Mkdir(dir, 0755)
-			if err == nil {
-				require.NoError(t, os.Remove(dir))
-				t.Skip("current user or filesystem bypasses directory creation restrictions")
-			}
-			require.ErrorIs(t, err, os.ErrPermission)
-			var pathErr *os.PathError
-			require.ErrorAs(t, err, &pathErr)
+			pathErr := verifyTelemetryDirectoryCreationDenied(t, dir)
 
 			// GetConfigPath currently panics before telemetry.Begin. Preserve
 			// this existing failure in both modes, including the real exit code.
@@ -207,6 +201,22 @@ func TestMainTelemetryMissingUncreatableConfigDirectoryPreservesStartupFailure(t
 			require.Empty(t, entries, "failed startup must leave no config or telemetry files")
 		})
 	}
+}
+
+func verifyTelemetryDirectoryCreationDenied(t *testing.T, path string) *os.PathError {
+	t.Helper()
+	// A failed file-write probe does not prove mkdir is denied on Windows.
+	// Probe the actual directory before running a scenario that requires its
+	// creation to fail, just as we check effective file-write restrictions.
+	err := os.Mkdir(path, 0755)
+	if err == nil {
+		require.NoError(t, os.Remove(path))
+		t.Skip("current user or filesystem bypasses directory creation restrictions")
+	}
+	require.ErrorIs(t, err, os.ErrPermission)
+	var pathErr *os.PathError
+	require.ErrorAs(t, err, &pathErr)
+	return pathErr
 }
 
 func verifyTelemetryWriteDenied(t *testing.T, path string) {
