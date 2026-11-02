@@ -1,9 +1,13 @@
 package telemetry
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestAlibabaCloudEnvironmentNamesExcludeValues(t *testing.T) {
@@ -103,4 +107,40 @@ func stringSliceContains(values []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func TestEnvironmentNamesAreBoundedSortedAndExcludeValues(t *testing.T) {
+	for i := 0; i < maxEnvironmentNames+10; i++ {
+		t.Setenv(fmt.Sprintf("ALIBABA_CLOUD_TEST_%03d", i), "private-secret")
+	}
+	names := alibabaCloudEnvironmentNames()
+	require.Len(t, names, maxEnvironmentNames)
+	require.True(t, sort.StringsAreSorted(names))
+	require.NotContains(t, names, "private-secret")
+	require.NotContains(t, names, fmt.Sprintf("ALIBABA_CLOUD_TEST_%03d", maxEnvironmentNames+9))
+}
+
+func TestShellAndLocaleFallbacks(t *testing.T) {
+	t.Setenv("SHELL", "")
+	t.Setenv("COMSPEC", "cmd.exe")
+	require.Equal(t, "cmd", detectShellType())
+	for _, key := range []string{"LC_ALL", "LC_MESSAGES", "LANG"} {
+		t.Setenv(key, "unsafe/private/value")
+	}
+	require.Empty(t, detectLocale(), "unsafe locale values must not be recorded")
+}
+
+func TestReadLinuxDistroFallbackAndMalformedLines(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing")
+	name, id, version := readLinuxDistro(missing)
+	require.Empty(t, name)
+	require.Empty(t, id)
+	require.Empty(t, version)
+	path := filepath.Join(dir, "os-release")
+	require.NoError(t, os.WriteFile(path, []byte("# comment without equals\nNAME='Test Linux'\nID=test\nVERSION_ID=1\n"), 0600))
+	name, id, version = readLinuxDistro(missing, path)
+	require.Equal(t, "Test Linux", name)
+	require.Equal(t, "test", id)
+	require.Equal(t, "1", version)
 }
