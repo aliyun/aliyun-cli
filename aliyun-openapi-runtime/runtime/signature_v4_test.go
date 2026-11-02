@@ -274,6 +274,25 @@ func TestPrepareCallSignatureV4EmptyMeansLegacy(t *testing.T) {
 	}
 }
 
+func TestExecuteSSERejectsSignatureV2AndV4(t *testing.T) {
+	for _, version := range []string{SignatureVersionV2, SignatureVersionV4} {
+		err := NewExecutor().ExecuteSSE(&ExecContext{
+			API: &meta.API{
+				ProductCode: "Ecs",
+				Name:        "DescribeInstances",
+				Version:     "2014-05-26",
+				IsSSE:       true,
+			},
+			Credential:       staticAKCredential(t),
+			SignatureVersion: version,
+			Region:           "cn-hangzhou",
+		}, nil)
+		if err == nil || err.Error() != "runtime: SSE API does not support signature version v2 or v4" {
+			t.Fatalf("ExecuteSSE(signature=%s) error = %v", version, err)
+		}
+	}
+}
+
 func TestPrepareCallLegacySignatureOverridesV4(t *testing.T) {
 	ec := &ExecContext{
 		API: &meta.API{

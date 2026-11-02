@@ -26,9 +26,17 @@ import (
 type SSEEvent json.RawMessage
 
 func sendSSE(ec *ExecContext, req *AssembledRequest, yield func(SSEEvent)) error {
-	// CallSSEApi does not dispatch to the SDK's legacy v2 signer.
-	if usesLegacySignature(ec.API.ProductCode) {
-		return fmt.Errorf("runtime: SSE does not support signature algorithm v2")
+	// CallSSEApi only knows ACS3 signing. SignatureAlgorithm="v2" is treated as an
+	// algorithm name (producing empty signatures), and SignatureVersion="v4" does not
+	// go through the POP/SLS SPI path. Reject both until the SDK supports them.
+	signVersion, err := normalizeSignatureVersion(ec.SignatureVersion)
+	if err != nil {
+		return err
+	}
+	if usesLegacySignature(ec.API.ProductCode) ||
+		signVersion == SignatureVersionV2 ||
+		signVersion == SignatureVersionV4 {
+		return fmt.Errorf("runtime: SSE API does not support signature version v2 or v4")
 	}
 	call, err := prepareCall(ec, req)
 	if err != nil {
