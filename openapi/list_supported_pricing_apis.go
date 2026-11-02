@@ -19,10 +19,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 )
 
 // Cross-product enumeration: asks CloudControl ListSupportedPricingApis
@@ -180,7 +180,7 @@ func invokeListSupportedPricingApis(ctx *cli.Context, profile *config.Profile) (
 		return "", fmt.Errorf("init list-supported-pricing-apis client failed: %s", err)
 	}
 	return paginateList(func(nextToken string) ([]byte, error) {
-		request := requests.NewCommonRequest()
+		request := legacyapi.NewRequest()
 		request.Product = estimateCostProductCode
 		request.Version = estimateCostApiVersion
 		request.Method = "GET"
@@ -198,7 +198,7 @@ func invokeListSupportedPricingApis(ctx *cli.Context, profile *config.Profile) (
 		}
 		request.SetContentType("application/json")
 
-		resp, err := client.ProcessCommonRequest(request)
+		resp, err := client.Send(request)
 		if err != nil {
 			return nil, err
 		}

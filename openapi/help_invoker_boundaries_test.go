@@ -8,11 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
@@ -87,8 +85,7 @@ func TestLegacyInvokerClientSettingsAndUserAgent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 3*time.Second, client.GetReadTimeout())
 	require.Equal(t, 4*time.Second, client.GetConnectTimeout())
-	require.True(t, client.GetConfig().AutoRetry)
-	require.Equal(t, 2, client.GetConfig().MaxRetryTime)
+	require.Equal(t, 2, client.RetryCount)
 	profile.RegionId = ""
 	_, err = GetClient(profile, ctx)
 	require.ErrorContains(t, err, "RegionId is empty")
@@ -105,7 +102,7 @@ func TestLegacyInvokerClientSettingsAndUserAgent(t *testing.T) {
 		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
 	}))
 	invoker.request.ApiName = "DescribeRegions"
-	_, err = invoker.client.ProcessCommonRequest(invoker.request)
+	_, err = invoker.client.Send(invoker.request)
 	require.NoError(t, err)
 	for _, segment := range []string{"vendor/local-vendor", "EnvAgent/1.0", "FlagAgent/2.0"} {
 		require.Contains(t, userAgent, segment)
@@ -113,15 +110,15 @@ func TestLegacyInvokerClientSettingsAndUserAgent(t *testing.T) {
 }
 
 type boundaryInvoker struct {
-	request *requests.CommonRequest
+	request *legacyapi.Request
 	bodies  []string
 	err     error
 }
 
-func (*boundaryInvoker) getClient() *sdk.Client                { return nil }
-func (i *boundaryInvoker) getRequest() *requests.CommonRequest { return i.request }
-func (*boundaryInvoker) Prepare(*cli.Context) error            { return nil }
-func (i *boundaryInvoker) Call() (*responses.CommonResponse, error) {
+func (*boundaryInvoker) getClient() *legacyapi.Client     { return nil }
+func (i *boundaryInvoker) getRequest() *legacyapi.Request { return i.request }
+func (*boundaryInvoker) Prepare(*cli.Context) error       { return nil }
+func (i *boundaryInvoker) Call() (*legacyapi.Response, error) {
 	if i.err != nil {
 		return nil, i.err
 	}
@@ -129,13 +126,13 @@ func (i *boundaryInvoker) Call() (*responses.CommonResponse, error) {
 	if len(i.bodies) > 1 {
 		i.bodies = i.bodies[1:]
 	}
-	response := responses.NewCommonResponse()
-	err := responses.Unmarshal(response, &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body))}, "JSON")
+	response := legacyapi.NewResponse()
+	err := legacyapi.ReadResponse(response, &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body))})
 	return response, err
 }
 
 func TestPagerCallWithMergesPagesAndPropagatesInvalidResponses(t *testing.T) {
-	invoker := &boundaryInvoker{request: requests.NewCommonRequest(), bodies: []string{
+	invoker := &boundaryInvoker{request: legacyapi.NewRequest(), bodies: []string{
 		`{"PageNumber":1,"PageSize":1,"TotalCount":2,"Items":[1]}`,
 		`{"PageNumber":2,"PageSize":1,"TotalCount":2,"Items":[2]}`,
 	}}

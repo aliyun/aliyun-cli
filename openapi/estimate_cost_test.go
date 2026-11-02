@@ -25,18 +25,17 @@ import (
 	"testing"
 
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
-	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestBuildEstimateCostParameters(t *testing.T) {
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.QueryParams["InstanceType"] = "ecs.g6.large"
 	req.QueryParams["SystemDisk.Category"] = "cloud_essd"
 	req.QueryParams["empty"] = ""
@@ -62,7 +61,7 @@ func TestBuildEstimateCostParametersRegionNotOverridden(t *testing.T) {
 	// RegionId in the body / query wins over the request RegionId fallback —
 	// otherwise users that explicitly switch region via --RegionId would get
 	// quoted against their default profile region by surprise.
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.QueryParams["RegionId"] = "cn-beijing"
 	req.RegionId = "cn-hangzhou"
 
@@ -74,7 +73,7 @@ func TestBuildEstimateCostParametersRegionNotOverridden(t *testing.T) {
 func TestBuildEstimateCostParametersBadBody(t *testing.T) {
 	// --body that isn't a JSON object can't be merged into pricing parameters —
 	// fail with an actionable tip rather than silently dropping the body.
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.SetContent([]byte(`not-json`))
 
 	_, err := buildEstimateCostParameters(req)
@@ -84,7 +83,7 @@ func TestBuildEstimateCostParametersBadBody(t *testing.T) {
 
 func TestResolveEstimateCostApiName(t *testing.T) {
 	// RPC style: api name already on the request
-	rpc := &RpcInvoker{BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()}}
+	rpc := &RpcInvoker{BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()}}
 	rpc.request.ApiName = "RunInstances"
 	name, err := resolveEstimateCostApiName(nil, rpc)
 	assert.Nil(t, err)
@@ -92,7 +91,7 @@ func TestResolveEstimateCostApiName(t *testing.T) {
 
 	// RESTful style with resolved api metadata
 	restful := &RestfulInvoker{
-		BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()},
+		BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()},
 		api:          &canonicalmeta.API{Name: "DescribeClusters"},
 	}
 	name, err = resolveEstimateCostApiName(nil, restful)
@@ -106,7 +105,7 @@ func TestResolveEstimateCostApiName(t *testing.T) {
 	AddFlags(ctx.Flags())
 	library := NewLibrary(ctx.Stdout(), "en")
 	bare := &RestfulInvoker{
-		BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()},
+		BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()},
 		method:       "GET",
 		path:         "/no/such/path",
 	}
@@ -152,7 +151,7 @@ func TestResolveEstimateCostApiNameUsesProductDefaultVersionForPathLookup(t *tes
 		},
 	}
 
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.Product = product.Code
 	req.Version = "2099-01-01"
 	restful := &RestfulInvoker{
@@ -267,7 +266,7 @@ func TestTranslateEstimateCostErrorPricingNotSupported(t *testing.T) {
 	// "The quote cannot be produced" case — must be turned into the friendly
 	// hint, not a raw error string with the upstream Code embedded.
 	body := `{"RequestId":"req-pns","Code":"PricingNotSupported","Message":"no pricing","HostId":"host"}`
-	serverErr := sdkerrors.NewServerError(404, body, "")
+	serverErr := legacyapi.NewServerError(404, body, "")
 	err := translateEstimateCostError("Ecs", "2014-05-26", "DescribeRegions", serverErr)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "no pricing information for Ecs/2014-05-26/DescribeRegions")
@@ -286,7 +285,7 @@ func TestTranslateEstimateCostErrorLeavesPricingNotRequiredAlone(t *testing.T) {
 	// reaches the error translator; if it ever did, it must not be dressed up
 	// as one of the failure cases.
 	body := `{"RequestId":"req-pnr","Code":"PricingNotRequired","Message":"free","HostId":"host"}`
-	serverErr := sdkerrors.NewServerError(400, body, "")
+	serverErr := legacyapi.NewServerError(400, body, "")
 	err := translateEstimateCostError("hbr", "2017-09-08", "EnableBackupPlan", serverErr)
 	assert.Equal(t, serverErr, err)
 }
@@ -412,7 +411,7 @@ func TestMainEstimateCostMessageFollowsProfileLanguage(t *testing.T) {
 
 func TestCostIrrelevantFromErrorRecognisesPricingNotRequired(t *testing.T) {
 	body := `{"RequestId":"req-pnr","Code":"PricingNotRequired","Message":"该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。","HostId":"host"}`
-	serverErr := sdkerrors.NewServerError(400, body, "")
+	serverErr := legacyapi.NewServerError(400, body, "")
 
 	out, isCostIrrelevant := costIrrelevantFromError("hbr", "2017-09-08", "EnableBackupPlan", serverErr, "")
 	assert.True(t, isCostIrrelevant)
@@ -428,7 +427,7 @@ func TestCostIrrelevantFromErrorRecognisesPricingNotRequired(t *testing.T) {
 func TestCostIrrelevantFromErrorPassesOtherErrorsThrough(t *testing.T) {
 	// Anything that is not PricingNotRequired must stay on the error path —
 	// especially PricingNotSupported, which means the opposite thing.
-	notSupported := sdkerrors.NewServerError(404,
+	notSupported := legacyapi.NewServerError(404,
 		`{"RequestId":"r","Code":"PricingNotSupported","Message":"no pricing","HostId":"h"}`, "")
 	_, isCostIrrelevant := costIrrelevantFromError("Ecs", "2014-05-26", "DescribeRegions", notSupported, "")
 	assert.False(t, isCostIrrelevant)
@@ -452,7 +451,7 @@ func TestTranslateEstimateCostErrorInvalidParameter(t *testing.T) {
 	// objected to. Tip is delivered via cli.ErrorWithTip.GetTip, not the
 	// Error() string itself — Error() preserves the wrapped error verbatim.
 	body := `{"RequestId":"req-ip","Code":"InvalidParameter","Message":"bad popVersion","HostId":"host"}`
-	serverErr := sdkerrors.NewServerError(400, body, "")
+	serverErr := legacyapi.NewServerError(400, body, "")
 	err := translateEstimateCostError("Ecs", "2014-05-26", "RunInstances", serverErr)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "InvalidParameter")
@@ -466,7 +465,7 @@ func TestTranslateEstimateCostErrorUnknownServerCode(t *testing.T) {
 	// random new ones) fall through unchanged — better the user sees the
 	// upstream code+message than a vague "pricing failed" wrapper.
 	body := `{"RequestId":"req-th","Code":"Throttling.User","Message":"slow down","HostId":"host"}`
-	serverErr := sdkerrors.NewServerError(429, body, "")
+	serverErr := legacyapi.NewServerError(429, body, "")
 	got := translateEstimateCostError("Ecs", "2014-05-26", "RunInstances", serverErr)
 	assert.Equal(t, serverErr, got)
 }

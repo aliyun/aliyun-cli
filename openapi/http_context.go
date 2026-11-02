@@ -82,7 +82,7 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	} else if product.LocationServiceCode == "" {
 		// Products without a location service resolve their endpoint from the
 		// static regional endpoint table, so a nil sdk client is safe here.
-		ep, e := product.GetEndpointWithType(cp.RegionId, nil, cp.EndpointType)
+		ep, e := product.GetEndpointWithType(cp.RegionId, cp.EndpointType)
 		if e != nil {
 			// An explicit --endpoint is applied as a request-time override, so a
 			// failed table lookup is only fatal when no override is present.

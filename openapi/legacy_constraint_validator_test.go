@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 )
 
 func legacyConstraintContext(t *testing.T, forceOn, forceOff bool) *cli.Context {
@@ -323,7 +323,7 @@ func TestLegacyRepeatListAndInvokerHelpers(t *testing.T) {
 	if got := legacyImplicitDocRequiredArgs(&RpcInvoker{BasicInvoker: &BasicInvoker{}}); got != nil {
 		t.Fatalf("nil request implicit args = %#v", got)
 	}
-	invoker := &RpcInvoker{BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()}}
+	invoker := &RpcInvoker{BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()}}
 	if got := legacyImplicitDocRequiredArgs(invoker); got != nil {
 		t.Fatalf("empty RegionId should not satisfy doc_required: %#v", got)
 	}

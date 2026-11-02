@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
 	"github.com/stretchr/testify/assert"
@@ -101,7 +101,7 @@ func TestCommandoPrintUsageAndNonInteractiveInstallHint(t *testing.T) {
 }
 
 func TestMarshalDryRunInvokeMeta(t *testing.T) {
-	request := requests.NewCommonRequest()
+	request := legacyapi.NewRequest()
 	request.Product = "ecs"
 	request.Version = "2014-05-26"
 	request.ApiName = "DescribeRegions"

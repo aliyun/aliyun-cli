@@ -20,11 +20,10 @@ import (
 	"os"
 	"regexp"
 
-	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 )
 
@@ -108,7 +107,7 @@ func newCostIrrelevantQuote(popCode string, popVersion string, apiName string, l
 // error, translate it normally" — kept separate from the HTTP call so the
 // classification is testable without standing up a signed quote server.
 func costIrrelevantFromError(popCode string, popVersion string, apiName string, err error, language string) (string, bool) {
-	serverErr, isServerErr := err.(*sdkerrors.ServerError)
+	serverErr, isServerErr := err.(*legacyapi.ServerError)
 	if !isServerErr || serverErr.ErrorCode() != estimateCostCodeNotRequired {
 		return "", false
 	}
@@ -430,7 +429,7 @@ func resolveEstimateCostApiName(library *Library, inv Invoker) (string, error) {
 // buildEstimateCostParameters flattens every parameter slot of the prepared
 // request (query / form-or-body / path / JSON body) into one map. Values stay
 // strings — CLI semantics; the server normalizes dotted keys like `DataDisk.1.Size`.
-func buildEstimateCostParameters(req *requests.CommonRequest) (map[string]interface{}, error) {
+func buildEstimateCostParameters(req *legacyapi.Request) (map[string]interface{}, error) {
 	parameters := make(map[string]interface{})
 	for k, v := range req.QueryParams {
 		if k != "" && v != "" {
@@ -497,7 +496,7 @@ func estimateCostEndpoint() string {
 	return defaultEstimateCostHost
 }
 
-func setEstimateCostEndpoint(request *requests.CommonRequest) {
+func setEstimateCostEndpoint(request *legacyapi.Request) {
 	request.Domain = estimateCostEndpoint()
 	// The legacy SDK appends Port when building the URL, so an explicit
 	// endpoint port must be kept separate from Domain.
@@ -526,7 +525,7 @@ func invokeEstimateCost(ctx *cli.Context, profile *config.Profile, popCode strin
 		return "", err
 	}
 
-	request := requests.NewCommonRequest()
+	request := legacyapi.NewRequest()
 	request.Product = estimateCostProductCode
 	request.Version = estimateCostApiVersion
 	request.Method = "POST"
@@ -539,7 +538,7 @@ func invokeEstimateCost(ctx *cli.Context, profile *config.Profile, popCode strin
 	request.SetContent(content)
 	request.SetContentType("application/json")
 
-	resp, err := client.ProcessCommonRequest(request)
+	resp, err := client.Send(request)
 	if err != nil {
 		// A confirmed cost-irrelevant API arrives on the error channel — the
 		// quote service models it as errorCode=PricingNotRequired — but it is
@@ -565,7 +564,7 @@ func invokeEstimateCost(ctx *cli.Context, profile *config.Profile, popCode strin
 // The tip says so explicitly, because reading "not supported" as "free" is a
 // billing-relevant mistake.
 func translateEstimateCostError(popCode string, popVersion string, apiName string, err error) error {
-	if serverErr, ok := err.(*sdkerrors.ServerError); ok {
+	if serverErr, ok := err.(*legacyapi.ServerError); ok {
 		switch serverErr.ErrorCode() {
 		case estimateCostCodeNotSupported:
 			return cli.NewErrorWithTip(

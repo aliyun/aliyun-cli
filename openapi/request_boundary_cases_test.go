@@ -9,10 +9,10 @@ import (
 	"testing"
 
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/stretchr/testify/require"
 )
@@ -36,7 +36,7 @@ func TestLegacyRequestPreparationPreservesBodyAndParameterLocations(t *testing.T
 		f.SetAssigned(true)
 		f.SetValue(name + "-value")
 	}
-	inv := &RestfulInvoker{BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()}, api: api, method: "POST", path: "/reports"}
+	inv := &RestfulInvoker{BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()}, api: api, method: "POST", path: "/reports"}
 	require.NoError(t, inv.Prepare(ctx))
 	require.Equal(t, "Query-value", inv.request.QueryParams["Query"])
 	require.Equal(t, "Form-value", inv.request.FormParams["Form"])
@@ -50,14 +50,14 @@ func TestLegacyRequestPreparationPreservesBodyAndParameterLocations(t *testing.T
 	ctx.SetUnknownFlags(cli.NewFlagSet())
 	BodyFlag(ctx.Flags()).SetAssigned(true)
 	BodyFlag(ctx.Flags()).SetValue(`{"enabled":true}`)
-	rpc := &RpcInvoker{BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()}, api: api}
+	rpc := &RpcInvoker{BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()}, api: api}
 	require.NoError(t, rpc.Prepare(ctx))
 	require.Equal(t, "http", rpc.request.Scheme)
 	require.JSONEq(t, `{"enabled":true}`, string(rpc.request.Content))
 	MethodFlag(ctx.Flags()).SetAssigned(true)
 	MethodFlag(ctx.Flags()).SetValue("DELETE")
 	require.ErrorContains(t, rpc.Prepare(ctx), "not supported")
-	force := &ForceRpcInvoker{BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()}, method: "CreateReport"}
+	force := &ForceRpcInvoker{BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()}, method: "CreateReport"}
 	require.ErrorContains(t, force.Prepare(ctx), "not supported")
 	MethodFlag(ctx.Flags()).SetAssigned(true)
 	MethodFlag(ctx.Flags()).SetValue("GET")
@@ -89,7 +89,7 @@ func TestQuoteCollectionRejectsMalformedBodiesBeforeCallingService(t *testing.T)
 			ctx.SetUnknownFlags(cli.NewFlagSet())
 			BodyFlag(ctx.Flags()).SetAssigned(true)
 			BodyFlag(ctx.Flags()).SetValue("not-json")
-			request := requests.NewCommonRequest()
+			request := legacyapi.NewRequest()
 			request.ApiName = "CreateReport"
 			request.SetContent([]byte("not-json"))
 			want := "requires the request body to be a JSON object"
@@ -169,6 +169,6 @@ func TestDryRunEndpointAndWildcardSanitization(t *testing.T) {
 	require.Equal(t, "global.test", dryRunOpenapiEndpoint(ctx, h))
 	h.product = nil
 	require.Empty(t, dryRunOpenapiEndpoint(ctx, h))
-	r := &RestfulInvoker{BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()}, api: &canonicalmeta.API{Name: "ListReports"}}
+	r := &RestfulInvoker{BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()}, api: &canonicalmeta.API{Name: "ListReports"}}
 	require.Equal(t, "ListReports", buildDryRunInvokeMeta(nil, r).API)
 }

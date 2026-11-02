@@ -406,6 +406,13 @@ func TestHelpLanguagePrefersCommandFlag(t *testing.T) {
 
 func TestRuntimeHostPublicRoutingWrappers(t *testing.T) {
 	t.Setenv(sysconfig.EnvPluginsDir, filepath.Join(t.TempDir(), "plugins"))
+	// Earlier tests may have initialized the singleton against the developer's
+	// installed plugins. This baseline assertion needs its own isolated engine.
+	previous := Engine()
+	engineInst = openapiruntime.NewEngine(openapiruntime.Options{
+		BaselineFS: bundledmeta.Metadatas, UserPluginsDir: userPluginsDir(), BundledBy: "test",
+	}, nil)
+	t.Cleanup(func() { engineInst = previous })
 	if got := userPluginsDir(); got != os.Getenv(sysconfig.EnvPluginsDir) {
 		t.Fatalf("userPluginsDir() = %q", got)
 	}

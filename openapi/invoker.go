@@ -16,18 +16,14 @@ package openapi
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
-
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/credentials"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
@@ -52,7 +48,7 @@ func (a *BasicInvoker) applyMetadataTimeout(api *canonicalmeta.API) {
 	}
 }
 
-func GetClient(cp *config.Profile, ctx *cli.Context) (client *sdk.Client, err error) {
+func GetClient(cp *config.Profile, ctx *cli.Context) (client *legacyapi.Client, err error) {
 	if cp.Mode == config.Anonymous {
 		return nil, fmt.Errorf("anonymous mode is only supported via the OpenAPI path; legacy SDK cannot disable signing")
 	}
@@ -70,31 +66,20 @@ func GetClient(cp *config.Profile, ctx *cli.Context) (client *sdk.Client, err er
 		return
 	}
 
-	var cred auth.Credential
-	if model.SecurityToken != nil {
-		cred = credentials.NewStsTokenCredential(*model.AccessKeyId, *model.AccessKeySecret, *model.SecurityToken)
-	} else {
-		cred = credentials.NewAccessKeyCredential(*model.AccessKeyId, *model.AccessKeySecret)
-	}
-
 	if cp.RegionId == "" {
-		err = fmt.Errorf("default RegionId is empty! run `aliyun configure` first")
-		return
+		return nil, fmt.Errorf("default RegionId is empty! run `aliyun configure` first")
 	}
-
-	conf := sdk.NewConfig()
-	client, err = sdk.NewClientWithOptions(cp.RegionId, conf, cred)
-	if err != nil {
-		return
+	if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(cp.RegionId) {
+		return nil, fmt.Errorf("regionId contains invalid characters")
 	}
-	// get UserAgent from env
-	conf.UserAgent = os.Getenv("ALIYUN_USER_AGENT")
-
-	if cp.RetryCount > 0 {
-		// when use --retry-count, enable auto retry
-		conf.WithAutoRetry(true)
-		conf.WithMaxRetryTime(cp.RetryCount)
+	token := ""
+	if model.SecurityToken != nil {
+		token = *model.SecurityToken
 	}
+	client = legacyapi.NewClient(cp.RegionId, *model.AccessKeyId, *model.AccessKeySecret, token)
+	client.UseSTSCredential = model.SecurityToken != nil
+	client.ExtraUserAgent = os.Getenv("ALIYUN_USER_AGENT")
+	client.RetryCount = cp.RetryCount
 
 	if client != nil {
 		if cp.ReadTimeout > 0 {
@@ -115,10 +100,10 @@ func GetClient(cp *config.Profile, ctx *cli.Context) (client *sdk.Client, err er
 // - RpcForceInvoker
 // - RestfulInvoker
 type Invoker interface {
-	getClient() *sdk.Client
-	getRequest() *requests.CommonRequest
+	getClient() *legacyapi.Client
+	getRequest() *legacyapi.Request
 	Prepare(ctx *cli.Context) error
-	Call() (*responses.CommonResponse, error)
+	Call() (*legacyapi.Response, error)
 }
 
 // implementations
@@ -131,8 +116,8 @@ type InvokeHelper interface {
 // basic invoker to init common object and headers
 type BasicInvoker struct {
 	profile *config.Profile
-	client  *sdk.Client
-	request *requests.CommonRequest
+	client  *legacyapi.Client
+	request *legacyapi.Request
 	product *meta.Product
 
 	throttlingRetryConfig *throttlingretry.Config
@@ -142,11 +127,11 @@ func NewBasicInvoker(cp *config.Profile) *BasicInvoker {
 	return &BasicInvoker{profile: cp}
 }
 
-func (a *BasicInvoker) getClient() *sdk.Client {
+func (a *BasicInvoker) getClient() *legacyapi.Client {
 	return a.client
 }
 
-func (a *BasicInvoker) getRequest() *requests.CommonRequest {
+func (a *BasicInvoker) getRequest() *legacyapi.Request {
 	return a.request
 }
 
@@ -196,7 +181,7 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 			code)
 	}
 
-	a.request = requests.NewCommonRequest()
+	a.request = legacyapi.NewRequest()
 	a.request.Product = product.Code
 	if !dryRun {
 		if cfg, cfgErr := throttlingretry.LoadEffective(config.GetConfigDir(ctx)); cfgErr == nil {
@@ -266,7 +251,7 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 
 	if dryRun {
 		if a.request.Domain == "" {
-			a.request.Domain, err = product.GetEndpointWithType(a.request.RegionId, nil, a.profile.EndpointType)
+			a.request.Domain, err = product.GetEndpointWithType(a.request.RegionId, a.profile.EndpointType)
 			if err != nil {
 				return cli.NewErrorWithTip(
 					fmt.Errorf("unknown endpoint for %s/%s! failed %w", product.GetLowerCode(), a.request.RegionId, err),
@@ -323,7 +308,7 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 			a.request.Domain = "estimate-cost-placeholder.invalid"
 		} else {
 			endpointType := a.profile.EndpointType
-			a.request.Domain, err = product.GetEndpointWithType(a.request.RegionId, a.client, endpointType)
+			a.request.Domain, err = product.GetEndpointWithType(a.request.RegionId, endpointType)
 			if err != nil {
 				// Wrap with %w (not %s) so *meta.InvalidEndpointError survives the
 				// chain and the AI-mode normalizer can render a JSON envelope.

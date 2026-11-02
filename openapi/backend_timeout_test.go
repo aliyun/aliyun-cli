@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/stretchr/testify/require"
 )
@@ -34,7 +34,7 @@ func TestLegacyBackendTimeoutPrecedence(t *testing.T) {
 		{"rds", "CreateDBInstance", -1, 0, false, 0},
 		{"rds", "CreateDBInstance", 57000, 0, true, 0},
 	} {
-		request := requests.NewCommonRequest()
+		request := legacyapi.NewRequest()
 		request.Product = tc.product
 		invoker := &BasicInvoker{request: request, profile: &config.Profile{ReadTimeout: tc.user}}
 		invoker.applyMetadataTimeout(&canonicalmeta.API{Name: tc.action, TimeoutMS: tc.metadata,
@@ -46,7 +46,7 @@ func TestLegacyBackendTimeoutPrecedence(t *testing.T) {
 }
 
 func TestBackendTimeoutPreservesRequestTimeout(t *testing.T) {
-	request := requests.NewCommonRequest()
+	request := legacyapi.NewRequest()
 	request.SetReadTimeout(3 * time.Second)
 	invoker := &BasicInvoker{request: request}
 	invoker.applyMetadataTimeout(&canonicalmeta.API{TimeoutMS: 57000})
@@ -56,7 +56,7 @@ func TestBackendTimeoutPreservesRequestTimeout(t *testing.T) {
 }
 
 func TestBackendTimeoutDoesNotUseAnotherAPIVersion(t *testing.T) {
-	request := requests.NewCommonRequest()
+	request := legacyapi.NewRequest()
 	request.Product, request.Version = "rds", "2025-01-01"
 	invoker := &BasicInvoker{request: request, profile: &config.Profile{}}
 	invoker.applyMetadataTimeout(&canonicalmeta.API{Name: "CreateDBInstance", TimeoutMS: 57000,

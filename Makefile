@@ -106,7 +106,7 @@ test: deps
 	go list ./... >/dev/null
 	go vet ./...
 	ALIYUN_CLI_META_DIR="$(META_DIR)" LANG="en_US.UTF-8" go test -race -coverprofile=coverage.txt -covermode=atomic \
-		./bundledmeta ./canonicalmeta \
+		./bundledmeta ./canonicalmeta ./internal/... \
 		./util/... ./cli/... ./config/... \
 		./i18n/... ./main/... ./openapi/... ./meta/... ./export/... \
 		./sysconfig/... ./mcpproxy ./cloudsso ./cliext/... ./tools/...

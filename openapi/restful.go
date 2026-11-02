@@ -19,9 +19,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 )
 
 type RestfulInvoker struct {
@@ -111,9 +111,9 @@ func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
 	return nil
 }
 
-func (a *RestfulInvoker) Call() (*responses.CommonResponse, error) {
-	return a.callWithThrottlingRetry(func() (*responses.CommonResponse, error) {
-		return a.client.ProcessCommonRequest(a.request)
+func (a *RestfulInvoker) Call() (*legacyapi.Response, error) {
+	return a.callWithThrottlingRetry(func() (*legacyapi.Response, error) {
+		return a.client.Send(a.request)
 	})
 }
 
