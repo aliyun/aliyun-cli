@@ -69,6 +69,50 @@ func TestConfigureTelemetryDoesNotInheritPersistentFlags(t *testing.T) {
 	}
 }
 
+func TestConfigureTelemetryRejectsUnexpectedArguments(t *testing.T) {
+	for _, name := range []string{"", "show", "enable", "disable", "purge"} {
+		t.Run(name, func(t *testing.T) {
+			ctx, stdout, dir := testTelemetryContext(t)
+			cmd := NewConfigureTelemetryCommand()
+			ctx.EnterCommand(cmd)
+			if name != "" {
+				cmd = cmd.GetSubCommand(name)
+				ctx.EnterCommand(cmd)
+			}
+			err := cmd.Run(ctx, []string{"unexpected"})
+			var invalid *cli.InvalidCommandError
+			require.ErrorAs(t, err, &invalid)
+			require.Empty(t, stdout.String())
+			require.NoDirExists(t, dir, "invalid management commands must not mutate local state")
+		})
+	}
+}
+
+func TestConfigureTelemetryReportsInvalidPreferences(t *testing.T) {
+	for _, name := range []string{"", "show"} {
+		t.Run(name, func(t *testing.T) {
+			ctx, stdout, dir := testTelemetryContext(t)
+			require.NoError(t, os.MkdirAll(dir, 0700))
+			path := telemetry.GetConfigFilePath(dir)
+			require.NoError(t, os.WriteFile(path, []byte("{"), 0600))
+			cmd := NewConfigureTelemetryCommand()
+			ctx.EnterCommand(cmd)
+			if name != "" {
+				cmd = cmd.GetSubCommand(name)
+				ctx.EnterCommand(cmd)
+			}
+			err := cmd.Run(ctx, nil)
+			require.ErrorContains(t, err, "load telemetry config failed")
+			var syntax *json.SyntaxError
+			require.ErrorAs(t, err, &syntax)
+			require.Empty(t, stdout.String())
+			data, err := os.ReadFile(path)
+			require.NoError(t, err)
+			require.Equal(t, "{", string(data))
+		})
+	}
+}
+
 func TestConfigureTelemetryEnableAndDisable(t *testing.T) {
 	ctx, _, configDir := testTelemetryContext(t)
 	enable := enterTelemetrySubcommand(t, ctx, "enable")
