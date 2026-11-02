@@ -138,7 +138,7 @@ type Profile struct {
 	AutoPluginInstallEnablePre bool             `json:"auto_plugin_install_enable_pre,omitempty"` // install latest version (including pre-release) when true
 	BearerTokenValue           string           `json:"bearer_token,omitempty"`
 	BearerTokenHeaderKey       string           `json:"bearer_token_header_key,omitempty"`
-	SignatureVersion           string           `json:"signature_version,omitempty"` // empty/v3 (ACS3), v2 (legacy), or v4
+	SignatureVersion           string           `json:"signature_version,omitempty"` // empty (default) or "v4"
 	parent                     *Configuration   //`json:"-"`
 }
 
@@ -923,9 +923,12 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 
 	// Forward effective signature version so Go plugins (aliyun-cli-runtime)
 	// honor profile.signature_version / --cli-sign-version / env the same way
-	// as the in-process OpenAPI path.
-	if v := cp.EffectiveSignatureVersion(CliSignVersionFromFlags(ctx.Flags())); v != "" {
-		envs[EnvSignatureVersion] = v
+	// as the in-process OpenAPI path. An assigned empty flag/env must still be
+	// forwarded so the plugin clears a profile-level v4.
+	cliValue, cliAssigned := CliSignVersionFromFlags(ctx.Flags())
+	effective := cp.EffectiveSignatureVersion(cliValue, cliAssigned)
+	if _, envSet := os.LookupEnv(EnvSignatureVersion); cliAssigned || envSet || effective != "" {
+		envs[EnvSignatureVersion] = effective
 	}
 
 	return envs, nil

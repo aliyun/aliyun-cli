@@ -70,7 +70,8 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	if err != nil {
 		return
 	}
-	signVersion, err := cp.ResolvedSignatureVersion(config.CliSignVersionFromFlags(ctx.Flags()))
+	cliValue, cliAssigned := config.CliSignVersionFromFlags(ctx.Flags())
+	signVersion, err := cp.ResolvedSignatureVersion(cliValue, cliAssigned)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +84,7 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	// Product legacy SignatureAlgorithm=v2 (e.g. FNF) outranks configured V4.
 	useV4 := false
 	legacy := strings.EqualFold(product.Code, "fnf") || strings.EqualFold(product.GetLowerCode(), "fnf")
-	if legacy || signVersion == config.SignatureVersionV2 {
+	if legacy {
 		conf.SignatureAlgorithm = tea.String("v2")
 	} else if signVersion == config.SignatureVersionV4 {
 		conf.SignatureVersion = tea.String(config.SignatureVersionV4)

@@ -78,15 +78,14 @@ Do not put real secrets in scripts, shell history, source control, or issue repo
 
 ## Signature version (kebab-case commands)
 
-Only kebab-case commands are supported (for example `aliyun ecs describe-instances`). `--cli-sign-version` / `signature_version` / `ALIBABA_CLOUD_SIGNATURE_VERSION` accept:
+Only kebab-case commands are supported (for example `aliyun ecs describe-instances`). `--cli-sign-version` / profile `signature_version` / `ALIBABA_CLOUD_SIGNATURE_VERSION` currently accept:
 
 | Value | Behavior |
 | --- | --- |
-| `v2` | Legacy signing via `SignatureAlgorithm=v2` |
-| `v3` | Default ACS3 path (same as unset) |
-| `v4` | Signature V4 (`SignatureVersion=v4`) |
+| `v4` | Use signature V4 |
+| empty | Clear a configured value and restore the default signing path |
 
-Precedence: command flag > environment variable > profile.
+Any other value is rejected. Precedence: command flag > environment variable > profile. An empty value follows the same precedence and can override a profile-level `v4`.
 
 Enable it for one command:
 
@@ -100,10 +99,17 @@ Save it as the profile default (same flag):
 aliyun configure set --profile default --cli-sign-version v4
 ```
 
-Or set the environment variable for the current process:
+Clear the profile value and restore the default:
+
+```sh
+aliyun configure set --profile default --cli-sign-version ''
+```
+
+Or set / clear the environment variable for the current process:
 
 ```sh
 export ALIBABA_CLOUD_SIGNATURE_VERSION=v4
+export ALIBABA_CLOUD_SIGNATURE_VERSION=
 ```
 
 When none are set, signing behavior stays unchanged.
@@ -436,7 +442,7 @@ Environment variables can select a profile or fill fields not supplied by flags/
 | `ALIBABA_CLOUD_REGION_ID` | Default region |
 | `ALIBABA_CLOUD_STS_ENDPOINT` | Override the STS endpoint |
 | `ALIBABA_CLOUD_ENDPOINT` | Override the product endpoint |
-| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI signature version: `v2` / `v3` / `v4` (overrides profile `signature_version`) |
+| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI signature version: only `v4`; set empty to clear and use default (overrides profile `signature_version`) |
 | `ALIBABA_CLOUD_CREDENTIALS_URI` | CredentialsURI source |
 | `ALIBABA_CLOUD_OIDC_PROVIDER_ARN` | OIDC provider ARN |
 | `ALIBABA_CLOUD_OIDC_TOKEN_FILE` | OIDC token file |

@@ -16,6 +16,7 @@ package config
 
 import (
 	"bytes"
+	"os"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -23,111 +24,146 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func unsetSignatureVersionEnv(t *testing.T) {
+	t.Helper()
+	orig, had := os.LookupEnv(EnvSignatureVersion)
+	require.NoError(t, os.Unsetenv(EnvSignatureVersion))
+	t.Cleanup(func() {
+		if had {
+			_ = os.Setenv(EnvSignatureVersion, orig)
+		} else {
+			_ = os.Unsetenv(EnvSignatureVersion)
+		}
+	})
+}
+
 func TestNormalizeSignatureVersion(t *testing.T) {
 	got, err := NormalizeSignatureVersion("")
 	require.NoError(t, err)
 	assert.Empty(t, got)
 
-	got, err = NormalizeSignatureVersion(" V2 ")
-	require.NoError(t, err)
-	assert.Equal(t, SignatureVersionV2, got)
-
-	got, err = NormalizeSignatureVersion("v3")
-	require.NoError(t, err)
-	assert.Equal(t, SignatureVersionV3, got)
-
-	got, err = NormalizeSignatureVersion("V4")
+	got, err = NormalizeSignatureVersion(" V4 ")
 	require.NoError(t, err)
 	assert.Equal(t, SignatureVersionV4, got)
 
-	_, err = NormalizeSignatureVersion("v1")
+	_, err = NormalizeSignatureVersion("v2")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported signature_version")
+
+	_, err = NormalizeSignatureVersion("v3")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported signature_version")
 }
 
 func TestEffectiveSignatureVersionPrecedence(t *testing.T) {
-	t.Setenv(EnvSignatureVersion, "")
+	unsetSignatureVersionEnv(t)
+
 	p := &Profile{SignatureVersion: SignatureVersionV4}
-	assert.Equal(t, SignatureVersionV4, p.EffectiveSignatureVersion(""))
+	assert.Equal(t, SignatureVersionV4, p.EffectiveSignatureVersion("", false))
 
 	t.Setenv(EnvSignatureVersion, "v4")
 	p.SignatureVersion = ""
-	assert.Equal(t, "v4", p.EffectiveSignatureVersion(""))
+	assert.Equal(t, "v4", p.EffectiveSignatureVersion("", false))
 
 	t.Setenv(EnvSignatureVersion, "v4")
 	p.SignatureVersion = "ignored"
-	assert.Equal(t, "v4", p.EffectiveSignatureVersion(""))
+	assert.Equal(t, "v4", p.EffectiveSignatureVersion("", false))
 
-	// --cli-sign-version wins over env and profile.
+	// Assigned --cli-sign-version wins over env and profile.
 	t.Setenv(EnvSignatureVersion, "ignored-env")
 	p.SignatureVersion = "ignored-profile"
-	assert.Equal(t, SignatureVersionV4, p.EffectiveSignatureVersion("v4"))
+	assert.Equal(t, SignatureVersionV4, p.EffectiveSignatureVersion("v4", true))
+
+	// Assigned empty clears env/profile v4 for this invocation.
+	assert.Empty(t, p.EffectiveSignatureVersion("", true))
+
+	// Present empty env clears profile v4.
+	t.Setenv(EnvSignatureVersion, "")
+	p.SignatureVersion = SignatureVersionV4
+	assert.Empty(t, p.EffectiveSignatureVersion("", false))
 }
 
 func TestUseSignatureV4(t *testing.T) {
-	t.Setenv(EnvSignatureVersion, "")
-	ok, err := (&Profile{}).UseSignatureV4("")
+	unsetSignatureVersionEnv(t)
+
+	ok, err := (&Profile{}).UseSignatureV4("", false)
 	require.NoError(t, err)
 	assert.False(t, ok)
 
-	ok, err = (&Profile{SignatureVersion: "v4"}).UseSignatureV4("")
+	ok, err = (&Profile{SignatureVersion: "v4"}).UseSignatureV4("", false)
 	require.NoError(t, err)
 	assert.True(t, ok)
 
-	ok, err = (&Profile{SignatureVersion: "V4"}).UseSignatureV4("")
+	ok, err = (&Profile{SignatureVersion: "V4"}).UseSignatureV4("", false)
 	require.NoError(t, err)
 	assert.True(t, ok)
 
-	ok, err = (&Profile{SignatureVersion: "v3"}).UseSignatureV4("")
-	require.NoError(t, err)
-	assert.False(t, ok)
+	_, err = (&Profile{SignatureVersion: "v3"}).UseSignatureV4("", false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported signature_version")
 
-	ok, err = (&Profile{SignatureVersion: "v2"}).UseSignatureV4("")
-	require.NoError(t, err)
-	assert.False(t, ok)
+	_, err = (&Profile{SignatureVersion: "v2"}).UseSignatureV4("", false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported signature_version")
 
 	t.Setenv(EnvSignatureVersion, "v4")
-	ok, err = (&Profile{SignatureVersion: "v3"}).UseSignatureV4("")
+	ok, err = (&Profile{SignatureVersion: "ignored"}).UseSignatureV4("", false)
 	require.NoError(t, err)
 	assert.True(t, ok)
 
-	t.Setenv(EnvSignatureVersion, "v3")
-	ok, err = (&Profile{}).UseSignatureV4("v4")
+	ok, err = (&Profile{}).UseSignatureV4("v4", true)
 	require.NoError(t, err)
 	assert.True(t, ok)
+
+	ok, err = (&Profile{SignatureVersion: SignatureVersionV4}).UseSignatureV4("", true)
+	require.NoError(t, err)
+	assert.False(t, ok)
 }
 
 func TestCliSignVersionFromFlags(t *testing.T) {
-	assert.Empty(t, CliSignVersionFromFlags(nil))
+	v, assigned := CliSignVersionFromFlags(nil)
+	assert.Empty(t, v)
+	assert.False(t, assigned)
 
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(stdout, stderr)
-	assert.Empty(t, CliSignVersionFromFlags(ctx.Flags()))
+	v, assigned = CliSignVersionFromFlags(ctx.Flags())
+	assert.Empty(t, v)
+	assert.False(t, assigned)
 
 	AddFlags(ctx.Flags())
-	assert.Empty(t, CliSignVersionFromFlags(ctx.Flags()))
+	v, assigned = CliSignVersionFromFlags(ctx.Flags())
+	assert.Empty(t, v)
+	assert.False(t, assigned)
 
 	f := CliSignVersionFlag(ctx.Flags())
 	require.NotNil(t, f)
 	f.SetAssigned(true)
 	f.SetValue("  v4  ")
-	assert.Equal(t, "v4", CliSignVersionFromFlags(ctx.Flags()))
+	v, assigned = CliSignVersionFromFlags(ctx.Flags())
+	assert.Equal(t, "v4", v)
+	assert.True(t, assigned)
+
+	f.SetValue("")
+	v, assigned = CliSignVersionFromFlags(ctx.Flags())
+	assert.Empty(t, v)
+	assert.True(t, assigned)
 }
 
 func TestEffectiveSignatureVersionNilProfile(t *testing.T) {
-	t.Setenv(EnvSignatureVersion, "")
+	unsetSignatureVersionEnv(t)
 	var p *Profile
-	assert.Empty(t, p.EffectiveSignatureVersion(""))
-	assert.Equal(t, "v4", p.EffectiveSignatureVersion("v4"))
+	assert.Empty(t, p.EffectiveSignatureVersion("", false))
+	assert.Equal(t, "v4", p.EffectiveSignatureVersion("v4", true))
 
 	t.Setenv(EnvSignatureVersion, "v4")
-	assert.Equal(t, "v4", p.EffectiveSignatureVersion(""))
+	assert.Equal(t, "v4", p.EffectiveSignatureVersion("", false))
 }
 
 func TestUseSignatureV4UnsupportedEnv(t *testing.T) {
 	t.Setenv(EnvSignatureVersion, "v1")
-	_, err := (&Profile{}).UseSignatureV4("")
+	_, err := (&Profile{}).UseSignatureV4("", false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported signature_version")
 }

@@ -57,96 +57,30 @@ func TestPrepareCallEnablesSignatureV4(t *testing.T) {
 	}
 }
 
-func TestPrepareCallSignatureV3IsDefault(t *testing.T) {
-	ec := &ExecContext{
-		API: &meta.API{
-			ProductCode: "Ecs",
-			Name:        "DescribeInstances",
-			Version:     "2014-05-26",
-		},
-		Credential:       staticAKCredential(t),
-		SignatureVersion: SignatureVersionV3,
-		Region:           "cn-hangzhou",
-	}
-	req := &AssembledRequest{
-		Action:   "DescribeInstances",
-		Version:  "2014-05-26",
-		Method:   "POST",
-		Protocol: "HTTPS",
-		Style:    "RPC",
-		Endpoint: "ecs.cn-hangzhou.aliyuncs.com",
-	}
-	call, err := prepareCall(ec, req)
-	if err != nil {
-		t.Fatalf("prepareCall: %v", err)
-	}
-	if call.client.SignatureVersion != nil && tea.StringValue(call.client.SignatureVersion) != "" {
-		t.Fatalf("unexpected SignatureVersion %q", tea.StringValue(call.client.SignatureVersion))
-	}
-	if call.client.SignatureAlgorithm != nil && tea.StringValue(call.client.SignatureAlgorithm) != "" {
-		t.Fatalf("unexpected SignatureAlgorithm %q", tea.StringValue(call.client.SignatureAlgorithm))
-	}
-	if call.client.Spi != nil {
-		t.Fatalf("v3 must not install gateway, got %T", call.client.Spi)
-	}
-}
-
-func TestPrepareCallSignatureV2SetsAlgorithm(t *testing.T) {
-	ec := &ExecContext{
-		API: &meta.API{
-			ProductCode: "Ecs",
-			Name:        "DescribeInstances",
-			Version:     "2014-05-26",
-		},
-		Credential:       staticAKCredential(t),
-		SignatureVersion: SignatureVersionV2,
-		Region:           "cn-hangzhou",
-	}
-	req := &AssembledRequest{
-		Action:   "DescribeInstances",
-		Version:  "2014-05-26",
-		Method:   "POST",
-		Protocol: "HTTPS",
-		Style:    "RPC",
-		Endpoint: "ecs.cn-hangzhou.aliyuncs.com",
-	}
-	call, err := prepareCall(ec, req)
-	if err != nil {
-		t.Fatalf("prepareCall: %v", err)
-	}
-	if tea.StringValue(call.client.SignatureAlgorithm) != "v2" {
-		t.Fatalf("SignatureAlgorithm = %q, want v2", tea.StringValue(call.client.SignatureAlgorithm))
-	}
-	if call.client.SignatureVersion != nil && tea.StringValue(call.client.SignatureVersion) != "" {
-		t.Fatalf("v2 must not set SignatureVersion, got %q", tea.StringValue(call.client.SignatureVersion))
-	}
-	if call.client.Spi != nil {
-		t.Fatalf("v2 must not install gateway, got %T", call.client.Spi)
-	}
-}
-
 func TestPrepareCallRejectsUnsupportedSignatureVersion(t *testing.T) {
-	ec := &ExecContext{
-		API: &meta.API{
-			ProductCode: "Ecs",
-			Name:        "DescribeInstances",
-			Version:     "2014-05-26",
-		},
-		Credential:       staticAKCredential(t),
-		SignatureVersion: "v1",
-		Region:           "cn-hangzhou",
-	}
-	req := &AssembledRequest{
-		Action:   "DescribeInstances",
-		Version:  "2014-05-26",
-		Method:   "POST",
-		Protocol: "HTTPS",
-		Style:    "RPC",
-		Endpoint: "ecs.cn-hangzhou.aliyuncs.com",
-	}
-	_, err := prepareCall(ec, req)
-	if err == nil {
-		t.Fatal("expected unsupported signature_version error")
+	for _, version := range []string{"v1", "v2", "v3"} {
+		ec := &ExecContext{
+			API: &meta.API{
+				ProductCode: "Ecs",
+				Name:        "DescribeInstances",
+				Version:     "2014-05-26",
+			},
+			Credential:       staticAKCredential(t),
+			SignatureVersion: version,
+			Region:           "cn-hangzhou",
+		}
+		req := &AssembledRequest{
+			Action:   "DescribeInstances",
+			Version:  "2014-05-26",
+			Method:   "POST",
+			Protocol: "HTTPS",
+			Style:    "RPC",
+			Endpoint: "ecs.cn-hangzhou.aliyuncs.com",
+		}
+		_, err := prepareCall(ec, req)
+		if err == nil {
+			t.Fatalf("expected unsupported signature_version error for %q", version)
+		}
 	}
 }
 
@@ -274,22 +208,20 @@ func TestPrepareCallSignatureV4EmptyMeansLegacy(t *testing.T) {
 	}
 }
 
-func TestExecuteSSERejectsSignatureV2AndV4(t *testing.T) {
-	for _, version := range []string{SignatureVersionV2, SignatureVersionV4} {
-		err := NewExecutor().ExecuteSSE(&ExecContext{
-			API: &meta.API{
-				ProductCode: "Ecs",
-				Name:        "DescribeInstances",
-				Version:     "2014-05-26",
-				IsSSE:       true,
-			},
-			Credential:       staticAKCredential(t),
-			SignatureVersion: version,
-			Region:           "cn-hangzhou",
-		}, nil)
-		if err == nil || err.Error() != "runtime: SSE API does not support signature version v2 or v4" {
-			t.Fatalf("ExecuteSSE(signature=%s) error = %v", version, err)
-		}
+func TestExecuteSSERejectsSignatureV4(t *testing.T) {
+	err := NewExecutor().ExecuteSSE(&ExecContext{
+		API: &meta.API{
+			ProductCode: "Ecs",
+			Name:        "DescribeInstances",
+			Version:     "2014-05-26",
+			IsSSE:       true,
+		},
+		Credential:       staticAKCredential(t),
+		SignatureVersion: SignatureVersionV4,
+		Region:           "cn-hangzhou",
+	}, nil)
+	if err == nil || err.Error() != "runtime: SSE API does not support signature version v2 or v4" {
+		t.Fatalf("ExecuteSSE(signature=v4) error = %v", err)
 	}
 }
 

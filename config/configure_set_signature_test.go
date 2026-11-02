@@ -73,20 +73,16 @@ func TestDoConfigureSet_CliSignVersion(t *testing.T) {
 	assert.Equal(t, SignatureVersionV4, saved.SignatureVersion)
 
 	f.SetValue("v3")
-	require.NoError(t, doConfigureSet(ctx))
-	assert.Equal(t, SignatureVersionV3, saved.SignatureVersion)
-
-	f.SetValue("v2")
-	require.NoError(t, doConfigureSet(ctx))
-	assert.Equal(t, SignatureVersionV2, saved.SignatureVersion)
-
-	f.SetValue("v1")
 	err := doConfigureSet(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported signature_version")
 
-	// Flag not assigned: keep existing profile.signature_version.
-	f.SetAssigned(false)
+	f.SetValue("v2")
+	err = doConfigureSet(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported signature_version")
+
+	// Assigned empty clears profile.signature_version.
 	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
 			return &Configuration{
@@ -104,6 +100,12 @@ func TestDoConfigureSet_CliSignVersion(t *testing.T) {
 			}, nil
 		}
 	}
+	f.SetValue("")
+	require.NoError(t, doConfigureSet(ctx))
+	assert.Empty(t, saved.SignatureVersion)
+
+	// Flag not assigned: keep existing profile.signature_version.
+	f.SetAssigned(false)
 	require.NoError(t, doConfigureSet(ctx))
 	assert.Equal(t, SignatureVersionV4, saved.SignatureVersion)
 }

@@ -78,15 +78,14 @@ aliyun configure set \
 
 ## 签名版本（中划线式命令）
 
-仅支持中划线式命令（例如 `aliyun ecs describe-instances`）。`--cli-sign-version` / `signature_version` / `ALIBABA_CLOUD_SIGNATURE_VERSION` 支持：
+仅支持中划线式命令（例如 `aliyun ecs describe-instances`）。`--cli-sign-version` / Profile `signature_version` / `ALIBABA_CLOUD_SIGNATURE_VERSION` 当前仅支持：
 
 | 值 | 行为 |
 | --- | --- |
-| `v2` | 使用历史 `SignatureAlgorithm=v2` 签名 |
-| `v3` | 默认 ACS3 路径（与未设置相同） |
-| `v4` | 使用签名 V4（`SignatureVersion=v4`） |
+| `v4` | 使用签名 V4 |
+| 空值 | 清空已配置的签名版本，恢复默认签名 |
 
-优先级：命令行 flag > 环境变量 > Profile。
+其他值会报错不支持。优先级：命令行 flag > 环境变量 > Profile。空值同样遵循该优先级，可用于覆盖 Profile 中的 `v4`。
 
 单次命令开启：
 
@@ -100,10 +99,17 @@ aliyun ecs describe-instances --cli-sign-version v4
 aliyun configure set --profile default --cli-sign-version v4
 ```
 
-或仅对当前进程设置环境变量：
+清空 Profile 中的签名版本，恢复默认：
+
+```sh
+aliyun configure set --profile default --cli-sign-version ''
+```
+
+或仅对当前进程设置 / 清空环境变量：
 
 ```sh
 export ALIBABA_CLOUD_SIGNATURE_VERSION=v4
+export ALIBABA_CLOUD_SIGNATURE_VERSION=
 ```
 
 未设置时，签名行为与现在一致。
@@ -448,7 +454,7 @@ Saving profile[uri] ...Done.
 | `ALIBABA_CLOUD_REGION_ID` | 默认地域 |
 | `ALIBABA_CLOUD_STS_ENDPOINT` | 覆盖 STS Endpoint |
 | `ALIBABA_CLOUD_ENDPOINT` | 覆盖产品 Endpoint |
-| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI 签名版本：`v2` / `v3` / `v4`（优先于 Profile 中的 `signature_version`） |
+| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI 签名版本：当前仅支持 `v4`；设为空可清空并恢复默认（优先于 Profile 中的 `signature_version`） |
 | `ALIBABA_CLOUD_CREDENTIALS_URI` | CredentialsURI 地址 |
 | `ALIBABA_CLOUD_OIDC_PROVIDER_ARN` | OIDC Provider ARN |
 | `ALIBABA_CLOUD_OIDC_TOKEN_FILE` | OIDC Token 文件 |

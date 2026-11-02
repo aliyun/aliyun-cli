@@ -15,7 +15,7 @@ import (
 )
 
 func TestHostLoadsCredentialAndWireSettingsFromExplicitProfile(t *testing.T) {
-	t.Setenv(config.EnvSignatureVersion, "")
+	require.NoError(t, os.Unsetenv(config.EnvSignatureVersion))
 	ctx := cli.NewCommandContext(io.Discard, io.Discard)
 	config.AddFlags(ctx.Flags())
 	path := filepath.Join(t.TempDir(), "config.json")

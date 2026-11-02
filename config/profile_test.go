@@ -33,6 +33,7 @@ import (
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newCtx() *cli.Context {
@@ -1948,7 +1949,7 @@ func TestGetRuntimeEnv_OptionalFields(t *testing.T) {
 }
 
 func TestGetRuntimeEnv_SignatureVersion(t *testing.T) {
-	t.Setenv(EnvSignatureVersion, "")
+	require.NoError(t, os.Unsetenv(EnvSignatureVersion))
 	p := newProfile()
 	p.Mode = AK
 	p.AccessKeyId = "ak"
@@ -1965,6 +1966,15 @@ func TestGetRuntimeEnv_SignatureVersion(t *testing.T) {
 	assert.NoError(t, err)
 	_, has := envs[EnvSignatureVersion]
 	assert.False(t, has)
+
+	// Present empty env clears profile v4 and must still be forwarded.
+	p.SignatureVersion = SignatureVersionV4
+	t.Setenv(EnvSignatureVersion, "")
+	envs, err = p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	val, has := envs[EnvSignatureVersion]
+	assert.True(t, has)
+	assert.Empty(t, val)
 }
 
 func TestGetRuntimeEnv_OptionalFieldsOmitted(t *testing.T) {

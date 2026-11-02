@@ -105,12 +105,13 @@ func (h *cliHost) Settings() runtime.Settings {
 		}
 		s.UserAgent = buildUserAgentSuffix(h.ctx)
 		if h.loadErr == nil {
-			s.SignatureVersion = h.profile.EffectiveSignatureVersion(config.CliSignVersionFromFlags(h.ctx.Flags()))
-		} else if v := config.CliSignVersionFromFlags(h.ctx.Flags()); v != "" {
+			cliValue, cliAssigned := config.CliSignVersionFromFlags(h.ctx.Flags())
+			s.SignatureVersion = h.profile.EffectiveSignatureVersion(cliValue, cliAssigned)
+		} else if v, assigned := config.CliSignVersionFromFlags(h.ctx.Flags()); assigned {
 			s.SignatureVersion = v
 		}
 	} else if h.loadErr == nil {
-		s.SignatureVersion = h.profile.EffectiveSignatureVersion("")
+		s.SignatureVersion = h.profile.EffectiveSignatureVersion("", false)
 	}
 	return s
 }

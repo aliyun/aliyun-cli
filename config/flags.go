@@ -713,17 +713,23 @@ func CliSignVersionFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(CliSignVersionFlagName)
 }
 
-// NewCliSignVersionFlag selects the OpenAPI signature version (v2 / v3 / v4).
-// Reused by both invoke (`aliyun ecs describe-instances --cli-sign-version v4`)
-// and `aliyun configure set --cli-sign-version v4` (persists profile.signature_version).
+// NewCliSignVersionFlag selects the OpenAPI signature version.
+// Currently only "v4" is supported; an assigned empty value clears the setting
+// and restores the default signing path. Reused by invoke and
+// `aliyun configure set` (persists profile.signature_version).
 func NewCliSignVersionFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "caller",
 		Name:         CliSignVersionFlagName,
-		AssignedMode: cli.AssignedOnce,
+		// AssignedDefault allows `--cli-sign-version` / `--cli-sign-version=` to
+		// clear the effective version (AssignedOnce rejects empty values).
+		AssignedMode: cli.AssignedDefault,
 		Persistent:   true,
 		Short: i18n.T(
-			"OpenAPI signature version for kebab-case commands: v2, v3 (default), or v4 (also persists via `aliyun configure set`)",
-			"中划线式命令的 OpenAPI 签名版本：v2、v3（默认）或 v4（`aliyun configure set` 可写入 Profile）"),
+			"OpenAPI signature version for kebab-case commands: only v4; set empty to clear and use default (also persists via `aliyun configure set`)",
+			"中划线式命令的 OpenAPI 签名版本：当前仅支持 v4；设为空值可清空并恢复默认签名（`aliyun configure set` 可写入 Profile）"),
+		Long: i18n.T(
+			"Select the OpenAPI signature version for kebab-case commands. Currently only `v4` is supported. Set an empty value (`--cli-sign-version ''`, `aliyun configure set --cli-sign-version ''`, or `ALIBABA_CLOUD_SIGNATURE_VERSION=`) to clear a previously configured value and fall back to the default signing path. Any other value is rejected.",
+			"选择中划线式命令的 OpenAPI 签名版本。当前仅支持 `v4`。设置空值（`--cli-sign-version ''`、`aliyun configure set --cli-sign-version ''`，或 `ALIBABA_CLOUD_SIGNATURE_VERSION=`）可清空已配置的值并恢复默认签名。其他值会报错不支持。"),
 	}
 }

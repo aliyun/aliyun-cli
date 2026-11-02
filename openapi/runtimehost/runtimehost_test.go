@@ -41,6 +41,7 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
 	"github.com/aliyun/aliyun-openapi-runtime/source"
+	"github.com/stretchr/testify/require"
 )
 
 // captureExecutor records the ExecContext it receives instead of
@@ -477,7 +478,7 @@ func TestRuntimeHostProfileLoadFailuresAreBestEffort(t *testing.T) {
 }
 
 func TestRuntimeHostSettingsSignatureVersionFromFlagWhenProfileMissing(t *testing.T) {
-	t.Setenv(config.EnvSignatureVersion, "")
+	require.NoError(t, os.Unsetenv(config.EnvSignatureVersion))
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	config.AddFlags(ctx.Flags())
 	config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
