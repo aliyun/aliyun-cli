@@ -16,11 +16,13 @@ package openapi
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -28,6 +30,7 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
+	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	pricingruntime "github.com/aliyun/aliyun-openapi-runtime/runtime"
@@ -70,6 +73,48 @@ func TestPricingV2ListPaginationAndHost(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 2, calls.Load())
 	require.JSONEq(t, `{"supportedApis":[{"popCode":"Ecs","apiName":"RunInstances","popVersion":"2014-05-26"},{"popCode":"Rds","apiName":"CreateDBInstance","popVersion":"2014-08-15"}],"nextToken":"","requestId":"r2"}`, out)
+}
+
+func TestPricingV2RejectsInvalidProfiles(t *testing.T) {
+	ctx := cli.NewCommandContext(io.Discard, io.Discard)
+	config.AddFlags(ctx.Flags())
+	AddFlags(ctx.Flags())
+	for _, tc := range []struct {
+		name, want string
+		profile    config.Profile
+	}{
+		{"anonymous", "authenticated credentials", config.Profile{Mode: config.Anonymous}},
+		{"bearer", "BearerToken", config.Profile{Mode: config.BearerToken}},
+		{"missing region", "RegionId is empty", config.Profile{Mode: config.AK, AccessKeyId: "fixture-ak", AccessKeySecret: "fixture-secret"}},
+		{"missing credential", "AccessKeyId/AccessKeySecret is empty", config.Profile{Mode: config.AK, RegionId: "cn-hangzhou"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := invokeEstimateCost(ctx, &tc.profile, "ecs", "2014-05-26", "RunInstances", nil)
+			require.ErrorContains(t, err, tc.want)
+			require.Empty(t, out)
+			out, err = invokeListSupportedPricingApis(ctx, &tc.profile)
+			require.ErrorContains(t, err, tc.want)
+			require.Empty(t, out)
+		})
+	}
+}
+
+func TestPricingV2InvalidResponseCannotBecomeSuccessThroughOutputFiltering(t *testing.T) {
+	for _, body := range []string{`not-json`, `{}`, `{"code":"Success","success":true,"message":"ok","requestId":"r"}`} {
+		for _, quiet := range []bool{false, true} {
+			t.Run(body+"/quiet="+strconv.FormatBool(quiet), func(t *testing.T) {
+				ctx, output, profile := quoteServer(t, 200, body)
+				QuietFlag(ctx.Flags()).SetAssigned(quiet)
+				raw, err := invokeEstimateCost(ctx, profile, "ecs", "2014-05-26", "RunInstances", nil)
+				require.NoError(t, err)
+				err = finishEstimateCost(ctx, raw)
+				require.ErrorContains(t, err, "invalid pricing response")
+				var business *pricingruntime.PricingBusinessError
+				require.False(t, errors.As(err, &business))
+				require.Empty(t, output.String(), "invalid responses must not be printed as successful quotes")
+			})
+		}
+	}
 }
 
 func TestPricingV2ListSecondPageFailure(t *testing.T) {

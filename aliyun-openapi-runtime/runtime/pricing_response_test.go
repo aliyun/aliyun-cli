@@ -14,6 +14,7 @@
 package runtime
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -34,6 +35,8 @@ func TestPricingResponseClassification(t *testing.T) {
 		{"top level controls failure", `{"success":false,"code":"UpstreamError","message":"failed","requestId":"r","price":{"success":true}}`, true, false},
 		{"legacy price", `{"price":{"success":true},"requestId":"r"}`, false, false},
 		{"legacy failed price", `{"price":{"success":false,"errorCode":"InvalidParameter"},"requestId":"r"}`, true, false},
+		{"bare legacy quote", `{"success":true,"totalAmount":1}`, false, false},
+		{"bare legacy failure", `{"success":false,"errorCode":"InvalidParameter","errorMessage":"invalid","upstreamRequestId":"upstream-r"}`, true, false},
 		{"legacy free", `{"Code":"PricingNotRequired","Message":"free","RequestId":"r"}`, false, false},
 		{"legacy unsupported", `{"Code":"PricingNotSupported","Message":"unsupported","RequestId":"r"}`, true, false},
 		{"missing success", `{"code":"Success","message":"ok","requestId":"r","price":{}}`, false, true},
@@ -55,6 +58,21 @@ func TestPricingResponseClassification(t *testing.T) {
 				t.Fatalf("result = %v", err)
 			}
 		})
+	}
+}
+
+func TestPricingBusinessErrorKeepsDiagnosticsWithoutDuplicateOutput(t *testing.T) {
+	err := PricingResponseError(`{"success":false,"code":"PricingNotSupported","message":"no mapping","requestId":"quote-r"}`)
+	var business *PricingBusinessError
+	if !errors.As(err, &business) {
+		t.Fatalf("expected business failure, got %v", err)
+	}
+	if business.Error() != "cost estimation failed: PricingNotSupported: no mapping (requestId: quote-r)" || business.ExitCode() != 3 {
+		t.Fatalf("lost error diagnostics or exit status: %v", business)
+	}
+	var stderr bytes.Buffer
+	if err := business.RenderError(&stderr); err != nil || stderr.Len() != 0 {
+		t.Fatalf("business error must not duplicate the response on stderr: %q, %v", stderr.String(), err)
 	}
 }
 

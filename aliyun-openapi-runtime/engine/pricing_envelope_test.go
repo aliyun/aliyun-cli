@@ -174,3 +174,54 @@ func TestEstimateCostExplicitAPIDryRun(t *testing.T) {
 		})
 	}
 }
+
+func TestEstimateCostRejectsInvalidResponsesAndOutputFilters(t *testing.T) {
+	for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"} {
+		t.Setenv(key, "")
+	}
+	t.Setenv("ALIBABA_CLOUD_PRICING_HOST", "")
+	credential, err := credentials.NewCredential(&credentials.Config{Type: tea.String("access_key"), AccessKeyId: tea.String("ak"), AccessKeySecret: tea.String("secret")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, body, mode string
+	}{
+		{"malformed JSON", `<html>bad gateway</html>`, "full"},
+		{"missing quote outcome", `{}`, "full"},
+		{"quiet cannot hide malformed response", `{}`, "quiet"},
+		{"invalid query", `{"price":{"success":true}}`, "query"},
+		{"invalid table query", `{"price":{"success":true}}`, "table"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls atomic.Int32
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				_, _ = io.WriteString(w, tc.body)
+			}))
+			defer server.Close()
+			t.Setenv("ALIBABA_CLOUD_PRICING_ENDPOINT", server.Listener.Addr().String())
+			ec := &runtime.ExecContext{Credential: credential, SkipSecureVerify: true, API: &meta.API{Name: "Run", ProductCode: "demo", Version: "v1", Style: meta.StyleRPC}}
+			executor := &responseExecutor{}
+			engine := newBuilderCoverageEngine(executor)
+			res := &argparser.Result{}
+			var output bytes.Buffer
+			switch tc.mode {
+			case "quiet":
+				res.Reserved.Quiet = true
+			case "query":
+				res.Reserved.CliQuery = "["
+			case "table":
+				res.Reserved.OutputTable = &argparser.OutputTableConfig{Rows: "[", Cols: []string{"price"}}
+			}
+			err := engine.executeEstimateCost(&output, ec, res)
+			var business *runtime.PricingBusinessError
+			if err == nil || errors.As(err, &business) {
+				t.Fatalf("invalid response/output must be a non-business error, got %v", err)
+			}
+			if output.Len() != 0 || calls.Load() != 1 || executor.calls != 0 {
+				t.Fatalf("output=%q quote calls=%d target calls=%d", output.String(), calls.Load(), executor.calls)
+			}
+		})
+	}
+}
