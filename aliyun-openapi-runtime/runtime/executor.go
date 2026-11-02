@@ -36,6 +36,7 @@ import (
 	"time"
 
 	popgateway "github.com/alibabacloud-go/alibabacloud-gateway-pop/client"
+	slsgateway "github.com/alibabacloud-go/alibabacloud-gateway-sls/client"
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
 	"github.com/alibabacloud-go/tea/dara"
@@ -607,15 +608,18 @@ func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) 
 		return nil, fmt.Errorf("runtime: create client: %w", err)
 	}
 	client.DisableSDKError = tea.Bool(true)
-	if useV4 {
-		productId := strings.TrimSpace(ec.API.ProductCode)
-		if productId == "" && ec.Product != nil {
-			productId = strings.TrimSpace(ec.Product.Code)
-		}
-		if productId == "" {
+	productCode := strings.TrimSpace(ec.API.ProductCode)
+	if productCode == "" && ec.Product != nil {
+		productCode = strings.TrimSpace(ec.Product.Code)
+	}
+	if strings.EqualFold(productCode, "sls") {
+		// SLS gateway implements ACS4 when SignatureVersion=v4; do not swap in POP.
+		client.Spi = &slsgateway.Client{}
+	} else if useV4 {
+		if productCode == "" {
 			return nil, errors.New("runtime: signature version v4 requires a product id")
 		}
-		client.ProductId = tea.String(productId)
+		client.ProductId = tea.String(productCode)
 		gateway, gerr := popgateway.NewClient()
 		if gerr != nil {
 			return nil, fmt.Errorf("runtime: init signature v4 gateway: %w", gerr)

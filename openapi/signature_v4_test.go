@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"testing"
 
+	slsgateway "github.com/alibabacloud-go/alibabacloud-gateway-sls/client"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
@@ -137,9 +138,11 @@ func TestGetOpenapiClientSlsUsesSignatureV4(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, client)
 	assert.Equal(t, config.SignatureVersionV4, tea.StringValue(client.SignatureVersion))
-	assert.Equal(t, "Sls", tea.StringValue(client.ProductId))
 	assert.Equal(t, "cn-hangzhou.log.aliyuncs.com", tea.StringValue(client.Endpoint))
-	assert.NotNil(t, client.Spi)
+	// SLS keeps its own gateway SPI; V4 is selected via SignatureVersion only.
+	_, ok := client.Spi.(*slsgateway.Client)
+	assert.True(t, ok, "SLS must keep slsgateway.Client under signature V4")
+	assert.Empty(t, tea.StringValue(client.ProductId))
 }
 
 func TestGetOpenapiClientSignatureV4Unsupported(t *testing.T) {

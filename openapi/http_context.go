@@ -124,10 +124,15 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 		return
 	}
 	client.DisableSDKError = tea.Bool(true)
+	isSls := strings.EqualFold(product.Code, "sls")
+	if isSls {
+		// SLS gateway handles host management and implements ACS4 when
+		// SignatureVersion=v4 (see alibabacloud-gateway-sls); do not swap in POP.
+		client.Spi = &slsgateway.Client{}
+		return client, nil
+	}
 	if useV4 {
-		// Signature V4 (including SLS) goes through the POP gateway SPI (ACS4-HMAC-SHA256).
-		// SLS's legacy gateway is ACS3 host management only and is skipped under V4;
-		// the SLS endpoint is already resolved above (region.log.aliyuncs.com / --endpoint).
+		// Generic OpenAPI products sign ACS4 through the POP gateway SPI.
 		productId := strings.TrimSpace(product.Code)
 		if productId == "" {
 			productId = product.GetLowerCode()
@@ -140,10 +145,6 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 		if err = client.SetGatewayClient(gateway); err != nil {
 			return nil, fmt.Errorf("set signature v4 gateway failed, %s", err)
 		}
-		return client, nil
-	}
-	if strings.ToLower(product.Code) == "sls" {
-		client.Spi = &slsgateway.Client{} // host management for sls endpoint (ACS3)
 	}
 	return client, err
 }

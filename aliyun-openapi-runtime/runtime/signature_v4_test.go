@@ -17,6 +17,7 @@ package runtime
 import (
 	"testing"
 
+	slsgateway "github.com/alibabacloud-go/alibabacloud-gateway-sls/client"
 	"github.com/alibabacloud-go/tea/tea"
 
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
@@ -112,6 +113,40 @@ func TestPrepareCallSignatureV4RequiresProductId(t *testing.T) {
 	_, err := prepareCall(ec, req)
 	if err == nil {
 		t.Fatal("expected product id error")
+	}
+}
+
+func TestPrepareCallSlsSignatureV4KeepsSlsGateway(t *testing.T) {
+	ec := &ExecContext{
+		API: &meta.API{
+			ProductCode: "Sls",
+			Name:        "GetProject",
+			Version:     "2020-12-30",
+		},
+		Credential:       staticAKCredential(t),
+		SignatureVersion: SignatureVersionV4,
+		Region:           "cn-hangzhou",
+	}
+	req := &AssembledRequest{
+		Action:   "GetProject",
+		Version:  "2020-12-30",
+		Method:   "GET",
+		Protocol: "HTTPS",
+		Style:    "ROA",
+		Endpoint: "cn-hangzhou.log.aliyuncs.com",
+	}
+	call, err := prepareCall(ec, req)
+	if err != nil {
+		t.Fatalf("prepareCall: %v", err)
+	}
+	if got := tea.StringValue(call.client.SignatureVersion); got != SignatureVersionV4 {
+		t.Fatalf("SignatureVersion = %q, want %q", got, SignatureVersionV4)
+	}
+	if tea.StringValue(call.client.ProductId) != "" {
+		t.Fatalf("SLS V4 must not set POP ProductId, got %q", tea.StringValue(call.client.ProductId))
+	}
+	if _, ok := call.client.Spi.(*slsgateway.Client); !ok {
+		t.Fatalf("SLS V4 must keep slsgateway.Client, got %T", call.client.Spi)
 	}
 }
 
