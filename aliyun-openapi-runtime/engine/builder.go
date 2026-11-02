@@ -536,9 +536,23 @@ func (e *Engine) executeEstimateCost(out io.Writer, ec *runtime.ExecContext, res
 	if err != nil {
 		return err
 	}
-	// The quote is the result, so --quiet intentionally does not suppress it.
-	_, err = fmt.Fprintln(out, quote)
-	return err
+	resultErr := runtime.PricingResponseError(quote)
+	var business *runtime.PricingBusinessError
+	if resultErr != nil && !errors.As(resultErr, &business) {
+		return resultErr
+	}
+	if !res.Reserved.Quiet {
+		response := &runtime.Response{Raw: []byte(quote)}
+		if res.Reserved.OutputTable != nil {
+			err = renderOutputTable(out, nil, response.Raw, res.Reserved.OutputTable)
+		} else {
+			err = renderResponse(out, response, res.Reserved.CliQuery, false)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return resultErr
 }
 
 func (e *Engine) executeSSE(out io.Writer, ec *runtime.ExecContext, res *argparser.Result, compact bool) error {
