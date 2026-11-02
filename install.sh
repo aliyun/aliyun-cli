@@ -104,3 +104,14 @@ then
   fi
   mv ./aliyun /usr/local/bin/
 fi
+
+# Reset the installation identifier only after the new CLI is installed.
+# The CLI generates a new identifier on its next telemetry-enabled command.
+TELEMETRY_INSTANCE_ID_FILE="${HOME}/.aliyun/telemetry-instance-id"
+if [[ -f "${TELEMETRY_INSTANCE_ID_FILE}" || -L "${TELEMETRY_INSTANCE_ID_FILE}" ]]
+then
+  if ! rm -f -- "${TELEMETRY_INSTANCE_ID_FILE}" 2>/dev/null
+  then
+    printf '%s\n' 'Warning: CLI installed successfully, but the telemetry installation ID could not be reset. Remove ~/.aliyun/telemetry-instance-id manually to reset it.' >&2
+  fi
+fi
