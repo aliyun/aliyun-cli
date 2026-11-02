@@ -89,3 +89,84 @@ func TestBuildExecContextCopiesSignatureVersion(t *testing.T) {
 		t.Fatalf("Settings.SignatureVersion = %q, want %q", got, SignatureVersionV4)
 	}
 }
+
+func TestPrepareCallSignatureV4RequiresProductId(t *testing.T) {
+	ec := &ExecContext{
+		API: &meta.API{
+			ProductCode: "",
+			Name:        "DescribeInstances",
+			Version:     "2014-05-26",
+		},
+		Credential:       staticAKCredential(t),
+		SignatureVersion: SignatureVersionV4,
+		Region:           "cn-hangzhou",
+	}
+	req := &AssembledRequest{
+		Action:   "DescribeInstances",
+		Version:  "2014-05-26",
+		Method:   "POST",
+		Protocol: "HTTPS",
+		Style:    "RPC",
+		Endpoint: "ecs.cn-hangzhou.aliyuncs.com",
+	}
+	_, err := prepareCall(ec, req)
+	if err == nil {
+		t.Fatal("expected product id error")
+	}
+}
+
+func TestPrepareCallSignatureV4ProductFallback(t *testing.T) {
+	ec := &ExecContext{
+		API: &meta.API{
+			ProductCode: "",
+			Name:        "DescribeInstances",
+			Version:     "2014-05-26",
+		},
+		Product:          &meta.Product{Code: "Ecs"},
+		Credential:       staticAKCredential(t),
+		SignatureVersion: SignatureVersionV4,
+		Region:           "cn-hangzhou",
+	}
+	req := &AssembledRequest{
+		Action:   "DescribeInstances",
+		Version:  "2014-05-26",
+		Method:   "POST",
+		Protocol: "HTTPS",
+		Style:    "RPC",
+		Endpoint: "ecs.cn-hangzhou.aliyuncs.com",
+	}
+	call, err := prepareCall(ec, req)
+	if err != nil {
+		t.Fatalf("prepareCall: %v", err)
+	}
+	if got := tea.StringValue(call.client.ProductId); got != "Ecs" {
+		t.Fatalf("ProductId = %q, want Ecs", got)
+	}
+}
+
+func TestPrepareCallSignatureV4EmptyMeansLegacy(t *testing.T) {
+	ec := &ExecContext{
+		API: &meta.API{
+			ProductCode: "Ecs",
+			Name:        "DescribeInstances",
+			Version:     "2014-05-26",
+		},
+		Credential: staticAKCredential(t),
+		Region:     "cn-hangzhou",
+	}
+	req := &AssembledRequest{
+		Action:   "DescribeInstances",
+		Version:  "2014-05-26",
+		Method:   "POST",
+		Protocol: "HTTPS",
+		Style:    "RPC",
+		Endpoint: "ecs.cn-hangzhou.aliyuncs.com",
+	}
+	call, err := prepareCall(ec, req)
+	if err != nil {
+		t.Fatalf("prepareCall: %v", err)
+	}
+	if call.client.SignatureVersion != nil && tea.StringValue(call.client.SignatureVersion) != "" {
+		t.Fatalf("unexpected SignatureVersion %q", tea.StringValue(call.client.SignatureVersion))
+	}
+}

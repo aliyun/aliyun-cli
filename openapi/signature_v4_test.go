@@ -121,3 +121,75 @@ func TestProcessInvokeRejectsSignatureV4FromCliSignVersionFlag(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "signature version v4 is not supported for PascalCase")
 }
+
+func TestGetOpenapiClientSlsUsesSignatureV4(t *testing.T) {
+	t.Setenv(config.EnvSignatureVersion, "")
+	_, ctx, _, _ := newCanonicalHelpTestContext(t)
+	config.AddFlags(ctx.Flags())
+	profile := &config.Profile{
+		Mode:             config.AK,
+		AccessKeyId:      "id",
+		AccessKeySecret:  "secret",
+		RegionId:         "cn-hangzhou",
+		SignatureVersion: config.SignatureVersionV4,
+	}
+	client, err := GetOpenapiClient(profile, ctx, &meta.Product{Code: "Sls"})
+	require.NoError(t, err)
+	require.NotNil(t, client)
+	assert.Equal(t, config.SignatureVersionV4, tea.StringValue(client.SignatureVersion))
+	assert.Equal(t, "Sls", tea.StringValue(client.ProductId))
+	assert.Equal(t, "cn-hangzhou.log.aliyuncs.com", tea.StringValue(client.Endpoint))
+	assert.NotNil(t, client.Spi)
+}
+
+func TestGetOpenapiClientSignatureV4Unsupported(t *testing.T) {
+	t.Setenv(config.EnvSignatureVersion, "")
+	_, ctx, _, _ := newCanonicalHelpTestContext(t)
+	config.AddFlags(ctx.Flags())
+	profile := &config.Profile{
+		Mode:             config.AK,
+		AccessKeyId:      "id",
+		AccessKeySecret:  "secret",
+		RegionId:         "cn-hangzhou",
+		SignatureVersion: "v3",
+	}
+	_, err := GetOpenapiClient(profile, ctx, &meta.Product{Code: "Ecs", GlobalEndpoint: "ecs.cn-hangzhou.aliyuncs.com"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported signature_version")
+}
+
+func TestGetOpenapiClientSignatureV4EmptyProductCodeFallsBackToLower(t *testing.T) {
+	t.Setenv(config.EnvSignatureVersion, "v4")
+	_, ctx, _, _ := newCanonicalHelpTestContext(t)
+	config.AddFlags(ctx.Flags())
+	profile := &config.Profile{
+		Mode:            config.AK,
+		AccessKeyId:     "id",
+		AccessKeySecret: "secret",
+		RegionId:        "cn-hangzhou",
+		Endpoint:        "ecs.cn-hangzhou.aliyuncs.com",
+	}
+	client, err := GetOpenapiClient(profile, ctx, &meta.Product{Code: ""})
+	require.NoError(t, err)
+	assert.Equal(t, config.SignatureVersionV4, tea.StringValue(client.SignatureVersion))
+	assert.Equal(t, "", tea.StringValue(client.ProductId))
+	assert.NotNil(t, client.Spi)
+}
+
+func TestProcessInvokeRejectsUnsupportedSignatureVersion(t *testing.T) {
+	t.Setenv(config.EnvSignatureVersion, "")
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	config.AddFlags(ctx.Flags())
+	c := &Commando{profile: config.Profile{
+		Mode:             config.AK,
+		AccessKeyId:      "id",
+		AccessKeySecret:  "secret",
+		RegionId:         "cn-hangzhou",
+		SignatureVersion: "v2",
+	}}
+	err := c.processInvoke(ctx, "ecs", "DescribeInstances", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported signature_version")
+}

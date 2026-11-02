@@ -476,6 +476,22 @@ func TestRuntimeHostProfileLoadFailuresAreBestEffort(t *testing.T) {
 	}
 }
 
+func TestRuntimeHostSettingsSignatureVersionFromFlagWhenProfileMissing(t *testing.T) {
+	t.Setenv(config.EnvSignatureVersion, "")
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	config.AddFlags(ctx.Flags())
+	config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
+	config.ConfigurePathFlag(ctx.Flags()).SetValue(filepath.Join(t.TempDir(), "missing", "config.json"))
+	f := config.CliSignVersionFlag(ctx.Flags())
+	f.SetAssigned(true)
+	f.SetValue("v4")
+	host := &cliHost{ctx: ctx}
+	settings := host.Settings()
+	if settings.SignatureVersion != config.SignatureVersionV4 {
+		t.Fatalf("SignatureVersion = %q, want %q", settings.SignatureVersion, config.SignatureVersionV4)
+	}
+}
+
 func containsString(values []string, target string) bool {
 	for _, value := range values {
 		if value == target {

@@ -72,15 +72,36 @@ func TestUseSignatureV4(t *testing.T) {
 }
 
 func TestCliSignVersionFromFlags(t *testing.T) {
+	assert.Empty(t, CliSignVersionFromFlags(nil))
+
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(stdout, stderr)
+	assert.Empty(t, CliSignVersionFromFlags(ctx.Flags()))
+
 	AddFlags(ctx.Flags())
 	assert.Empty(t, CliSignVersionFromFlags(ctx.Flags()))
 
 	f := CliSignVersionFlag(ctx.Flags())
 	require.NotNil(t, f)
 	f.SetAssigned(true)
-	f.SetValue("v4")
+	f.SetValue("  v4  ")
 	assert.Equal(t, "v4", CliSignVersionFromFlags(ctx.Flags()))
+}
+
+func TestEffectiveSignatureVersionNilProfile(t *testing.T) {
+	t.Setenv(EnvSignatureVersion, "")
+	var p *Profile
+	assert.Empty(t, p.EffectiveSignatureVersion(""))
+	assert.Equal(t, "v4", p.EffectiveSignatureVersion("v4"))
+
+	t.Setenv(EnvSignatureVersion, "v4")
+	assert.Equal(t, "v4", p.EffectiveSignatureVersion(""))
+}
+
+func TestUseSignatureV4UnsupportedEnv(t *testing.T) {
+	t.Setenv(EnvSignatureVersion, "v2")
+	_, err := (&Profile{}).UseSignatureV4("")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported signature_version")
 }

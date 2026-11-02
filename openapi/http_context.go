@@ -125,7 +125,9 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	}
 	client.DisableSDKError = tea.Bool(true)
 	if useV4 {
-		// Signature V4 goes through the POP gateway SPI (ACS4-HMAC-SHA256).
+		// Signature V4 (including SLS) goes through the POP gateway SPI (ACS4-HMAC-SHA256).
+		// SLS's legacy gateway is ACS3 host management only and is skipped under V4;
+		// the SLS endpoint is already resolved above (region.log.aliyuncs.com / --endpoint).
 		productId := strings.TrimSpace(product.Code)
 		if productId == "" {
 			productId = product.GetLowerCode()
@@ -141,7 +143,7 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 		return client, nil
 	}
 	if strings.ToLower(product.Code) == "sls" {
-		client.Spi = &slsgateway.Client{} // host management for sls endpoint
+		client.Spi = &slsgateway.Client{} // host management for sls endpoint (ACS3)
 	}
 	return client, err
 }

@@ -88,10 +88,10 @@ Enable it for one command:
 aliyun ecs describe-instances --cli-sign-version v4
 ```
 
-Save it as the profile default:
+Save it as the profile default (same flag):
 
 ```sh
-aliyun configure set --profile default --signature-version v4
+aliyun configure set --profile default --cli-sign-version v4
 ```
 
 Or set the environment variable for the current process:

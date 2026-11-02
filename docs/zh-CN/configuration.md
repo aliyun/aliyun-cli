@@ -88,10 +88,10 @@ aliyun configure set \
 aliyun ecs describe-instances --cli-sign-version v4
 ```
 
-在 Profile 中设为默认：
+在 Profile 中设为默认（复用同一 flag）：
 
 ```sh
-aliyun configure set --profile default --signature-version v4
+aliyun configure set --profile default --cli-sign-version v4
 ```
 
 或仅对当前进程设置环境变量：

@@ -696,6 +696,34 @@ func TestManifestCorruptionHandling(t *testing.T) {
 	})
 }
 
+func TestExecutePluginForwardsPricePopCode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script test skipped on Windows")
+	}
+
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+
+	pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-test")
+	require.NoError(t, os.MkdirAll(pluginDir, 0755))
+	binPath := filepath.Join(pluginDir, "aliyun-cli-test")
+	require.NoError(t, os.WriteFile(binPath, []byte("#!/bin/sh\nprintf 'pop=%s\\n' \"$ALIBABA_CLOUD_PRICE_POP_CODE\"\n"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "manifest.json"), []byte(`{"name":"aliyun-cli-test","version":"1.0.0","productCode":"Ecs","command":"test"}`), 0644))
+
+	manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(manifestPath), 0755))
+	manifestJSON := `{"plugins":{"aliyun-cli-test":{"name":"aliyun-cli-test","version":"1.0.0","path":"` + pluginDir + `","command":"test","productCode":"Ecs"}}}`
+	require.NoError(t, os.WriteFile(manifestPath, []byte(manifestJSON), 0644))
+
+	stdout := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, new(bytes.Buffer))
+	ok, err := ExecutePlugin("test", []string{"test", "describe-instances"}, ctx)
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Contains(t, stdout.String(), "pop=Ecs")
+}
+
 func TestMergeEnvs(t *testing.T) {
 	t.Run("Empty overrides returns base unchanged", func(t *testing.T) {
 		base := []string{"FOO=bar", "BAZ=qux"}
