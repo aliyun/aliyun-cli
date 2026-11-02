@@ -78,9 +78,9 @@ aliyun configure set \
 
 ## 签名 V4（中划线式命令）
 
-阶段一仅让中划线式命令（例如 `aliyun ecs describe-instances`）支持签名 V4。大驼峰式命令仍走 V1 Golang SDK，暂不支持签名 V4。
+仅支持中划线式命令（例如 `aliyun ecs describe-instances`）。
 
-优先级（与 SLS 插件 `--cli-sign-version` 一致）：命令行 flag > 环境变量 > Profile。
+优先级：命令行 flag > 环境变量 > Profile。
 
 单次命令开启：
 
@@ -100,7 +100,7 @@ aliyun configure set --profile default --cli-sign-version v4
 export ALIBABA_CLOUD_SIGNATURE_VERSION=v4
 ```
 
-未设置时，签名行为与现在一致。打开签名 V4 后执行大驼峰命令会得到明确错误，而不会静默退回旧签名。
+未设置时，签名行为与现在一致。
 
 ## STS 临时凭证
 

@@ -78,9 +78,9 @@ Do not put real secrets in scripts, shell history, source control, or issue repo
 
 ## Signature V4 (kebab-case commands)
 
-Phase 1 enables signature V4 only for kebab-case commands such as `aliyun ecs describe-instances`. PascalCase commands still use the V1 Golang SDK and do not support signature V4 yet.
+Only kebab-case commands are supported (for example `aliyun ecs describe-instances`).
 
-Precedence (same as the SLS plugin `--cli-sign-version` hook): command flag > environment variable > profile.
+Precedence: command flag > environment variable > profile.
 
 Enable it for one command:
 
@@ -100,7 +100,7 @@ Or set the environment variable for the current process:
 export ALIBABA_CLOUD_SIGNATURE_VERSION=v4
 ```
 
-When none are set, signing behavior stays unchanged. With signature V4 enabled, PascalCase commands return a clear error instead of silently falling back to the old signature.
+When none are set, signing behavior stays unchanged.
 
 ## Temporary STS credentials
 
