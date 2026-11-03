@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
@@ -14,6 +14,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	pricingruntime "github.com/aliyun/aliyun-openapi-runtime/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,18 +23,18 @@ func TestEstimateCostEntryPointsUseQuoteResponseAndPropagateOutputErrors(t *test
 	for _, route := range []string{"oss bridge", "direct oss", "triple", "openapi", "legacy"} {
 		for _, outputError := range []bool{false, true} {
 			t.Run(route+map[bool]string{false: "/success", true: "/invalid query"}[outputError], func(t *testing.T) {
-				received := make(chan estimateCostRequest, 1)
+				received := make(chan pricingruntime.PricingRequest, 1)
 				servePricingFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					assert.Equal(t, http.MethodPost, r.Method)
 					assert.Equal(t, estimateCostQuotePath, r.URL.Path)
-					var payload estimateCostRequest
+					var payload pricingruntime.PricingRequest
 					if !assert.NoError(t, json.NewDecoder(r.Body).Decode(&payload)) {
 						http.Error(w, "invalid quote request", http.StatusBadRequest)
 						return
 					}
 					received <- payload
 					w.Header().Set("Content-Type", "application/json")
-					io.WriteString(w, `{"Success":true,"price":{"amount":42}}`)
+					io.WriteString(w, `{"price":{"success":true,"totalAmount":42}}`)
 				}))
 				var output bytes.Buffer
 				ctx := cli.NewCommandContext(&output, io.Discard)
@@ -109,30 +110,6 @@ func servePricingFixture(t *testing.T, handler http.Handler) {
 	t.Helper()
 	server := httptest.NewTLSServer(handler)
 	t.Cleanup(server.Close)
-	// The SDK keeps endpoint domains and ports separate; tunnel the test hostname to the local TLS server.
-	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !assert.Equal(t, http.MethodConnect, r.Method) {
-			http.Error(w, "CONNECT required", http.StatusMethodNotAllowed)
-			return
-		}
-		upstream, err := net.Dial("tcp", server.Listener.Addr().String())
-		if !assert.NoError(t, err) {
-			http.Error(w, "quote server unavailable", http.StatusBadGateway)
-			return
-		}
-		defer upstream.Close()
-		conn, buffered, err := w.(http.Hijacker).Hijack()
-		if !assert.NoError(t, err) {
-			return
-		}
-		defer conn.Close()
-		io.WriteString(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		go io.Copy(upstream, buffered)
-		io.Copy(conn, upstream)
-	}))
-	t.Cleanup(proxy.Close)
-	t.Setenv(estimateCostEndpointEnv, "quote.test.invalid")
-	t.Setenv("HTTPS_PROXY", proxy.URL)
-	t.Setenv("NO_PROXY", "")
-	t.Setenv("no_proxy", "")
+	t.Setenv(estimateCostEndpointEnv, strings.TrimPrefix(server.URL, "https://"))
+	t.Setenv(estimateCostHostEnv, "")
 }

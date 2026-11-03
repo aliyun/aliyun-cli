@@ -16,13 +16,11 @@ package openapi
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
-	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 )
 
 // Cross-product enumeration: asks CloudControl ListSupportedPricingApis
@@ -175,34 +173,14 @@ type pagedListResponse struct {
 // (see paginateList) so tests can swap in a stub fetcher without standing up
 // an https server.
 func invokeListSupportedPricingApis(ctx *cli.Context, profile *config.Profile) (string, error) {
-	client, err := GetClient(profile, ctx)
+	client, err := newPricingClient(ctx, profile)
 	if err != nil {
-		return "", fmt.Errorf("init list-supported-pricing-apis client failed: %s", err)
+		return "", fmt.Errorf("init list-supported-pricing-apis client failed: %w", err)
 	}
+	defer client.Close()
 	return paginateList(func(nextToken string) ([]byte, error) {
-		request := legacyapi.NewRequest()
-		request.Product = estimateCostProductCode
-		request.Version = estimateCostApiVersion
-		request.Method = "GET"
-		request.PathPattern = estimateCostListPath
-		setEstimateCostEndpoint(request)
-		request.Scheme = "https"
-		if host := os.Getenv(estimateCostHostEnv); host != "" {
-			request.Headers["Host"] = host
-		}
-		// Pagination is via query string; the upstream contract uses camelCase
-		// nextToken/maxResults (ROA style). We don't pass maxResults — the
-		// server default (100) is fine for an enumeration that runs once.
-		if nextToken != "" {
-			request.QueryParams["nextToken"] = nextToken
-		}
-		request.SetContentType("application/json")
-
-		resp, err := client.Send(request)
-		if err != nil {
-			return nil, err
-		}
-		return []byte(resp.GetHttpContentString()), nil
+		body, err := client.ListSupportedAPIs(nextToken)
+		return []byte(body), err
 	})
 }
 

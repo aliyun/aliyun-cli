@@ -14,6 +14,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	pricingruntime "github.com/aliyun/aliyun-openapi-runtime/runtime"
 	"github.com/stretchr/testify/require"
 )
 
@@ -237,9 +238,9 @@ func TestCommandoMainQuotesMissingMetadataWithoutInvokingTarget(t *testing.T) {
 			repo, err := meta.MockLoadRepository([]meta.Product{{Code: "demo", Version: "v1", ApiStyle: "restful"}})
 			require.NoError(t, err)
 			c.library.builtinRepo, c.library.canonicalRepo = repo, newFakeCanonicalRepo()
-			received := make(chan estimateCostRequest, 1)
+			received := make(chan pricingruntime.PricingRequest, 1)
 			servePricingFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				var request estimateCostRequest
+				var request pricingruntime.PricingRequest
 				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 					t.Error(err)
 					http.Error(w, "invalid quote", 400)
