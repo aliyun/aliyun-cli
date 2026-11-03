@@ -145,10 +145,9 @@ aliyun plugin update --name <plugin-name>
 
 ```sh
 export ALIBABA_CLOUD_OSSUTIL_EXEC_PATH=/usr/local/bin/ossutil
-aliyun ossutil ls --region cn-hangzhou
 ```
 
-设置该变量后，CLI 会跳过 ossutil 下载、安装和远端版本检查。二进制版本由镜像或安装流程管理，需支持 CLI 的 `alicli` 兼容模式。凭证、参数和输入输出继续使用现有 CLI 集成。路径不存在或不可执行时会明确报错，不回退到自动安装。未设置该变量或值为空时，保持原有自动安装和更新行为。
+设置该变量后，`aliyun ossutil` 直接使用指定的可执行文件，跳过自动下载、安装和远端版本检查，工具版本由运行环境管理。路径不存在或不可执行时会明确报错，不回退到自动安装。未设置该变量或值为空时，保持原有自动安装和更新行为。
 
 ## 问题诊断
 
