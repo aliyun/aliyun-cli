@@ -378,9 +378,6 @@ func DownloadAndUnzip(url string, destFile string, exeFilePath string, extractCe
 	}
 	// 这里会多出一个类似ossutil-2.1.2-mac-arm64的层级
 	sourceFile := filepath.Join(destDirUse, extractCenterDir, originExtractFile)
-	if !fileExists(sourceFile) {
-		return fmt.Errorf("extracted file %s not exist", sourceFile)
-	}
 	source, err := os.Open(sourceFile)
 	if err != nil {
 		return fmt.Errorf("failed to open extracted file %s: %w", sourceFile, err)

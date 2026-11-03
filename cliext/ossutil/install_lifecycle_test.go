@@ -260,6 +260,41 @@ func TestDownloadAndUnzipPreservesDestinationOnPublishFailure(t *testing.T) {
 	}
 }
 
+func TestDownloadAndUnzipPreservesBinaryWhenExecutableMissing(t *testing.T) {
+	archive, err := os.ReadFile(createZipWithEntries(t, map[string]string{"center/README.txt": "no executable"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	defer server.Close()
+	root := t.TempDir()
+	executable := filepath.Join(root, "ossutil")
+	if err := os.WriteFile(executable, []byte("old binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	err = DownloadAndUnzip(server.URL, filepath.Join(root, "download.zip"), executable, "center")
+	var pathErr *os.PathError
+	if !errors.Is(err, os.ErrNotExist) || !errors.As(err, &pathErr) || pathErr.Op != "open" {
+		t.Fatalf("expected the original missing-executable open error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "failed to open extracted file") {
+		t.Fatalf("missing executable error has no context: %v", err)
+	}
+	data, err := os.ReadFile(executable)
+	if err != nil || string(data) != "old binary" {
+		t.Fatalf("missing executable changed the installed binary: %q, %v", data, err)
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "ossutil" {
+		t.Fatalf("missing executable left temporary files: %v", entries)
+	}
+}
+
 func TestDownloadAndUnzipPreservesBinaryOnChecksumError(t *testing.T) {
 	archive := ossutilTestArchive(t, "center", "new binary contents")
 	r, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
