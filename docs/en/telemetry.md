@@ -39,7 +39,7 @@ The structured telemetry events described above do not collect:
 - Session IDs, terminal IDs, parent process IDs, OpenAPI or gateway request IDs, or request IDs returned by the telemetry endpoint.
 - The cloud region configured in the current profile or a client IP address field.
 
-This scope applies to the telemetry events constructed and uploaded by the CLI. It does not cover network access logs or business requests you explicitly send to cloud services.
+This scope applies to the telemetry events constructed and uploaded by the CLI. It does not cover network access logs or business requests you explicitly send to cloud services. The telemetry endpoint's response `requestId` and `telemetryRequestId` are used only in local diagnostic logs.
 
 ## Manage telemetry
 
@@ -104,7 +104,7 @@ Telemetry uses the following local files. `~` denotes the user's home directory;
 
 Temporary event files pass data between local processes; they are not complete command logs.
 
-`telemetry.log` automatically records collection, event persistence, and upload status with fixed failure reasons in JSON Lines format. Use timestamps, process IDs, and `eventId` to correlate stages and identify events that were not generated, could not be saved, or failed to upload. Upload records also include HTTP status codes and duration where applicable. These logs stay local and contain no command lines, business parameter values, credentials, business file paths, request or response bodies, or raw error messages.
+`telemetry.log` automatically records collection, event persistence, and upload status with fixed failure reasons in JSON Lines format. Use timestamps, process IDs, and `eventId` to correlate stages and identify events that were not generated, could not be saved, or failed to upload. Upload records also include HTTP status codes, duration, and validated response identifiers (`requestId` and `telemetryRequestId`) where supplied by the server; these identifiers are omitted when no response is received. These logs stay local and contain no command lines, business parameter values, credentials, business file paths, request or response bodies, or raw error messages.
 
 Logs rotate at 10 MiB per file, retaining up to 5 backups (`telemetry.log.1` through `telemetry.log.5`). Local diagnostics can still record skip reasons when telemetry is disabled. Diagnostic logging failures do not affect command execution.
 

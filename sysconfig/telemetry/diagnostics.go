@@ -33,14 +33,16 @@ var diagnosticMu sync.Mutex
 // diagnosticRecord deliberately accepts no free-form messages, errors, command
 // arguments, or paths. Every string field is validated again before writing.
 type diagnosticRecord struct {
-	Stage      string `json:"stage"`
-	Status     string `json:"status"`
-	Reason     string `json:"reason,omitempty"`
-	ErrorKind  string `json:"errorKind,omitempty"`
-	EventID    string `json:"eventId,omitempty"`
-	Pipeline   string `json:"pipeline,omitempty"`
-	HTTPStatus int    `json:"httpStatus,omitempty"`
-	DurationMs int64  `json:"durationMs,omitempty"`
+	Stage              string `json:"stage"`
+	Status             string `json:"status"`
+	Reason             string `json:"reason,omitempty"`
+	ErrorKind          string `json:"errorKind,omitempty"`
+	EventID            string `json:"eventId,omitempty"`
+	RequestID          string `json:"requestId,omitempty"`
+	TelemetryRequestID string `json:"telemetryRequestId,omitempty"`
+	Pipeline           string `json:"pipeline,omitempty"`
+	HTTPStatus         int    `json:"httpStatus,omitempty"`
+	DurationMs         int64  `json:"durationMs,omitempty"`
 }
 
 // writeDiagnostic is independent of collection state. Logging must never affect
@@ -190,6 +192,12 @@ func sanitizeDiagnostic(record *diagnosticRecord) bool {
 	if !validDiagnosticEventID(record.EventID) {
 		record.EventID = ""
 	}
+	if !validDiagnosticRequestID(record.RequestID) {
+		record.RequestID = ""
+	}
+	if !validDiagnosticRequestID(record.TelemetryRequestID) {
+		record.TelemetryRequestID = ""
+	}
 	if record.Pipeline != "public" && record.Pipeline != "inner" {
 		record.Pipeline = ""
 	}
@@ -214,6 +222,20 @@ func validDiagnosticEventID(id string) bool {
 			continue
 		}
 		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
+			return false
+		}
+	}
+	return true
+}
+
+// Request identifiers are bounded protocol metadata, never arbitrary response
+// text. Restrict their alphabet before allowing them into local diagnostics.
+func validDiagnosticRequestID(id string) bool {
+	if len(id) == 0 || len(id) > 128 {
+		return false
+	}
+	for _, c := range []byte(id) {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '.' || c == '_' || c == ':' || c == '-') {
 			return false
 		}
 	}

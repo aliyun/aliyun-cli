@@ -43,7 +43,8 @@ func TestDiagnosticRecordContainsOnlySafeFields(t *testing.T) {
 	dir := t.TempDir()
 	record := diagnosticRecord{
 		Stage: "upload", Status: "failed", Reason: "http_error", ErrorKind: "network_error",
-		EventID: diagnosticTestEventID, Pipeline: "inner", HTTPStatus: 503, DurationMs: 42,
+		EventID: diagnosticTestEventID, RequestID: "request-ABC_123:trace.456", Pipeline: "inner", HTTPStatus: 503, DurationMs: 42,
+		TelemetryRequestID: "collector-ABC_123:trace.456",
 	}
 	writeDiagnostic(dir, record)
 	path := filepath.Join(dir, "logs", diagnosticLogName)
@@ -58,7 +59,8 @@ func TestDiagnosticRecordContainsOnlySafeFields(t *testing.T) {
 	require.Equal(t, map[string]any{
 		"timestamp": entry["timestamp"], "pid": float64(os.Getpid()),
 		"stage": "upload", "status": "failed", "reason": "http_error", "errorKind": "network_error",
-		"eventId": diagnosticTestEventID, "pipeline": "inner", "httpStatus": float64(503), "durationMs": float64(42),
+		"eventId": diagnosticTestEventID, "requestId": "request-ABC_123:trace.456", "pipeline": "inner", "httpStatus": float64(503), "durationMs": float64(42),
+		"telemetryRequestId": "collector-ABC_123:trace.456",
 	}, entry)
 	if runtime.GOOS != "windows" {
 		for _, p := range []string{path, path + ".lock"} {
@@ -77,7 +79,8 @@ func TestDiagnosticRecordContainsOnlySafeFields(t *testing.T) {
 	secret := "oss://private-bucket/secret?accessKey=private-value\nforged-log"
 	writeDiagnostic(dir, diagnosticRecord{
 		Stage: "upload", Status: "failed", Reason: secret, ErrorKind: secret,
-		EventID: secret, Pipeline: secret, HTTPStatus: 999, DurationMs: -1,
+		EventID: secret, RequestID: secret, Pipeline: secret, HTTPStatus: 999, DurationMs: -1,
+		TelemetryRequestID: secret,
 	})
 	entries = readDiagnosticEntries(t, path)
 	require.Len(t, entries, 2)
@@ -93,6 +96,33 @@ func TestDiagnosticRecordContainsOnlySafeFields(t *testing.T) {
 		writeDiagnostic(dir, record)
 	}
 	require.Len(t, readDiagnosticEntries(t, path), 2, "unknown stages and statuses must be discarded")
+}
+
+func TestDiagnosticRequestIDValidation(t *testing.T) {
+	t.Setenv(TelemetryLogDisableEnv, "0")
+	for _, id := range []string{diagnosticTestEventID, "request-ABC_123:trace.456", "A", strings.Repeat("a", 128)} {
+		t.Run("valid_"+id, func(t *testing.T) {
+			dir := t.TempDir()
+			writeDiagnostic(dir, diagnosticRecord{Stage: "upload", Status: "failed", RequestID: id, TelemetryRequestID: id})
+			entries := readDiagnosticEntries(t, filepath.Join(dir, "logs", diagnosticLogName))
+			require.Len(t, entries, 1)
+			require.Equal(t, id, entries[0]["requestId"], "preserve the identifier exactly")
+			require.Equal(t, id, entries[0]["telemetryRequestId"], "preserve the collector identifier exactly")
+		})
+	}
+	for i, id := range []string{
+		"", strings.Repeat("a", 129), "request\r\nforged-log", "request\x00secret", "request secret",
+		"https://private.example/request", "/private/business/path", "secret?token=credential", "请求标识", "request\\private",
+	} {
+		t.Run(fmt.Sprintf("invalid_%d", i), func(t *testing.T) {
+			dir := t.TempDir()
+			writeDiagnostic(dir, diagnosticRecord{Stage: "upload", Status: "failed", RequestID: id, TelemetryRequestID: id})
+			entries := readDiagnosticEntries(t, filepath.Join(dir, "logs", diagnosticLogName))
+			require.Len(t, entries, 1)
+			require.NotContains(t, entries[0], "requestId", "unsafe metadata must be omitted while retaining the diagnostic")
+			require.NotContains(t, entries[0], "telemetryRequestId", "unsafe collector metadata must be omitted")
+		})
+	}
 }
 
 func TestDiagnosticAllowedEnumsAndIdentifiers(t *testing.T) {

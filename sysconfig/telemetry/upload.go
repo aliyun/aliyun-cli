@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -27,6 +28,8 @@ import (
 )
 
 const defaultTelemetryEndpoint = "https://openapi-acore.aliyuncs.com/v1/telemetry/events"
+
+const maxTelemetryResponseBytes = 64 * 1024
 
 type uploadEvent struct {
 	SchemaVersion string         `json:"schemaVersion"`
@@ -119,6 +122,7 @@ func uploadFile(configDir, pipeline, cacheFile, eventID string) error {
 		record.Status = "succeeded"
 	}
 	record.HTTPStatus, record.DurationMs = result.httpStatus, result.durationMs
+	record.RequestID, record.TelemetryRequestID = result.requestID, result.telemetryRequestID
 	writeDiagnostic(configDir, record)
 	return nil
 }
@@ -132,11 +136,13 @@ func removeUploadCache(configDir, pipeline, cacheFile, eventID string) {
 }
 
 type telemetryUploadResult struct {
-	success    bool
-	httpStatus int
-	reason     string
-	errorKind  string
-	durationMs int64
+	success            bool
+	httpStatus         int
+	reason             string
+	errorKind          string
+	durationMs         int64
+	requestID          string
+	telemetryRequestID string
 }
 
 func postTelemetryBatch(batch []uploadEvent) bool {
@@ -163,18 +169,62 @@ func postTelemetryBatchResult(batch []uploadEvent, client *http.Client) (result 
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
+	if resp != nil {
+		result.httpStatus = resp.StatusCode
+		// A rejected redirect can return both a response and an error. Its body
+		// is already closed by net/http, but the response headers remain useful.
+		result.requestID, result.telemetryRequestID = telemetryResponseIDs(resp, err == nil)
+		if resp.Body != nil {
+			defer resp.Body.Close()
+		}
+	}
 	if err != nil {
 		result.errorKind = diagnosticErrorKind(err)
 		return result
 	}
-	defer resp.Body.Close()
-	result.httpStatus = resp.StatusCode
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		result.reason = "http_error"
 		return result
 	}
 	result.success = true
 	return result
+}
+
+// telemetryResponseIDs extracts only validated correlation identifiers. It
+// never returns response text, URLs, headers other than IDs, or parse errors.
+func telemetryResponseIDs(resp *http.Response, readBody bool) (requestID, telemetryRequestID string) {
+	requestID = firstValidResponseID(resp.Header.Get("X-Acs-Request-Id"), resp.Header.Get("X-Request-Id"))
+	telemetryRequestID = firstValidResponseID(resp.Header.Get("X-Telemetry-Request-Id"))
+	if !readBody || resp.Body == nil || requestID != "" && telemetryRequestID != "" {
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxTelemetryResponseBytes+1))
+	if err != nil || len(data) > maxTelemetryResponseBytes {
+		return
+	}
+	var ids struct {
+		RequestID          string `json:"requestId"`
+		TelemetryRequestID string `json:"telemetryRequestId"`
+	}
+	if json.Unmarshal(data, &ids) != nil {
+		return
+	}
+	if requestID == "" {
+		requestID = firstValidResponseID(ids.RequestID)
+	}
+	if telemetryRequestID == "" {
+		telemetryRequestID = firstValidResponseID(ids.TelemetryRequestID)
+	}
+	return
+}
+
+func firstValidResponseID(values ...string) string {
+	for _, value := range values {
+		if validDiagnosticRequestID(value) {
+			return value
+		}
+	}
+	return ""
 }
 
 func newUploadEvent(event Event) uploadEvent {

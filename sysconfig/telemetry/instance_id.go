@@ -35,7 +35,7 @@ func GetInstanceIDFilePath(configDir string) string {
 
 // LoadInstanceID reads an existing ID without creating one.
 func LoadInstanceID(configDir string) (string, error) {
-	data, err := os.ReadFile(GetInstanceIDFilePath(configDir))
+	data, err := readInstanceIDFile(GetInstanceIDFilePath(configDir))
 	if os.IsNotExist(err) {
 		return "", nil
 	}

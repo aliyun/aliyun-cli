@@ -24,3 +24,7 @@ func unlockFile(f *os.File) error {
 func replaceFile(source, target string) error {
 	return os.Rename(source, target)
 }
+
+func readInstanceIDFile(path string) ([]byte, error) {
+	return os.ReadFile(path)
+}

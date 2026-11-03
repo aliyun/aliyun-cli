@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// ErrLockBusy means another process held the lock until the wait budget expired.
+// ErrLockBusy means temporary contention on a telemetry file or its lock.
 var ErrLockBusy = errors.New("telemetry file lock is busy")
 
 // acquireFileLock locks a stable file. Its parent directory must already exist;

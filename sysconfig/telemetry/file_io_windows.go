@@ -4,7 +4,11 @@ package telemetry
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -21,6 +25,46 @@ func tryLockFile(f *os.File) error {
 
 func unlockFile(f *os.File) error {
 	return windows.UnlockFileEx(windows.Handle(f.Fd()), 0, 1, 0, &windows.Overlapped{})
+}
+
+// readInstanceIDFile shares delete access as well as reads and writes. Windows
+// requires this even for a new reader while MoveFileEx holds a DELETE handle;
+// os.ReadFile's default sharing mode does not allow that concurrent open.
+func readInstanceIDFile(path string) ([]byte, error) {
+	// Resolve before checking length: even a short relative filename can live
+	// beneath a working directory longer than Windows' legacy path limit.
+	name, err := filepath.Abs(path)
+	if err != nil {
+		return nil, &os.PathError{Op: "open", Path: path, Err: err}
+	}
+	if len(name) >= 248 && !strings.HasPrefix(name, `\\?\`) && !strings.HasPrefix(name, `\\.\`) {
+		// Match os file access for long paths, including UNC shares. Extended
+		// paths must be absolute and normalized before adding the prefix.
+		if strings.HasPrefix(name, `\\`) {
+			name = `\\?\UNC\` + name[2:]
+		} else {
+			name = `\\?\` + name
+		}
+	}
+	namep, err := windows.UTF16PtrFromString(name)
+	if err != nil {
+		return nil, &os.PathError{Op: "open", Path: path, Err: err}
+	}
+	handle, err := windows.CreateFile(namep, windows.GENERIC_READ,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	if err != nil {
+		pathErr := &os.PathError{Op: "open", Path: path, Err: err}
+		if errors.Is(err, windows.ERROR_SHARING_VIOLATION) {
+			// Keep contention distinct from an absent ID: callers must never
+			// generate another identifier while the existing file is busy.
+			return nil, fmt.Errorf("%w: %w", ErrLockBusy, pathErr)
+		}
+		return nil, pathErr
+	}
+	f := os.NewFile(uintptr(handle), path)
+	defer f.Close()
+	return io.ReadAll(f)
 }
 
 func replaceFile(source, target string) error {
