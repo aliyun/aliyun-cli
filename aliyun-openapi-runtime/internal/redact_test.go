@@ -314,6 +314,63 @@ func TestMaskBodyTopLevelArrayPreservesNumbers(t *testing.T) {
 	}
 }
 
+func TestMaskBodyUnicodePrefixes(t *testing.T) {
+	const secret = "FAKE_SECRET_20261103"
+	for _, prefix := range []string{"\ufeff", "\u200b", "\u200c", "\u200d", "\u2060", "\u202e", " \t\ufeff"} {
+		nested := prefix + `{"password":"` + secret + `"}`
+		object, _ := json.Marshal(map[string]string{"payload": nested})
+		array, _ := json.Marshal([]string{nested})
+		quoted, _ := json.Marshal(nested)
+		for _, body := range []string{
+			prefix + "<Password>" + secret + "==</Password>",
+			prefix + "raw=" + secret,
+			url.QueryEscape(prefix+"raw") + "=" + secret,
+			string(object), string(array),
+			"payload=" + url.QueryEscape(nested),
+			"payload=" + url.QueryEscape(string(quoted)),
+		} {
+			t.Run(fmt.Sprintf("%q/%q", prefix, body), func(t *testing.T) {
+				want := fmt.Sprintf("<opaque body omitted: %d bytes>", len(body))
+				for _, mask := range []func(string) string{MaskBodyFull, MaskBody} {
+					if got := mask(body); got != want {
+						t.Fatalf("got %q, want %q", got, want)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestMaskBodySensitiveValuesNeedNotBeJSON(t *testing.T) {
+	const secret = "FAKE_SECRET_20261103"
+	for _, value := range []string{"[" + secret, "{" + secret, `"` + secret, "\ufeff" + secret, "\u200b" + secret} {
+		for _, key := range []string{"password", "user.password.1", "user[password]"} {
+			object, _ := json.Marshal(map[string]string{key: value, "name": "visible"})
+			want, _ := json.Marshal(map[string]string{key: MaskValue(value), "name": "visible"})
+			body := key + "=" + url.QueryEscape(value) + "&name=visible"
+			for _, tc := range []struct{ body, want string }{
+				{string(object), string(want)},
+				{body, key + "=" + MaskValue(value) + "&name=visible"},
+			} {
+				t.Run(tc.body, func(t *testing.T) {
+					if got := MaskBodyFull(tc.body); got != tc.want || strings.Contains(got, secret) {
+						t.Fatalf("got %q, want %q", got, tc.want)
+					}
+				})
+			}
+		}
+	}
+	for _, tc := range []struct{ body, want string }{
+		{`{"credentials":{"items":["[FAKE_SECRET_20261103"]},"name":"visible"}`, `{"credentials":"***","name":"visible"}`},
+		{`[{"password":"[FAKE_SECRET_20261103","name":"visible"}]`, `[{"name":"visible","password":"[FAK***"}]`},
+		{`{"payload":"{\"password\":\"[FAKE_SECRET_20261103\",\"name\":\"visible\"}"}`, `{"payload":"{\"name\":\"visible\",\"password\":\"[FAK***\"}"}`},
+	} {
+		if got := MaskBodyFull(tc.body); got != tc.want {
+			t.Fatalf("got %q, want %q", got, tc.want)
+		}
+	}
+}
+
 func TestMaskBodyWholeObjectSecret(t *testing.T) {
 	output := MaskBody(`{"credentials":{"accessKeySecret":"x"}}`)
 	var body map[string]any

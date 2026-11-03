@@ -153,7 +153,7 @@ func MaskBodyFull(body string) string {
 	if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") || strings.HasPrefix(trimmed, `"`) || strings.HasPrefix(trimmed, "<") {
 		return omitted
 	}
-	if strings.ContainsFunc(body, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) {
+	if strings.ContainsFunc(body, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }) {
 		return omitted
 	}
 	if _, err := url.ParseQuery(body); err != nil {
@@ -167,7 +167,7 @@ func MaskBodyFull(body string) string {
 		}
 		name, _ := url.QueryUnescape(key)
 		decoded, _ := url.QueryUnescape(value)
-		if !utf8.ValidString(name) || !utf8.ValidString(decoded) || !canRedactJSON(decoded) {
+		if !utf8.ValidString(name) || !utf8.ValidString(decoded) || strings.ContainsFunc(name, func(r rune) bool { return unicode.Is(unicode.Cf, r) }) || !isSensitivePath(name) && !canRedactJSON(decoded) {
 			return omitted
 		}
 		if masked := MaskKV(name, decoded); masked != decoded {
@@ -179,6 +179,9 @@ func MaskBodyFull(body string) string {
 
 func canRedactJSON(value string) bool {
 	trimmed := strings.TrimSpace(value)
+	if first, _ := utf8.DecodeRuneInString(trimmed); unicode.Is(unicode.Cf, first) {
+		return false
+	}
 	if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") && !strings.HasPrefix(trimmed, `"`) {
 		return true
 	}
@@ -187,10 +190,10 @@ func canRedactJSON(value string) bool {
 	}
 	decoder := json.NewDecoder(strings.NewReader(value))
 	decoder.UseNumber()
-	return canRedactJSONValue(decoder)
+	return canRedactJSONValue(decoder, false)
 }
 
-func canRedactJSONValue(decoder *json.Decoder) bool {
+func canRedactJSONValue(decoder *json.Decoder, sensitive bool) bool {
 	token, err := decoder.Token()
 	if err != nil {
 		return false
@@ -210,13 +213,13 @@ func canRedactJSONValue(decoder *json.Decoder) bool {
 					return false
 				}
 				seen[name] = true
-				if !canRedactJSONValue(decoder) {
+				if !canRedactJSONValue(decoder, sensitive || isSensitivePath(name)) {
 					return false
 				}
 			}
 		} else {
 			for decoder.More() {
-				if !canRedactJSONValue(decoder) {
+				if !canRedactJSONValue(decoder, sensitive) {
 					return false
 				}
 			}
@@ -224,7 +227,7 @@ func canRedactJSONValue(decoder *json.Decoder) bool {
 		_, err = decoder.Token()
 		return err == nil
 	case string:
-		return canRedactJSON(value)
+		return sensitive || canRedactJSON(value)
 	default:
 		return true
 	}

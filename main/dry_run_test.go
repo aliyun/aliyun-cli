@@ -100,61 +100,73 @@ func TestCSDryRunOmitsBOMXMLBodyFile(t *testing.T) {
 	clearAgentDetectionEnv(t)
 	t.Setenv("ALIBABA_CLOUD_CLI_PLUGINS_DIR", t.TempDir())
 	t.Setenv("ALIBABA_CLOUD_CLI_PLUGIN_AUTO_INSTALL", "false")
-	const secret = "FAKE_SECRET_20261103=="
-	body := []byte("\ufeff<Password>" + secret + "</Password>")
-	for _, route := range []struct {
-		name string
-		args []string
-	}{
-		{"camel", []string{"cs", "CreateCluster", "--version", "2015-12-15"}},
-		{"REST", []string{"cs", "POST", "/clusters", "--version", "2015-12-15"}},
-		{"kebab", []string{"cs", "create-cluster", "--api-version", "2015-12-15"}},
+	const secret = "FAKE_SECRET_20261103"
+	for _, tc := range []struct{ name, body, want string }{
+		{"BOM XML", "\ufeff<Password>" + secret + "==</Password>", ""},
+		{"zero-width XML", "\u200b<Password>" + secret + "==</Password>", ""},
+		{"nested BOM JSON", `{"payload":"\ufeff{\"password\":\"` + secret + `\"}"}`, ""},
+		{"nested BOM form", "payload=%EF%BB%BF%7B%22password%22%3A%22" + secret + "%22%7D", ""},
+		{"sensitive JSON prefix", `{"password":"[` + secret + `","name":"visible"}`, `{"name":"visible","password":"[FAK***"}`},
+		{"sensitive form prefix", "password=%5B" + secret + "&name=visible", "password=[FAK***&name=visible"},
 	} {
-		for _, mode := range []string{"--cli-dry-run", "--cli-dry-run-json"} {
-			t.Run(route.name+"/"+mode, func(t *testing.T) {
-				dir := t.TempDir()
-				bodyPath := filepath.Join(dir, "body.xml")
-				if err := os.WriteFile(bodyPath, body, 0o600); err != nil {
-					t.Fatal(err)
-				}
-				configPath := filepath.Join(dir, "config.json")
-				profileJSON := []byte(`{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":"testid","access_key_secret":"testsecret","region_id":"cn-hangzhou","language":"en"}]}`)
-				if err := os.WriteFile(configPath, profileJSON, 0o600); err != nil {
-					t.Fatal(err)
-				}
-				profile, err := config.LoadProfile(configPath, "default")
-				if err != nil {
-					t.Fatal(err)
-				}
-				var stdout, stderr bytes.Buffer
-				root := newRootCommand(profile, &stdout)
-				ctx := newCommandContext(&stdout, &stderr)
-				ctx.EnterCommand(root)
-				args := append([]string(nil), route.args...)
-				args = append(args, "--body-file", bodyPath, mode, "--endpoint", "example.com", "--region", "cn-hangzhou", "--config-path", configPath, "--log-level", "DEBUG")
-				cli.DisableExitCode()
-				defer cli.EnableExitCode()
-				originalArgs := os.Args
-				os.Args = append([]string{"aliyun"}, args...)
-				defer func() { os.Args = originalArgs }()
-				root.Execute(ctx, args)
-				if stderr.Len() != 0 || strings.Contains(stdout.String(), secret) {
-					t.Fatalf("unsafe dry-run output: stdout=%s stderr=%s", &stdout, &stderr)
-				}
-				want := fmt.Sprintf("<opaque body omitted: %d bytes>", len(body))
-				if mode == "--cli-dry-run-json" {
-					var output openapi.CliDryRunOutput
-					if err := json.Unmarshal(stdout.Bytes(), &output); err != nil || output.Body != want || output.BodyFormat == "" {
-						t.Fatalf("unexpected dry-run JSON: %+v, error=%v", output, err)
+		body := []byte(tc.body)
+		for _, route := range []struct {
+			name string
+			args []string
+		}{
+			{"camel", []string{"cs", "CreateCluster", "--version", "2015-12-15"}},
+			{"REST", []string{"cs", "POST", "/clusters", "--version", "2015-12-15"}},
+			{"kebab", []string{"cs", "create-cluster", "--api-version", "2015-12-15"}},
+		} {
+			for _, mode := range []string{"--cli-dry-run", "--cli-dry-run-json"} {
+				t.Run(tc.name+"/"+route.name+"/"+mode, func(t *testing.T) {
+					dir := t.TempDir()
+					bodyPath := filepath.Join(dir, "body.xml")
+					if err := os.WriteFile(bodyPath, body, 0o600); err != nil {
+						t.Fatal(err)
 					}
-				} else if !strings.Contains(stdout.String(), want) {
-					t.Fatalf("omission marker missing: %s", &stdout)
-				}
-				unchanged, err := os.ReadFile(bodyPath)
-				if err != nil || !bytes.Equal(unchanged, body) {
-					t.Fatalf("input bytes changed: error=%v", err)
-				}
-			})
+					configPath := filepath.Join(dir, "config.json")
+					profileJSON := []byte(`{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":"testid","access_key_secret":"testsecret","region_id":"cn-hangzhou","language":"en"}]}`)
+					if err := os.WriteFile(configPath, profileJSON, 0o600); err != nil {
+						t.Fatal(err)
+					}
+					profile, err := config.LoadProfile(configPath, "default")
+					if err != nil {
+						t.Fatal(err)
+					}
+					var stdout, stderr bytes.Buffer
+					root := newRootCommand(profile, &stdout)
+					ctx := newCommandContext(&stdout, &stderr)
+					ctx.EnterCommand(root)
+					args := append([]string(nil), route.args...)
+					args = append(args, "--body-file", bodyPath, mode, "--endpoint", "example.com", "--region", "cn-hangzhou", "--config-path", configPath, "--log-level", "DEBUG")
+					cli.DisableExitCode()
+					defer cli.EnableExitCode()
+					originalArgs := os.Args
+					os.Args = append([]string{"aliyun"}, args...)
+					defer func() { os.Args = originalArgs }()
+					root.Execute(ctx, args)
+					if stderr.Len() != 0 || strings.Contains(stdout.String(), secret) {
+						t.Fatalf("unsafe dry-run output: stdout=%s stderr=%s", &stdout, &stderr)
+					}
+					want := tc.want
+					if want == "" {
+						want = fmt.Sprintf("<opaque body omitted: %d bytes>", len(body))
+					}
+					if mode == "--cli-dry-run-json" {
+						var output openapi.CliDryRunOutput
+						if err := json.Unmarshal(stdout.Bytes(), &output); err != nil || output.Body != want || output.BodyFormat == "" {
+							t.Fatalf("unexpected dry-run JSON: %+v, error=%v", output, err)
+						}
+					} else if !strings.Contains(stdout.String(), want) {
+						t.Fatalf("omission marker missing: %s", &stdout)
+					}
+					unchanged, err := os.ReadFile(bodyPath)
+					if err != nil || !bytes.Equal(unchanged, body) {
+						t.Fatalf("input bytes changed: error=%v", err)
+					}
+				})
+			}
 		}
 	}
 }

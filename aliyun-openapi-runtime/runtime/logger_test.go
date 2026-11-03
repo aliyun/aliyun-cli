@@ -221,6 +221,11 @@ func TestLogRequestOmitsOpaqueBody(t *testing.T) {
 		"<Password>" + secret + "</Password>",
 		"\ufeff<Password>" + secret + "==</Password>",
 		[]byte("\ufeff<Password>" + secret + "==</Password>"),
+		"\u200b<Password>" + secret + "==</Password>",
+		[]byte("\u200b<Password>" + secret + "==</Password>"),
+		`{"payload":"\ufeff{\"password\":\"` + secret + `\"}"}`,
+		"payload=%EF%BB%BF%7B%22password%22%3A%22" + secret + "%22%7D",
+		map[string]any{"payload": "\ufeff{\"password\":\"" + secret + "\"}"},
 		`{"password":"` + secret,
 		"password: " + secret,
 		[]byte(strings.Repeat("x", 1600) + secret),
@@ -257,6 +262,30 @@ func TestLogRequestOmitsOpaqueBody(t *testing.T) {
 		}
 		if !bytes.Equal(data, after) {
 			t.Fatal("logging changed the request body")
+		}
+	}
+}
+
+func TestLogRequestPreservesSensitiveValuePreview(t *testing.T) {
+	t.Cleanup(ResetLoggerForTest)
+	ResetLoggerForTest()
+	InitLogger("DEBUG", false)
+	var out bytes.Buffer
+	SetLoggerOutputForTest(&out)
+	const secret = "FAKE_SECRET_20261103"
+	for _, body := range []any{
+		`{"password":"[` + secret + `","name":"visible"}`,
+		[]byte(`{"password":"[` + secret + `","name":"visible"}`),
+		"password=%5B" + secret + "&name=visible",
+		map[string]any{"password": "[" + secret, "name": "visible"},
+	} {
+		out.Reset()
+		before, _ := json.Marshal(body)
+		req := &AssembledRequest{Body: body}
+		LogRequest(req)
+		after, _ := json.Marshal(req.Body)
+		if strings.Contains(out.String(), secret) || !strings.Contains(out.String(), "visible") || !strings.Contains(out.String(), "[FAK***") || !bytes.Equal(before, after) {
+			t.Fatalf("unsafe or regressed log for %T: %s", body, &out)
 		}
 	}
 }
