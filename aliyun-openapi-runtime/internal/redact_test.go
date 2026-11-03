@@ -16,6 +16,7 @@ package internal
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -100,11 +101,11 @@ func TestMaskBodyContentDetection(t *testing.T) {
 		{"form", "name=visible&Password=example-secret", "name=visible&Password=exam***"},
 		{"encoded key and repeated fields", "%50assword=example-secret&Password=another-secret&name=%E4%B8%AD", "%50assword=exam***&Password=anot***&name=%E4%B8%AD"},
 		{"form empty and short secrets", "password=&token=x&name=alice", "password=&token=***&name=alice"},
-		{"form literal newline", "password=example-secret\ncontinued&name=visible", "password=exam***&name=visible"},
-		{"raw lines", "name: visible\npassword: example-secret", "name: visible\npassword: example-secret"},
-		{"raw assignments", "name=visible, password=example-secret", "name=visible, password=example-secret"},
-		{"raw space separated fields", "name=visible password=example-secret", "name=visible password=example-secret"},
-		{"plain text", "ordinary text 正文末尾", "ordinary text 正文末尾"},
+		{"form literal newline", "password=example-secret\ncontinued&name=visible", ""},
+		{"raw lines", "name: visible\npassword: example-secret", ""},
+		{"raw assignments", "name=visible, password=example-secret", ""},
+		{"raw space separated fields", "name=visible password=example-secret", ""},
+		{"plain text", "ordinary text 正文末尾", ""},
 		{"JSON", `{"name":"visible","password":"example-secret"}`, `{"name":"visible","password":"exam***"}`},
 		{"unchanged JSON", `{ "name": "visible" }`, `{ "name": "visible" }`},
 		{"original stars", "password=*abcSECRET&note=***", "password=*abc***&note=***"},
@@ -116,6 +117,9 @@ func TestMaskBodyContentDetection(t *testing.T) {
 		{"embedded JSON array", "config=" + url.QueryEscape(`[{"note":"*","token":123}]`), `config=[{"note":"*","token":"***"}]`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.want == "" && tc.body != "" {
+				tc.want = fmt.Sprintf("<opaque body omitted: %d bytes>", len(tc.body))
+			}
 			if got := MaskBodyFull(tc.body); got != tc.want {
 				t.Fatalf("got %q, want %q", got, tc.want)
 			}
@@ -123,7 +127,7 @@ func TestMaskBodyContentDetection(t *testing.T) {
 	}
 }
 
-func TestMaskBodyFormPreservesUnparseableValues(t *testing.T) {
+func TestMaskBodyFormOmitsUnparseableValues(t *testing.T) {
 	for _, body := range []string{
 		`ext_params={key=example-string}`,
 		`ext_params={password=secret*value}`,
@@ -132,8 +136,9 @@ func TestMaskBodyFormPreservesUnparseableValues(t *testing.T) {
 		`ext_params="password=secret*value`,
 	} {
 		const sensitive = "&user.password.1=example-secret"
-		if got := MaskBodyFull(body + sensitive); got != body+"&user.password.1=exam***" {
-			t.Errorf("changed unparseable field or missed sibling redaction: %q", got)
+		want := fmt.Sprintf("<opaque body omitted: %d bytes>", len(body+sensitive))
+		if got := MaskBodyFull(body + sensitive); got != want {
+			t.Errorf("unparseable field output = %q, want %q", got, want)
 		}
 	}
 	for _, body := range []string{
@@ -142,8 +147,9 @@ func TestMaskBodyFormPreservesUnparseableValues(t *testing.T) {
 		`password=example-secret&name=%zz`,
 		`password=example-secret;name=alice`,
 	} {
-		if got := MaskBodyFull(body); got != body {
-			t.Errorf("changed unparseable form: got %q, want %q", got, body)
+		want := fmt.Sprintf("<opaque body omitted: %d bytes>", len(body))
+		if got := MaskBodyFull(body); got != want {
+			t.Errorf("unparseable form output = %q, want %q", got, want)
 		}
 	}
 }
@@ -190,15 +196,14 @@ func TestMaskBodyNestedForm(t *testing.T) {
 	if err != nil || json.Unmarshal([]byte(form.Get("config")), &decoded) != nil || decoded["inner"] != maskedNested {
 		t.Fatalf("nested JSON string field = %v, error = %v", form, err)
 	}
-	// Preserve damaged nested JSON verbatim so users can diagnose the request.
 	broken := `{"password":"FAKE_SECRET_123`
 	body = []byte("config=" + url.QueryEscape(broken) + "&name=alice")
-	if got := MaskBodyFull(string(body)); got != string(body) {
-		t.Fatalf("changed malformed JSON value: %s", got)
+	if got, want := MaskBodyFull(string(body)), fmt.Sprintf("<opaque body omitted: %d bytes>", len(body)); got != want {
+		t.Fatalf("malformed JSON value output = %q, want %q", got, want)
 	}
 }
 
-func TestMaskBodyPreservesUnparseableContent(t *testing.T) {
+func TestMaskBodyOmitsUnparseableContent(t *testing.T) {
 	for _, body := range []string{
 		`<Request><Password>example-secret</Password></Request>`,
 		`{"password":"example-secret`,
@@ -209,8 +214,9 @@ func TestMaskBodyPreservesUnparseableContent(t *testing.T) {
 		"\x00example-secret",
 		"\xffexample-secret",
 	} {
-		if got := MaskBodyFull(body); got != body {
-			t.Errorf("got %q, want unchanged %q", got, body)
+		want := fmt.Sprintf("<opaque body omitted: %d bytes>", len(body))
+		if got := MaskBodyFull(body); got != want {
+			t.Errorf("got %q, want %q", got, want)
 		}
 	}
 }
@@ -234,6 +240,50 @@ func TestMaskBodyFullPreservesCompleteRedactedJSON(t *testing.T) {
 func TestMaskBodyFullEmpty(t *testing.T) {
 	if got := MaskBodyFull(""); got != "" {
 		t.Fatalf("MaskBodyFull(empty) = %q", got)
+	}
+}
+
+func TestMaskBodyOmitsOpaqueContent(t *testing.T) {
+	const secret = "FAKE_SECRET_20261103"
+	for name, body := range map[string]string{
+		"duplicate nested value":    `{"x":"[` + secret + `","x":""}`,
+		"duplicate sensitive key":   `{"password":"` + secret + `","password":""}`,
+		"escaped duplicate key":     `{"password":"` + secret + `","pass\u0077ord":""}`,
+		"duplicate inside array":    `[{"password":"` + secret + `","password":""}]`,
+		"duplicate in form JSON":    "config=" + url.QueryEscape(`{"password":"`+secret+`","password":""}`),
+		"xml comment":               "<!--password=" + secret + "-->",
+		"invalid form":              "password=" + secret + "&name=%zz",
+		"xml":                       "<Password>" + secret + "</Password>",
+		"broken JSON":               `{"password":"` + secret,
+		"raw":                       "password: " + secret,
+		"long tail":                 strings.Repeat("x", 1600) + secret,
+		"binary":                    "\x00\xff" + secret,
+		"invalid UTF8 JSON":         "{\"name\":\"\xff" + secret + "\"}",
+		"invalid UTF8 form":         "name=%FF" + secret,
+		"empty key":                 "=" + secret,
+		"decoded empty key":         "%00=" + secret + "&name=%zz",
+		"missing equals":            "name=visible&" + secret,
+		"trailing separator":        "password=" + secret + "&",
+		"unencoded whitespace":      "name=visible password=" + secret,
+		"control character":         "name=visible\x00&password=" + secret,
+		"scalar JSON":               `"` + secret + `"`,
+		"number JSON":               "42",
+		"bool JSON":                 "true",
+		"null JSON":                 "null",
+		"broken nested JSON":        "config=" + url.QueryEscape(`{"password":"`+secret),
+		"broken nested quoted JSON": "config=" + url.QueryEscape(`"`+secret),
+		"nested object":             `{"config":"{\"password\":\"` + secret + `"}`,
+		"nested array":              `[{"config":"{\"password\":\"` + secret + `"}]`,
+		"damaged JSON with equals":  `{"name":"visible","config":"password=` + secret,
+	} {
+		t.Run(name, func(t *testing.T) {
+			want := fmt.Sprintf("<opaque body omitted: %d bytes>", len(body))
+			for _, mask := range []func(string) string{MaskBodyFull, MaskBody} {
+				if got := mask(body); got != want {
+					t.Fatalf("opaque body output = %q, want %q", got, want)
+				}
+			}
+		})
 	}
 }
 

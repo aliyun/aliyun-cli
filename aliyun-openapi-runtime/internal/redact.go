@@ -17,11 +17,14 @@ package internal
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"os"
 	"reflect"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 )
 
 const (
@@ -128,28 +131,100 @@ func MaskBody(body string) string {
 	return truncate(MaskBodyFull(body))
 }
 
-// MaskBodyFull redacts parseable JSON or form content without truncation.
-// Unparseable content and unchanged form fields retain their original spelling.
+// MaskBodyFull omits opaque bodies and redacts complete JSON objects/arrays or strict form content.
 func MaskBodyFull(body string) string {
+	if body == "" {
+		return ""
+	}
+	omitted := fmt.Sprintf("<opaque body omitted: %d bytes>", len(body))
+	if !utf8.ValidString(body) {
+		return omitted
+	}
+	trimmed := strings.TrimSpace(body)
 	if json.Valid([]byte(body)) {
+		if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") || !canRedactJSON(body) {
+			return omitted
+		}
 		return maskEmbeddedJSON(body)
 	}
+	if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") || strings.HasPrefix(trimmed, `"`) || strings.HasPrefix(trimmed, "<") {
+		return omitted
+	}
+	if strings.ContainsFunc(body, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) {
+		return omitted
+	}
 	if _, err := url.ParseQuery(body); err != nil {
-		return body
+		return omitted
 	}
 	parts := strings.Split(body, "&")
 	for i, part := range parts {
 		key, value, found := strings.Cut(part, "=")
-		if !found {
-			continue
+		if !found || key == "" {
+			return omitted
 		}
 		name, _ := url.QueryUnescape(key)
 		decoded, _ := url.QueryUnescape(value)
+		if !utf8.ValidString(name) || !utf8.ValidString(decoded) || !canRedactJSON(decoded) {
+			return omitted
+		}
 		if masked := MaskKV(name, decoded); masked != decoded {
 			parts[i] = key + "=" + masked
 		}
 	}
 	return strings.Join(parts, "&")
+}
+
+func canRedactJSON(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") && !strings.HasPrefix(trimmed, `"`) {
+		return true
+	}
+	if !json.Valid([]byte(value)) {
+		return false
+	}
+	decoder := json.NewDecoder(strings.NewReader(value))
+	decoder.UseNumber()
+	return canRedactJSONValue(decoder)
+}
+
+func canRedactJSONValue(decoder *json.Decoder) bool {
+	token, err := decoder.Token()
+	if err != nil {
+		return false
+	}
+	switch value := token.(type) {
+	case json.Delim:
+		if value == '{' {
+			seen := make(map[string]bool)
+			for decoder.More() {
+				key, err := decoder.Token()
+				if err != nil {
+					return false
+				}
+				name := key.(string)
+				// Duplicate members would hide earlier values during map decoding.
+				if seen[name] {
+					return false
+				}
+				seen[name] = true
+				if !canRedactJSONValue(decoder) {
+					return false
+				}
+			}
+		} else {
+			for decoder.More() {
+				if !canRedactJSONValue(decoder) {
+					return false
+				}
+			}
+		}
+		_, err = decoder.Token()
+		return err == nil
+	case string:
+		return canRedactJSON(value)
+	default:
+		return true
+	}
 }
 
 // ParamStyle=json puts serialized JSON inside a form field's string value.

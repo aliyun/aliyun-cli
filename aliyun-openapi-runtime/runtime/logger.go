@@ -15,6 +15,7 @@
 package runtime
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -254,16 +255,20 @@ func LogArgs(args map[string]any) {
 	}
 }
 
-// logJSON pretty-prints value at DEBUG, matching aliyun-cli-runtime's
-// LogJSON: MarshalIndent with two spaces, each line a separate Debug.
 func logJSON(label string, value any) {
-	b, err := json.MarshalIndent(value, "", "  ")
+	b, err := json.Marshal(value)
 	if err != nil {
-		Debug("%s: (failed to marshal: %v)", label, err)
+		Debug("%s: (failed to marshal; opaque body omitted)", label)
+		return
+	}
+	masked := redact.MaskBodyFull(string(b))
+	var formatted bytes.Buffer
+	if json.Indent(&formatted, []byte(masked), "", "  ") != nil {
+		Debug("%s: %s", label, masked)
 		return
 	}
 	Debug("%s:", label)
-	for _, line := range strings.Split(string(b), "\n") {
+	for _, line := range strings.Split(formatted.String(), "\n") {
 		if line != "" {
 			Debug("  %s", line)
 		}
@@ -294,7 +299,7 @@ func LogRequest(req *AssembledRequest) {
 		case []byte:
 			Debug("Body (bytes): %s", redact.MaskBody(string(v)))
 		default:
-			logJSON("Body", redact.MaskAny(req.Body))
+			logJSON("Body", req.Body)
 		}
 	}
 }

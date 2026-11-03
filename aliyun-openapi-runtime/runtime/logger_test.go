@@ -16,6 +16,8 @@ package runtime
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -207,6 +209,56 @@ func TestLogArgsMasksAndHandlesMarshalFailure(t *testing.T) {
 	}
 }
 
+func TestLogRequestOmitsOpaqueBody(t *testing.T) {
+	t.Cleanup(ResetLoggerForTest)
+	ResetLoggerForTest()
+	InitLogger("DEBUG", false)
+	var out bytes.Buffer
+	SetLoggerOutputForTest(&out)
+	const secret = "FAKE_SECRET_20261103"
+	for _, body := range []any{
+		"password=" + secret + "&name=%zz",
+		"<Password>" + secret + "</Password>",
+		`{"password":"` + secret,
+		"password: " + secret,
+		[]byte(strings.Repeat("x", 1600) + secret),
+		[]byte("\x00\xff" + secret),
+		json.RawMessage(`{"password":"` + secret + `","password":""}`),
+		map[string]any{"config": `{"password":"` + secret},
+		map[string]any{"config": []any{`{"password":"` + secret}},
+		map[string]any{"config": "\"" + secret},
+	} {
+		out.Reset()
+		var data []byte
+		switch value := body.(type) {
+		case string:
+			data = []byte(value)
+		case []byte:
+			data = append([]byte(nil), value...)
+		default:
+			data, _ = json.Marshal(value)
+		}
+		req := &AssembledRequest{Body: body}
+		LogRequest(req)
+		want := fmt.Sprintf("<opaque body omitted: %d bytes>", len(data))
+		if !strings.Contains(out.String(), want) || strings.Contains(out.String(), secret) {
+			t.Fatalf("unsafe request log for %T: %s", body, &out)
+		}
+		var after []byte
+		switch value := req.Body.(type) {
+		case string:
+			after = []byte(value)
+		case []byte:
+			after = value
+		default:
+			after, _ = json.Marshal(value)
+		}
+		if !bytes.Equal(data, after) {
+			t.Fatal("logging changed the request body")
+		}
+	}
+}
+
 func TestLogJSONRequestAndResponseBranches(t *testing.T) {
 	t.Cleanup(ResetLoggerForTest)
 	ResetLoggerForTest()
@@ -233,7 +285,7 @@ func TestLogJSONRequestAndResponseBranches(t *testing.T) {
 	logStringMap("Empty", nil)
 
 	out := buf.String()
-	for _, want := range []string{"Object:", "failed to marshal", "Body (bytes)", "Body:", "Response Body: (empty)", "fallback"} {
+	for _, want := range []string{"Object:", "failed to marshal", "Body (bytes)", "Body:", "Response Body: (empty)", "<opaque body omitted: 8 bytes>"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q:\n%s", want, out)
 		}
