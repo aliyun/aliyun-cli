@@ -1,6 +1,6 @@
 module github.com/aliyun/aliyun-cli/v3
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/alibabacloud-go/alibabacloud-gateway-sls v0.3.0
