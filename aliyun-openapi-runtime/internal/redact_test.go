@@ -112,6 +112,8 @@ func TestMaskBodyContentDetection(t *testing.T) {
 		{"encoded stars", "password=%2AabcSECRET&note=%2a%2A%2a", "password=*abc***&note=%2a%2A%2a"},
 		{"escaped delimiters", "password=a%26%3D%2BSECRET&name=alice", "password=a&=+***&name=alice"},
 		{"encoded and literal spaces", "note=hello%20world&note=hello+world&password=example-secret", "note=hello%20world&note=hello+world&password=exam***"},
+		{"Unicode inside form value", "name=vis\u200bible&password=example-secret", "name=vis\u200bible&password=exam***"},
+		{"encoded Unicode inside form value", "name=vis%E2%80%8Bible&password=example-secret", "name=vis%E2%80%8Bible&password=exam***"},
 		{"embedded JSON without encoding", `config={"note":"***","password":"*abcSECRET"}`, `config={"note":"***","password":"*abc***"}`},
 		{"encoded embedded JSON", "config=" + url.QueryEscape(`{"note":"***","password":"*abcSECRET"}`), `config={"note":"***","password":"*abc***"}`},
 		{"embedded JSON array", "config=" + url.QueryEscape(`[{"note":"*","token":123}]`), `config=[{"note":"*","token":"***"}]`},

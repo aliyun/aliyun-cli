@@ -141,7 +141,7 @@ func MaskBodyFull(body string) string {
 		return omitted
 	}
 	trimmed := strings.TrimSpace(body)
-	if strings.HasPrefix(trimmed, "\ufeff") {
+	if first, _ := utf8.DecodeRuneInString(trimmed); unicode.Is(unicode.Cf, first) {
 		return omitted
 	}
 	if json.Valid([]byte(body)) {
@@ -153,7 +153,7 @@ func MaskBodyFull(body string) string {
 	if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") || strings.HasPrefix(trimmed, `"`) || strings.HasPrefix(trimmed, "<") {
 		return omitted
 	}
-	if strings.ContainsFunc(body, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }) {
+	if strings.ContainsFunc(body, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) {
 		return omitted
 	}
 	if _, err := url.ParseQuery(body); err != nil {
