@@ -139,16 +139,6 @@ aliyun plugin update --name <plugin-name>
 
 完整说明见[命令使用指南](./docs/zh-CN/usage.md)和[插件管理指南](./docs/zh-CN/plugins.md)。
 
-### 复用预装的 ossutil
-
-让 `aliyun ossutil` 使用已有的 ossutil v2 可执行文件：
-
-```sh
-export ALIBABA_CLOUD_OSSUTIL_EXEC_PATH=/usr/local/bin/ossutil
-```
-
-设置该变量后，`aliyun ossutil` 直接使用指定的可执行文件，跳过自动下载、安装和远端版本检查，工具版本由运行环境管理。路径不存在或不可执行时会明确报错，不回退到自动安装。未设置该变量或值为空时，保持原有自动安装和更新行为。
-
 ## 问题诊断
 
 [OpenAPI 问题诊断](https://api.aliyun.com/troubleshoot?source=github_sdk) 可通过 `RequestId` 或报错信息定位 OpenAPI 调用问题。
