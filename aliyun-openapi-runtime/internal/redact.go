@@ -141,6 +141,9 @@ func MaskBodyFull(body string) string {
 		return omitted
 	}
 	trimmed := strings.TrimSpace(body)
+	if strings.HasPrefix(trimmed, "\ufeff") {
+		return omitted
+	}
 	if json.Valid([]byte(body)) {
 		if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") || !canRedactJSON(body) {
 			return omitted

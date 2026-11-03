@@ -779,6 +779,7 @@ func TestProcessCliDryRunOmitsOpaqueBody(t *testing.T) {
 	for i, body := range []string{
 		"password=" + secret + "&name=%zz",
 		"<Password>" + secret + "</Password>",
+		"\ufeff<Password>" + secret + "==</Password>",
 		`{"password":"` + secret,
 		"password: " + secret,
 		strings.Repeat("x", 1600) + secret,

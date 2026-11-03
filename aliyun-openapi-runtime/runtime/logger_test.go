@@ -219,6 +219,8 @@ func TestLogRequestOmitsOpaqueBody(t *testing.T) {
 	for _, body := range []any{
 		"password=" + secret + "&name=%zz",
 		"<Password>" + secret + "</Password>",
+		"\ufeff<Password>" + secret + "==</Password>",
+		[]byte("\ufeff<Password>" + secret + "==</Password>"),
 		`{"password":"` + secret,
 		"password: " + secret,
 		[]byte(strings.Repeat("x", 1600) + secret),
