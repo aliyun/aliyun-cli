@@ -61,6 +61,7 @@ func TestSelectedPluginRouteRefreshesFirstInstallation(t *testing.T) {
 			local := plugin.LocalPlugin{
 				Name: "aliyun-cli-routefixture", Version: "1.2.3", Command: "routefixture",
 				Type: test.pluginType, Inner: test.inner,
+				CmdNames: []string{"list-items"},
 			}
 			writePluginRouteManifest(t, pluginsDir, local)
 			selected, err := plugin.LookupLocalPlugin(args[0])
@@ -113,18 +114,81 @@ func TestSelectedPluginRouteKeepsExecutionSnapshot(t *testing.T) {
 	selected := plugin.LocalPlugin{
 		Name: "aliyun-cli-routefixture", Version: "1.2.3", Command: "routefixture",
 		Type: plugin.PluginTypeGo, Inner: true,
+		CmdNames: []string{"list-items"},
 	}
 	SetPluginRoute(&selected)
 	// An unrelated install/update after route selection must not rewrite the
 	// provenance of the command whose executable has already been selected.
 	selected.Version, selected.Type, selected.Inner = "9.9.9", plugin.PluginTypeMeta, false
+	selected.CmdNames[0] = "other-operation"
 	writePluginRouteManifest(t, pluginsDir, selected)
 	End(nil)
 	event := readPluginRouteEvent(t, dir, PipelineInner)
 	require.Equal(t, CommandTypePluginGo, event.CommandType)
 	require.Equal(t, PipelineInner, event.Pipeline)
 	require.Equal(t, "aliyun-cli-routefixture@1.2.3", event.Plugin)
+	require.Equal(t, "RouteFixture list-items", event.Command)
 	require.NoDirExists(t, GetPublicCacheDir(dir))
+}
+
+func TestInitialPluginScopeUsesInstalledDefinitionsForHelp(t *testing.T) {
+	t.Setenv(TelemetryDisableEnv, "0")
+	t.Setenv(TelemetryLogDisableEnv, "1")
+	pluginsDir := t.TempDir()
+	t.Setenv(plugin.EnvPluginsDir, pluginsDir)
+	t.Cleanup(resetExecutionState)
+	dir := collectionPanicConfigDir(t)
+	local := plugin.LocalPlugin{
+		Name: "aliyun-cli-routefixture", Command: "routefixture", Type: plugin.PluginTypeGo,
+		CommandAliases: []string{"routealias"}, CmdNames: []string{"resource list"},
+	}
+	writePluginRouteManifest(t, pluginsDir, local)
+	args := []string{"RouteAlias", "Resource", "List", "--help"}
+	Begin(BeginInput{ConfigDir: dir, CommandToken: args[0], CommandArgs: args})
+	require.NotNil(t, activeExecution)
+	require.Equal(t, local.CmdNames, activeExecution.scope.PluginCommandPaths)
+	// Help may finish in the host before the plugin executor selects a route.
+	End(nil)
+	event := readPluginRouteEvent(t, dir, PipelinePublic)
+	require.Equal(t, "RouteAlias Resource List", event.Command)
+}
+
+func TestSelectedPluginRouteReplacesStaleDefinitions(t *testing.T) {
+	t.Setenv(TelemetryDisableEnv, "0")
+	t.Setenv(TelemetryLogDisableEnv, "1")
+	pluginsDir := t.TempDir()
+	t.Setenv(plugin.EnvPluginsDir, pluginsDir)
+	t.Cleanup(resetExecutionState)
+	dir := collectionPanicConfigDir(t)
+	local := plugin.LocalPlugin{
+		Name: "aliyun-cli-routefixture", Command: "routefixture", Type: plugin.PluginTypeGo,
+		CmdNames: []string{"previous-operation"},
+	}
+	writePluginRouteManifest(t, pluginsDir, local)
+	args := []string{"RouteFixture", "Upload", "/private-sentinel/customer.csv"}
+	Begin(BeginInput{ConfigDir: dir, CommandToken: args[0], CommandArgs: args})
+	require.NotNil(t, activeExecution)
+	require.Equal(t, []string{"previous-operation"}, activeExecution.scope.PluginCommandPaths)
+	// An upgrade changes the definitions after Begin's lookup, before dispatch.
+	local.CmdNames = []string{"upload"}
+	SetPluginRoute(&local)
+	EndWithExitCode(1)
+	event := readPluginRouteEvent(t, dir, PipelinePublic)
+	require.Equal(t, "RouteFixture Upload", event.Command)
+	require.Equal(t, "Failure", event.Result)
+	data, err := json.Marshal(newUploadEvent(event))
+	require.NoError(t, err)
+	require.NotContains(t, string(data), "private-sentinel")
+}
+
+func TestPluginScopeCopiesInstalledDefinitions(t *testing.T) {
+	local := plugin.LocalPlugin{Name: "aliyun-cli-demo", Type: plugin.PluginTypeGo, CmdNames: []string{"upload"}}
+	scope := scopeFromLocalPlugin("demo", &local)
+	local.CmdNames[0] = "other-operation"
+	require.Equal(t, []string{"upload"}, scope.PluginCommandPaths)
+	local.CmdNames[0] = "upload"
+	scope.PluginCommandPaths[0] = "different-operation"
+	require.Equal(t, []string{"upload"}, local.CmdNames)
 }
 
 func TestPluginRouteMarkerDoesNotStartOrReopenCollection(t *testing.T) {

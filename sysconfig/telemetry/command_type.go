@@ -43,6 +43,9 @@ type Scope struct {
 	CommandToken string
 	// CommandType is set when the executor has selected a concrete route.
 	CommandType string
+	// PluginCommandPaths contains the installed manifest's relative command
+	// paths. Missing metadata limits Go plugin collection to the root command.
+	PluginCommandPaths []string
 }
 
 var cliExtensions = map[string]struct{}{}
@@ -125,6 +128,7 @@ func scopeFromLocalPlugin(commandToken string, lp *plugin.LocalPlugin) Scope {
 	scope.PluginName = lp.Name
 	scope.PluginVer = lp.Version
 	scope.PluginType = plugin.NormalizePluginType(lp.Type)
+	scope.PluginCommandPaths = append([]string(nil), lp.CmdNames...)
 	if lp.Inner {
 		scope.Pipeline = PipelineInner
 	}

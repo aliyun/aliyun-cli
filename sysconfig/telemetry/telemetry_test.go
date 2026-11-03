@@ -52,7 +52,8 @@ func TestExtractParamNames(t *testing.T) {
 func TestBuildEventKeepsDeepPluginCommandHierarchy(t *testing.T) {
 	event, err := BuildEvent(BuildInput{
 		Scope: Scope{Active: true, Pipeline: PipelinePublic,
-			CommandToken: "custom-plugin", PluginName: "aliyun-cli-custom-plugin", PluginType: plugin.PluginTypeGo},
+			CommandToken: "custom-plugin", PluginName: "aliyun-cli-custom-plugin", PluginType: plugin.PluginTypeGo,
+			PluginCommandPaths: []string{"resource policy list"}},
 		RootArgs: []string{
 			"custom-plugin", "resource", "policy", "list", "--path", "/private/customer.json", "--body=private business body",
 		},

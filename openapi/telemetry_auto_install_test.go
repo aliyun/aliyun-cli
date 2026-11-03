@@ -102,7 +102,11 @@ func TestTelemetryFirstAutoInstalledPluginUsesSelectedRoute(t *testing.T) {
 			if test.pluginType == plugin.PluginTypeGo {
 				args = append(args, "List")
 			}
-			rawArgs := append(append([]string(nil), args...), "--private-input", "private-value-sentinel")
+			rawArgs := append([]string(nil), args...)
+			if test.pluginType == plugin.PluginTypeGo {
+				rawArgs = append(rawArgs, "private-tail-sentinel")
+			}
+			rawArgs = append(rawArgs, "--private-input", "private-value-sentinel")
 			previousArgs := os.Args
 			os.Args = append([]string{"aliyun"}, rawArgs...)
 			t.Cleanup(func() { os.Args = previousArgs })
@@ -136,6 +140,7 @@ func TestTelemetryFirstAutoInstalledPluginUsesSelectedRoute(t *testing.T) {
 						Name: pluginName, Command: telemetryAutoInstallProduct, ProductCode: telemetryAutoInstallProduct,
 						Version: "1.2.3", Type: test.pluginType, Inner: test.inner,
 						Path: path, ProfileRequired: &required,
+						CmdNames: []string{"function list"},
 					},
 				}}
 				data, err := json.Marshal(manifest)
@@ -174,6 +179,7 @@ func TestTelemetryFirstAutoInstalledPluginUsesSelectedRoute(t *testing.T) {
 			require.Equal(t, strings.Join(args, " "), event.Command)
 			require.Equal(t, []string{"--private-input"}, event.Params)
 			require.NotContains(t, string(data), "private-value-sentinel")
+			require.NotContains(t, string(data), "private-tail-sentinel")
 			require.NoDirExists(t, telemetry.GetCacheDir(configDir, otherPipeline))
 			if test.pluginType == plugin.PluginTypeGo {
 				require.Equal(t, telemetry.CommandTypePluginGo, event.CommandType)

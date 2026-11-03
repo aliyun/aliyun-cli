@@ -131,17 +131,12 @@ func Main(args []string) {
 	cli.SetBeforeExit(telemetry.EndWithExitCode)
 	plugin.SetBeforePluginExit(telemetry.EndWithExitCode)
 	configDir := config.GetConfigPath()
-	commandArgs := sysmock.StripLeadingGlobalFlags(args)
-	commandToken := ""
-	if len(commandArgs) > 0 {
-		commandToken = commandArgs[0]
-	}
 	telemetry.Begin(telemetry.BeginInput{
-		ConfigDir:    configDir,
-		CommandArgs:  commandArgs,
-		CommandToken: commandToken,
-		AuthMode:     string(profile.Mode),
-		AIMode:       startupAIMode(args),
+		ConfigDir:   configDir,
+		Context:     ctx,
+		CommandArgs: args,
+		AuthMode:    string(profile.Mode),
+		AIMode:      startupAIMode(args),
 	})
 
 	if os.Getenv("GENERATE_METADATA") == "YES" {

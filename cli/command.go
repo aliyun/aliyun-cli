@@ -166,6 +166,19 @@ func (c *Command) getName() string {
 	return c.parent.getName() + " " + c.Name
 }
 
+// CommandPath returns the registered command names below the root. It excludes
+// invocation arguments, including unrecognized tokens passed to a Run callback.
+func (c *Command) CommandPath() []string {
+	var path []string
+	for command := c; command != nil && command.parent != nil; command = command.parent {
+		path = append(path, command.Name)
+	}
+	for left, right := 0, len(path)-1; left < right; left, right = left+1, right-1 {
+		path[left], path[right] = path[right], path[left]
+	}
+	return path
+}
+
 type Metadata struct {
 	Name   string                   `json:"name"`
 	Short  map[string]string        `json:"short"`

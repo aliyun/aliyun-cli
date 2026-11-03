@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGoPluginCommandStopsAtFirstFlag(t *testing.T) {
+func TestGoPluginCommandUsesConfirmedPaths(t *testing.T) {
 	for _, pluginType := range []string{plugin.PluginTypeGo, ""} {
 		name := pluginType
 		if name == "" {
@@ -31,12 +31,20 @@ func TestGoPluginCommandStopsAtFirstFlag(t *testing.T) {
 				{"end of options", []string{"demo", "Resource", "List", "--", "private-sentinel-one", "--private-sentinel-flag"}, "demo Resource List", nil},
 				{"root flag", []string{"demo", "--tag", "private-sentinel-one", "List"}, "demo", []string{"--tag"}},
 				{"hierarchy without flags", []string{"demo", "Resource", "Policy", "List"}, "demo Resource Policy List", nil},
+				{"malformed upload with path", []string{"demo", "upload", "/private-sentinel/customer.csv"}, "demo upload", nil},
+				{"malformed upload with scalar", []string{"demo", "upload", "private-sentinel-customer"}, "demo upload", nil},
+				{"unrecognized command", []string{"demo", "private-sentinel", "Resource", "List"}, "demo", nil},
+				{"unrecognized nested command", []string{"demo", "Resource", "private-sentinel", "Policy", "List"}, "demo Resource", nil},
+				{"intermediate group", []string{"demo", "Resource", "Policy"}, "demo Resource Policy", nil},
+				{"registered product alias", []string{"DemoAlias", "Resource", "Policy", "List", "private-sentinel"}, "DemoAlias Resource Policy List", nil},
+				{"root only", []string{"demo"}, "demo", nil},
 			} {
 				t.Run(test.name, func(t *testing.T) {
 					event, err := BuildEvent(BuildInput{
 						Scope: Scope{
-							Active: true, Pipeline: PipelinePublic, CommandToken: "demo",
+							Active: true, Pipeline: PipelinePublic, CommandToken: test.args[0],
 							PluginName: "aliyun-cli-demo", PluginType: pluginType,
+							PluginCommandPaths: []string{"list", "resource list", "resource policy list", "upload"},
 						},
 						RootArgs: test.args, InstanceID: "test-installation",
 					})
@@ -58,5 +66,41 @@ func TestGoPluginCommandStopsAtFirstFlag(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+func TestGoPluginCommandWithoutDefinitionsKeepsOnlyRoot(t *testing.T) {
+	for _, paths := range [][]string{nil, {}, {"", " "}} {
+		event, err := BuildEvent(BuildInput{
+			Scope: Scope{
+				Active: true, Pipeline: PipelinePublic, CommandToken: "demo",
+				PluginType: plugin.PluginTypeGo, PluginCommandPaths: paths,
+			},
+			RootArgs: []string{"demo", "upload", "/private-sentinel/customer.csv"}, InstanceID: "test-installation",
+		})
+		require.NoError(t, err)
+		require.Equal(t, "demo", event.Command)
+		uploaded, err := json.Marshal(newUploadEvent(event))
+		require.NoError(t, err)
+		require.NotContains(t, string(uploaded), "private-sentinel")
+	}
+}
+
+func TestFailedGoPluginCommandOmitsUnrecognizedInput(t *testing.T) {
+	exitCode := 1
+	event, err := BuildEvent(BuildInput{
+		Scope: Scope{
+			Active: true, Pipeline: PipelinePublic, CommandToken: "demo",
+			PluginType: plugin.PluginTypeGo, PluginCommandPaths: []string{"upload"},
+		},
+		RootArgs:   []string{"demo", "upload", "/private-sentinel/customer.csv"},
+		InstanceID: "test-installation", ExitCode: &exitCode,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Failure", event.Result)
+	for _, payload := range []any{event, newUploadEvent(event)} {
+		data, err := json.Marshal(payload)
+		require.NoError(t, err)
+		require.NotContains(t, string(data), "private-sentinel")
 	}
 }

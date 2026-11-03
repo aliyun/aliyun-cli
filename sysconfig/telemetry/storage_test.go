@@ -192,7 +192,7 @@ func TestTelemetryManagementRoutesDoNotStartCollection(t *testing.T) {
 		{"configure", "--profile:telemetry", "set"},
 		{"version"},
 	} {
-		require.False(t, isTelemetryManagementCommand(args), "%v", args)
+		require.False(t, isTelemetryManagementCommand(args, nil), "%v", args)
 	}
 }
 

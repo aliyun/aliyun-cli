@@ -20,11 +20,11 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
-	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
 )
 
 type BeginInput struct {
 	ConfigDir    string
+	Context      *cli.Context
 	CommandArgs  []string
 	CommandToken string
 	AuthMode     string
@@ -35,6 +35,7 @@ type BeginInput struct {
 
 type activeCommandExecution struct {
 	configDir             string
+	context               *cli.Context
 	scope                 Scope
 	rootArgs              []string
 	start                 time.Time
@@ -220,9 +221,18 @@ func Begin(in BeginInput) {
 	defer recoverCollectionPanic(in.ConfigDir)
 	resetExecutionState()
 	writeDiagnostic(in.ConfigDir, diagnosticRecord{Stage: "collection", Status: "started"})
+	var flags *cli.FlagSet
+	if in.Context != nil {
+		flags = in.Context.Flags()
+		in.CommandArgs = stripLeadingTelemetryFlags(in.CommandArgs, flags)
+		in.CommandToken = ""
+		if len(in.CommandArgs) > 0 {
+			in.CommandToken = in.CommandArgs[0]
+		}
+	}
 	// Managing telemetry must not create an ID or emit a new event, especially
 	// immediately after disable or purge.
-	if isTelemetryManagementCommand(in.CommandArgs) {
+	if isTelemetryManagementCommand(in.CommandArgs, flags) {
 		writeDiagnostic(in.ConfigDir, diagnosticRecord{Stage: "collection", Status: "skipped", Reason: "management_command"})
 		return
 	}
@@ -243,16 +253,17 @@ func Begin(in BeginInput) {
 		return
 	}
 	beginCommandExecution(in.ConfigDir, scope, in.CommandArgs, in.AIMode)
+	activeExecution.context = in.Context
 	SetEffectiveAuthenticationMode(in.AuthMode)
 	writeDiagnostic(in.ConfigDir, diagnosticRecord{Stage: "collection", Status: "succeeded", Pipeline: scope.Pipeline})
 }
 
-func isTelemetryManagementCommand(args []string) bool {
+func isTelemetryManagementCommand(args []string, flags *cli.FlagSet) bool {
 	for _, command := range []string{"configure", "telemetry"} {
-		args = sysmock.StripLeadingGlobalFlags(args)
+		args = stripLeadingTelemetryFlags(args, flags)
 		// The command parser accepts "help" before any subcommand.
 		for len(args) > 0 && args[0] == "help" {
-			args = sysmock.StripLeadingGlobalFlags(args[1:])
+			args = stripLeadingTelemetryFlags(args[1:], flags)
 		}
 		if len(args) == 0 || args[0] != command {
 			return false
@@ -274,6 +285,14 @@ func flush(exitCode *int, err error) {
 	defer recoverCollectionPanic()
 	execution, ok := takeCommandExecutionForEnd()
 	if !ok {
+		return
+	}
+	var commandPath []string
+	if execution.context != nil {
+		commandPath = execution.context.Command().CommandPath()
+	}
+	if len(commandPath) >= 2 && commandPath[0] == "configure" && commandPath[1] == "telemetry" {
+		writeDiagnostic(execution.configDir, diagnosticRecord{Stage: "collection", Status: "skipped", Reason: "management_command"})
 		return
 	}
 	// A command may have disabled telemetry while this invocation was running.
@@ -303,6 +322,7 @@ func flush(exitCode *int, err error) {
 	ev, buildErr := BuildEvent(BuildInput{
 		Scope:                 execution.scope,
 		RootArgs:              execution.rootArgs,
+		CommandPath:           commandPath,
 		InstanceID:            instanceID,
 		DurationMs:            commandExecutionDurationMs(execution),
 		Err:                   err,

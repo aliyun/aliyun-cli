@@ -88,8 +88,10 @@ type Event struct {
 }
 
 type BuildInput struct {
-	Scope                 Scope
-	RootArgs              []string
+	Scope    Scope
+	RootArgs []string
+	// CommandPath contains only registered names selected by the host parser.
+	CommandPath           []string
 	InstanceID            string
 	DurationMs            int64
 	Err                   error
@@ -180,7 +182,7 @@ func BuildEvent(in BuildInput) (Event, error) {
 		return Event{}, err
 	}
 
-	pos := commandParts(in.RootArgs, in.Scope)
+	pos := commandParts(in.RootArgs, in.Scope, in.CommandPath)
 	command := normalizeCommand(pos)
 
 	pluginField := ""

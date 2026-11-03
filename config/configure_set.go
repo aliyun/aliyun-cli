@@ -64,15 +64,16 @@ func doConfigureSet(ctx *cli.Context) error {
 		}
 	}
 
+	authModeSource := telemetry.AuthModeSourceExisting
 	mode, ok := ModeFlag(flags).GetValue()
 	if ok {
 		profile.Mode = NormalizeMode(mode)
-		telemetry.SetAuthenticationMode(string(profile.Mode), telemetry.AuthModeSourceExplicit)
-	} else {
-		if profile.Mode == "" {
-			profile.Mode = AK
-		}
+		authModeSource = telemetry.AuthModeSourceExplicit
+	} else if profile.Mode == "" {
+		profile.Mode = AK
+		authModeSource = telemetry.AuthModeSourceDefault
 	}
+	telemetry.SetAuthenticationMode(string(profile.Mode), authModeSource)
 
 	oldTarget := cloudSSOTarget(&profile)
 	switch profile.Mode {

@@ -17,8 +17,61 @@ package telemetry
 import (
 	"strings"
 
+	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
+	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
 )
+
+// Read definitions without assigning flags or changing the command parser's
+// state. Unknown flag forms leave the command boundary unconfirmed.
+func stripLeadingTelemetryFlags(args []string, flags *cli.FlagSet) []string {
+	if flags == nil {
+		return sysmock.StripLeadingGlobalFlags(args)
+	}
+	for i := 0; i < len(args); {
+		token := args[i]
+		if !strings.HasPrefix(token, "-") || strings.HasPrefix(token, "---") {
+			return args[i:]
+		}
+		flag := telemetryFlagDefinition(token, flags)
+		if flag == nil {
+			return nil
+		}
+		i++
+		_, value, inline := cli.SplitStringWithPrefix(token, "=:")
+		if flag.AssignedMode == cli.AssignedNone {
+			if inline && value != "" {
+				return nil
+			}
+			continue
+		}
+		if inline && value != "" {
+			continue
+		}
+		for i < len(args) {
+			next := args[i]
+			if strings.HasPrefix(next, "--") && !strings.HasPrefix(next, "---") || telemetryFlagDefinition(next, flags) != nil {
+				break
+			}
+			i++
+			if flag.AssignedMode != cli.AssignedRepeatable {
+				break
+			}
+		}
+	}
+	return nil
+}
+
+func telemetryFlagDefinition(token string, flags *cli.FlagSet) *cli.Flag {
+	name, _, _ := cli.SplitStringWithPrefix(token, "=:")
+	if strings.HasPrefix(name, "--") {
+		return flags.Get(name[2:])
+	}
+	if len(name) == 2 && name[0] == '-' {
+		return flags.GetByShorthand(rune(name[1]))
+	}
+	return nil
+}
 
 // ExtractParamNames preserves the order, case, and repetitions of recognized
 // option names while omitting their values.
@@ -93,7 +146,7 @@ func positionalParts(args []string) []string {
 	return parts
 }
 
-func commandParts(args []string, scope Scope) []string {
+func commandParts(args []string, scope Scope, commandPath []string) []string {
 	command := scope.CommandToken
 	if command == "" && len(args) > 0 {
 		command = args[0]
@@ -115,49 +168,56 @@ func commandParts(args []string, scope Scope) []string {
 	}
 	if scope.PluginName != "" || scope.PluginType != "" {
 		if plugin.NormalizePluginType(scope.PluginType) == plugin.PluginTypeGo {
-			// Go plugin command definitions do not accept positional arguments;
-			// business inputs are passed through flags. Tokens before the first
-			// flag are therefore command/subcommand names. Once options begin,
-			// later tokens may be repeated or multi-value option inputs; never
-			// promote them back into the command hierarchy.
-			for i, arg := range args {
-				if strings.HasPrefix(arg, "-") {
-					return args[:i]
-				}
-			}
-			return args
+			return confirmedPluginCommandParts(args, command, scope.PluginCommandPaths)
 		}
 		return positionalParts(args)
 	}
 	if len(args) == 0 || !strings.EqualFold(args[0], command) {
 		return parts
 	}
-	command = strings.ToLower(command)
-	// These core commands accept positional input after their subcommand:
-	// plugin search takes a search term, configure get takes field names,
-	// and utils go-migrate takes a source directory.
-	coreParts := positionalParts(args)
-	if len(coreParts) > 2 {
-		switch command + " " + strings.ToLower(coreParts[1]) {
-		case "plugin search", "configure get", "utils go-migrate":
-			return coreParts[:2]
-		}
-	}
-	if command == "help" {
-		if len(args) > 1 && plugin.IsReservedTopLevelCommand(args[1]) {
-			return append(parts, commandParts(args[1:], Scope{CommandToken: args[1]})...)
+	if plugin.IsReservedTopLevelCommand(command) {
+		// A Run callback may accept or ignore extra positional input. Only
+		// names actually selected from the registered tree are command levels.
+		if strings.EqualFold(command, "help") {
+			if len(commandPath) > 0 && plugin.IsReservedTopLevelCommand(commandPath[0]) {
+				return append(parts, commandPath...)
+			}
+		} else if len(commandPath) > 0 && commandPath[0] == command {
+			return commandPath
 		}
 		return parts
 	}
-	if plugin.IsReservedTopLevelCommand(command) {
-		return coreParts
-	}
 	// OpenAPI retains the product and API name or HTTP method. ROA requests
 	// can include a positional request path, which must not be collected.
+	coreParts := positionalParts(args)
 	if len(coreParts) > 1 && safeTelemetryIdentifier(coreParts[1], false) {
 		parts = append(parts, coreParts[1])
 	}
 	return parts
+}
+
+func confirmedPluginCommandParts(args []string, root string, paths []string) []string {
+	parts := []string{root}
+	if len(args) == 0 || !strings.EqualFold(args[0], root) {
+		return parts
+	}
+	// Go plugins accept business inputs through flags, but malformed invocations
+	// can still contain arbitrary tokens before them. Only retain names confirmed
+	// by the selected package's manifest, including groups implied by full paths.
+	matched := 0
+	for _, path := range paths {
+		depth := 0
+		for i, name := range strings.Fields(path) {
+			if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") || !strings.EqualFold(args[i+1], name) {
+				break
+			}
+			depth++
+		}
+		if depth > matched {
+			matched = depth
+		}
+	}
+	return append(parts, args[1:matched+1]...)
 }
 
 func safeTelemetryIdentifier(value string, allowDot bool) bool {
