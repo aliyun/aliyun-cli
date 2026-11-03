@@ -54,17 +54,24 @@ func readInstanceIDFile(path string) ([]byte, error) {
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
 		nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
 	if err != nil {
-		pathErr := &os.PathError{Op: "open", Path: path, Err: err}
-		if errors.Is(err, windows.ERROR_SHARING_VIOLATION) {
-			// Keep contention distinct from an absent ID: callers must never
-			// generate another identifier while the existing file is busy.
-			return nil, fmt.Errorf("%w: %w", ErrLockBusy, pathErr)
-		}
-		return nil, pathErr
+		return nil, instanceIDReadError(&os.PathError{Op: "open", Path: path, Err: err})
 	}
 	f := os.NewFile(uintptr(handle), path)
 	defer f.Close()
-	return io.ReadAll(f)
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, instanceIDReadError(err)
+	}
+	return data, nil
+}
+
+func instanceIDReadError(err error) error {
+	if errors.Is(err, windows.ERROR_SHARING_VIOLATION) || errors.Is(err, windows.ERROR_LOCK_VIOLATION) {
+		// Open may fail on sharing conflicts; ReadFile may instead fail on an
+		// exclusive byte-range lock. Neither means the persisted ID is absent.
+		return fmt.Errorf("%w: %w", ErrLockBusy, err)
+	}
+	return err
 }
 
 func replaceFile(source, target string) error {

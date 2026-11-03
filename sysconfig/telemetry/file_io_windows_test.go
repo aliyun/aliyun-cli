@@ -15,7 +15,7 @@ import (
 
 const windowsReadTestInstanceID = "c4160461-19cf-4ec9-bc28-b2430c1ad90e"
 
-func holdWindowsInstanceIDHandle(t *testing.T, path string, access, sharing uint32) func() {
+func holdWindowsInstanceIDHandle(t *testing.T, path string, access, sharing uint32) (windows.Handle, func()) {
 	t.Helper()
 	name, err := windows.UTF16PtrFromString(path)
 	require.NoError(t, err)
@@ -27,7 +27,7 @@ func holdWindowsInstanceIDHandle(t *testing.T, path string, access, sharing uint
 		once.Do(func() { require.NoError(t, windows.CloseHandle(handle)) })
 	}
 	t.Cleanup(closeHandle)
-	return closeHandle
+	return handle, closeHandle
 }
 
 func TestInstanceIDReadWhileDeleteHandleIsOpen(t *testing.T) {
@@ -52,18 +52,35 @@ func TestInstanceIDReadWhileDeleteHandleIsOpen(t *testing.T) {
 		"reading a published ID must not start initialization")
 }
 
-func TestInstanceIDExclusiveHandleIsBusyAndPreservesID(t *testing.T) {
+func TestInstanceIDLockedRangeIsBusyAndPreservesID(t *testing.T) {
 	dir := t.TempDir()
 	path := GetInstanceIDFilePath(dir)
 	contents := []byte(windowsReadTestInstanceID + "\n")
 	require.NoError(t, os.WriteFile(path, contents, 0600))
-	closeHandle := holdWindowsInstanceIDHandle(t, path, windows.GENERIC_READ, 0)
+	handle, closeHandle := holdWindowsInstanceIDHandle(t, path, windows.GENERIC_READ|windows.GENERIC_WRITE,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE)
+	overlapped := &windows.Overlapped{}
+	require.NoError(t, windows.LockFileEx(handle,
+		windows.LOCKFILE_EXCLUSIVE_LOCK|windows.LOCKFILE_FAIL_IMMEDIATELY,
+		0, uint32(len(contents)), 0, overlapped))
+	var unlockOnce sync.Once
+	unlock := func() {
+		unlockOnce.Do(func() {
+			require.NoError(t, windows.UnlockFileEx(handle, 0, uint32(len(contents)), 0, overlapped))
+		})
+	}
+	t.Cleanup(unlock)
+
+	// Byte-range locks are mandatory for ReadFile on a different handle, even
+	// within this process. Prove the fixture blocks an ordinary reader first.
+	_, err := os.ReadFile(path)
+	require.ErrorIs(t, err, windows.ERROR_LOCK_VIOLATION)
 
 	for _, load := range []func(string) (string, error){LoadInstanceID, EnsureInstanceID} {
 		id, err := load(dir)
 		require.Empty(t, id)
 		require.ErrorIs(t, err, ErrLockBusy)
-		require.ErrorIs(t, err, windows.ERROR_SHARING_VIOLATION)
+		require.ErrorIs(t, err, windows.ERROR_LOCK_VIOLATION)
 		require.False(t, os.IsNotExist(err), "a busy ID must never be treated as absent")
 		var pathErr *os.PathError
 		require.ErrorAs(t, err, &pathErr)
@@ -71,6 +88,7 @@ func TestInstanceIDExclusiveHandleIsBusyAndPreservesID(t *testing.T) {
 	}
 	require.NoFileExists(t, filepath.Join(dir, instanceIDLockName),
 		"busy readers must not try to generate a replacement ID")
+	unlock()
 	closeHandle()
 	got, err := os.ReadFile(path)
 	require.NoError(t, err)
