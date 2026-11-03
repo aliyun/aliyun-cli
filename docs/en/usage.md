@@ -255,6 +255,27 @@ aliyun ecs DescribeInstances \
 
 The waiter stops immediately if the API call or JMESPath evaluation fails. If the timeout is reached, the error includes the expression, expected value, and last observed value. `--waiter` cannot be combined with `--pager` or `--cli-dry-run`.
 
+## Price estimates
+
+Add `--estimate-cost` to an OpenAPI command to request a quote from the pricing service:
+
+```sh
+aliyun ecs CreateDisk --RegionId cn-hangzhou --ZoneId cn-hangzhou-i \
+  --DiskCategory cloud_essd --Size 40 --estimate-cost
+```
+
+The CLI requests response version 2 and preserves the server's `success`, `code`, `message`, and `requestId` fields. The service returns `price` when a quote is available and omits it otherwise. The CLI does not synthesize missing fields and also accepts an explicit `price: null` from the service.
+
+| Outcome | success | code | price | Exit code |
+| --- | --- | --- | --- | --- |
+| Quote obtained | true | Success | Quote object | 0 |
+| Confirmed cost-irrelevant | true | PricingNotRequired | Omitted | 0 |
+| Quote unavailable | false | PricingNotSupported | Omitted | 3 |
+
+Business outcomes are written to stdout without a second error document on stderr. `--cli-query`, table output, and `--quiet` affect presentation only: exit status is determined from the unfiltered response's top-level `success`. The CLI sends the language selected by `--language`, the profile, or the system locale to the service.
+
+During rolling upgrades, the CLI also accepts legacy quote and business-error JSON, preserving the original fields and RequestId. Authentication, parameter validation, and network errors retain their usual error handling.
+
 ## Safety and non-interactive use
 
 Potentially destructive operations may be subject to CLI safety policy and confirmation. Manage policy with:

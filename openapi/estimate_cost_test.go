@@ -25,13 +25,13 @@ import (
 	"testing"
 
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
-	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	pricingruntime "github.com/aliyun/aliyun-openapi-runtime/runtime"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -45,14 +45,14 @@ func TestBuildEstimateCostParameters(t *testing.T) {
 	req.RegionId = "cn-hangzhou"
 	req.SetContent([]byte(`{"Period": 1, "AutoRenew": true}`))
 
-	parameters, err := buildEstimateCostParameters(req)
+	parameters, err := buildEstimateCostParameters(pricingruntime.PricingParameterInput{Query: req.QueryParams, Form: req.FormParams, Path: req.PathParams, Body: req.Content, Region: req.RegionId})
 	assert.Nil(t, err)
 	assert.Equal(t, "ecs.g6.large", parameters["InstanceType"])
 	assert.Equal(t, "cloud_essd", parameters["SystemDisk.Category"])
 	assert.Equal(t, "from-form", parameters["Description"])
 	assert.Equal(t, "c-123", parameters["ClusterId"])
 	assert.Equal(t, "cn-hangzhou", parameters["RegionId"])
-	assert.Equal(t, float64(1), parameters["Period"])
+	assert.Equal(t, json.Number("1"), parameters["Period"])
 	assert.Equal(t, true, parameters["AutoRenew"])
 	_, ok := parameters["empty"]
 	assert.False(t, ok, "empty-string param should be dropped, otherwise GetApiPrice sees noise")
@@ -66,7 +66,7 @@ func TestBuildEstimateCostParametersRegionNotOverridden(t *testing.T) {
 	req.QueryParams["RegionId"] = "cn-beijing"
 	req.RegionId = "cn-hangzhou"
 
-	parameters, err := buildEstimateCostParameters(req)
+	parameters, err := buildEstimateCostParameters(pricingruntime.PricingParameterInput{Query: req.QueryParams, Form: req.FormParams, Path: req.PathParams, Body: req.Content, Region: req.RegionId})
 	assert.Nil(t, err)
 	assert.Equal(t, "cn-beijing", parameters["RegionId"])
 }
@@ -77,7 +77,7 @@ func TestBuildEstimateCostParametersBadBody(t *testing.T) {
 	req := requests.NewCommonRequest()
 	req.SetContent([]byte(`not-json`))
 
-	_, err := buildEstimateCostParameters(req)
+	_, err := buildEstimateCostParameters(pricingruntime.PricingParameterInput{Query: req.QueryParams, Form: req.FormParams, Path: req.PathParams, Body: req.Content, Region: req.RegionId})
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "JSON object")
 }
@@ -174,6 +174,10 @@ func TestResolveEstimateCostApiNameUsesProductDefaultVersionForPathLookup(t *tes
 // full request path — signing, transport, status handling — is exercised
 // rather than the body classifier alone. Returns the ready command context.
 func quoteServer(t *testing.T, status int, body string) (*cli.Context, *bytes.Buffer, *config.Profile) {
+	for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"} {
+		t.Setenv(key, "")
+	}
+
 	t.Helper()
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -200,38 +204,6 @@ func quoteServer(t *testing.T, status int, body string) (*cli.Context, *bytes.Bu
 	return ctx, w, &profile
 }
 
-func TestInvokeEstimateCostCostIrrelevantSucceeds(t *testing.T) {
-	// The whole point of the change: a confirmed-free API arrives as a 4xx,
-	// and the call must still succeed so the command exits 0.
-	ctx, _, profile := quoteServer(t, http.StatusBadRequest,
-		`{"RequestId":"req-pnr","Code":"PricingNotRequired","Message":"该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。","HostId":"h"}`)
-
-	out, err := invokeEstimateCost(ctx, profile, "hbr", "2017-09-08", "EnableBackupPlan", map[string]interface{}{})
-	assert.Nil(t, err)
-
-	var got costIrrelevantQuote
-	assert.Nil(t, json.Unmarshal([]byte(out), &got))
-	assert.True(t, got.CostIrrelevant)
-	assert.Equal(t, "hbr", got.PopCode)
-	assert.Equal(t, "2017-09-08", got.PopVersion)
-	assert.Equal(t, "EnableBackupPlan", got.ApiName)
-	assert.Equal(t, costIrrelevantMessage.Text(), got.Message)
-
-	// And it must not trip the exit-code contract on the way out.
-	assert.Nil(t, estimateCostBusinessError(out))
-}
-
-func TestInvokeEstimateCostNotSupportedStillFails(t *testing.T) {
-	// The sibling code must keep failing — "cannot be quoted" is a real error.
-	ctx, _, profile := quoteServer(t, http.StatusNotFound,
-		`{"RequestId":"req-pns","Code":"PricingNotSupported","Message":"no pricing","HostId":"h"}`)
-
-	out, err := invokeEstimateCost(ctx, profile, "Ecs", "2014-05-26", "DescribeInstances", map[string]interface{}{})
-	assert.Equal(t, "", out)
-	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "no pricing information for Ecs/2014-05-26/DescribeInstances")
-}
-
 func TestInvokeEstimateCostSuccessBodyPassesThrough(t *testing.T) {
 	// A normal 2xx quote is untouched by the cost-irrelevant handling.
 	ctx, _, profile := quoteServer(t, http.StatusOK, `{"price":{"originalAmount":0.178},"requestId":"req-ok"}`)
@@ -242,100 +214,7 @@ func TestInvokeEstimateCostSuccessBodyPassesThrough(t *testing.T) {
 	assert.NotContains(t, out, "costIrrelevant")
 }
 
-func TestProcessEstimateCostByTripleCostIrrelevantPrintsAndSucceeds(t *testing.T) {
-	// End-to-end through the by-triple entry point: the document is printed
-	// and no error is returned, which is what makes the command exit 0.
-	ctx, w, profile := quoteServer(t, http.StatusBadRequest,
-		`{"RequestId":"req-pnr","Code":"PricingNotRequired","Message":"...","HostId":"h"}`)
-	command := NewCommando(w, *profile)
-
-	product := &meta.Product{Code: "tablestore", Version: "2020-12-09"}
-	err := command.processEstimateCostByTriple(ctx, product, "2020-12-09", "CreateAgentStorage")
-	assert.Nil(t, err)
-	assert.Contains(t, w.String(), `"costIrrelevant": true`)
-	assert.Contains(t, w.String(), costIrrelevantMessage.Text())
-}
-
-func TestTranslateEstimateCostErrorPassthrough(t *testing.T) {
-	// Non-server errors fall through unchanged so callers see the original
-	// network/transport error instead of a misleading "pricing rejected" tip.
-	plain := assert.AnError
-	assert.Equal(t, plain, translateEstimateCostError("Ecs", "2014-05-26", "RunInstances", plain))
-}
-
-func TestTranslateEstimateCostErrorPricingNotSupported(t *testing.T) {
-	// "The quote cannot be produced" case — must be turned into the friendly
-	// hint, not a raw error string with the upstream Code embedded.
-	body := `{"RequestId":"req-pns","Code":"PricingNotSupported","Message":"no pricing","HostId":"host"}`
-	serverErr := sdkerrors.NewServerError(404, body, "")
-	err := translateEstimateCostError("Ecs", "2014-05-26", "DescribeRegions", serverErr)
-	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "no pricing information for Ecs/2014-05-26/DescribeRegions")
-	tip, _ := err.(cli.ErrorWithTip)
-	assert.NotNil(t, tip)
-	assert.Contains(t, tip.GetTip(""), "cannot be quoted")
-	// The tip must not let a reader conclude the call is free — that is the
-	// exact conflation PricingNotRequired exists to remove, and reading it the
-	// wrong way is a billing-relevant mistake.
-	assert.Contains(t, tip.GetTip(""), "does not mean the call is free")
-	assert.NotContains(t, tip.GetTip(""), "either incurs no cost")
-}
-
-func TestTranslateEstimateCostErrorLeavesPricingNotRequiredAlone(t *testing.T) {
-	// PricingNotRequired is intercepted in invokeEstimateCost and never
-	// reaches the error translator; if it ever did, it must not be dressed up
-	// as one of the failure cases.
-	body := `{"RequestId":"req-pnr","Code":"PricingNotRequired","Message":"free","HostId":"host"}`
-	serverErr := sdkerrors.NewServerError(400, body, "")
-	err := translateEstimateCostError("hbr", "2017-09-08", "EnableBackupPlan", serverErr)
-	assert.Equal(t, serverErr, err)
-}
-
-// TestCostIrrelevantQuoteMarshals guards the assumption that lets
-// newCostIrrelevantQuote ignore the json.Marshal error: the document is a bool
-// and four strings, which cannot fail to marshal. If someone later adds a field
-// that can (a channel, a func, a failing MarshalJSON), this test breaks loudly
-// at build time — better than a runtime branch that could silently report a
-// free API as unquotable, which is a billing-relevant wrong answer.
-func TestCostIrrelevantQuoteMarshals(t *testing.T) {
-	out := newCostIrrelevantQuote("Ecs", "2014-05-26", "RunInstances", "")
-	assert.JSONEq(t, `{
-		"costIrrelevant": true,
-		"popCode": "Ecs",
-		"popVersion": "2014-05-26",
-		"apiName": "RunInstances",
-		"message": "`+costIrrelevantMessage.Text()+`"
-	}`, out)
-}
-
-func TestNewCostIrrelevantQuoteCarriesTripleAndLocalizedMessage(t *testing.T) {
-	previousLanguage := i18n.GetLanguage()
-	t.Cleanup(func() { i18n.SetLanguage(previousLanguage) })
-	for _, test := range []struct {
-		language string
-		message  string
-	}{
-		{"en", "this OpenAPI is confirmed to incur no charge, so there is nothing to quote"},
-		{"zh", "该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。"},
-	} {
-		t.Run(test.language, func(t *testing.T) {
-			i18n.SetLanguage("en")
-			if test.language == "en" {
-				i18n.SetLanguage("zh")
-			}
-			out := newCostIrrelevantQuote("hbr", "2017-09-08", "EnableBackupPlan", test.language)
-			var got costIrrelevantQuote
-			assert.NoError(t, json.Unmarshal([]byte(out), &got))
-			assert.True(t, got.CostIrrelevant)
-			assert.Equal(t, "hbr", got.PopCode)
-			assert.Equal(t, "2017-09-08", got.PopVersion)
-			assert.Equal(t, "EnableBackupPlan", got.ApiName)
-			assert.Equal(t, test.message, got.Message)
-		})
-	}
-}
-
-func TestMainEstimateCostMessageFollowsProfileLanguage(t *testing.T) {
+func TestMainEstimateCostPreservesServerMessageAcrossLanguages(t *testing.T) {
 	const english = "this OpenAPI is confirmed to incur no charge, so there is nothing to quote"
 	const chinese = "该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。"
 	previousLanguage := i18n.GetLanguage()
@@ -398,77 +277,16 @@ func TestMainEstimateCostMessageFollowsProfileLanguage(t *testing.T) {
 					if !assert.NoError(t, err) {
 						return
 					}
-					var got costIrrelevantQuote
+					var got struct{ Code, Message, RequestId string }
 					assert.NoError(t, json.Unmarshal(out.Bytes(), &got))
-					assert.True(t, got.CostIrrelevant)
-					assert.Equal(t, route.args[1], got.ApiName)
-					assert.Equal(t, test.message, got.Message)
-					assert.NotContains(t, out.String(), "server-only message")
+					assert.Equal(t, "PricingNotRequired", got.Code)
+					assert.Equal(t, "req-language", got.RequestId)
+					assert.Equal(t, "server-only message", got.Message)
+					assert.NotContains(t, out.String(), "costIrrelevant")
 				})
 			}
 		})
 	}
-}
-
-func TestCostIrrelevantFromErrorRecognisesPricingNotRequired(t *testing.T) {
-	body := `{"RequestId":"req-pnr","Code":"PricingNotRequired","Message":"该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。","HostId":"host"}`
-	serverErr := sdkerrors.NewServerError(400, body, "")
-
-	out, isCostIrrelevant := costIrrelevantFromError("hbr", "2017-09-08", "EnableBackupPlan", serverErr, "")
-	assert.True(t, isCostIrrelevant)
-
-	var got costIrrelevantQuote
-	assert.Nil(t, json.Unmarshal([]byte(out), &got))
-	assert.True(t, got.CostIrrelevant)
-	assert.Equal(t, "EnableBackupPlan", got.ApiName)
-	// The CLI localizes its own message instead of passing through the server text.
-	assert.Equal(t, costIrrelevantMessage.Text(), got.Message)
-}
-
-func TestCostIrrelevantFromErrorPassesOtherErrorsThrough(t *testing.T) {
-	// Anything that is not PricingNotRequired must stay on the error path —
-	// especially PricingNotSupported, which means the opposite thing.
-	notSupported := sdkerrors.NewServerError(404,
-		`{"RequestId":"r","Code":"PricingNotSupported","Message":"no pricing","HostId":"h"}`, "")
-	_, isCostIrrelevant := costIrrelevantFromError("Ecs", "2014-05-26", "DescribeRegions", notSupported, "")
-	assert.False(t, isCostIrrelevant)
-
-	_, isCostIrrelevant = costIrrelevantFromError("Ecs", "2014-05-26", "RunInstances", assert.AnError, "")
-	assert.False(t, isCostIrrelevant)
-}
-
-func TestCostIrrelevantQuoteIsNotABusinessFailure(t *testing.T) {
-	// The exit-code contract: a confirmed-free answer must NOT fail the
-	// process. Scripts and agents gate on `$?`, and aborting on a free
-	// operation is precisely the behaviour this change removes.
-	out := newCostIrrelevantQuote("hbr", "2017-09-08", "EnableBackupPlan", "")
-	assert.Nil(t, estimateCostBusinessError(out))
-}
-
-func TestTranslateEstimateCostErrorInvalidParameter(t *testing.T) {
-	// Parameter-side rejection (bad popCode/version, missing required field)
-	// gets a "check parameters" tip; raw error keeps its detail (the upstream
-	// SDK.ServerError formatted body) so users can see what the server
-	// objected to. Tip is delivered via cli.ErrorWithTip.GetTip, not the
-	// Error() string itself — Error() preserves the wrapped error verbatim.
-	body := `{"RequestId":"req-ip","Code":"InvalidParameter","Message":"bad popVersion","HostId":"host"}`
-	serverErr := sdkerrors.NewServerError(400, body, "")
-	err := translateEstimateCostError("Ecs", "2014-05-26", "RunInstances", serverErr)
-	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "InvalidParameter")
-	tip, _ := err.(cli.ErrorWithTip)
-	assert.NotNil(t, tip)
-	assert.Contains(t, tip.GetTip(""), "check them against the target API")
-}
-
-func TestTranslateEstimateCostErrorUnknownServerCode(t *testing.T) {
-	// Server errors with codes we don't special-case (Throttling, Forbidden,
-	// random new ones) fall through unchanged — better the user sees the
-	// upstream code+message than a vague "pricing failed" wrapper.
-	body := `{"RequestId":"req-th","Code":"Throttling.User","Message":"slow down","HostId":"host"}`
-	serverErr := sdkerrors.NewServerError(429, body, "")
-	got := translateEstimateCostError("Ecs", "2014-05-26", "RunInstances", serverErr)
-	assert.Equal(t, serverErr, got)
 }
 
 func TestPrintEstimateCostResultQuietSkipsOutput(t *testing.T) {
@@ -755,11 +573,11 @@ func TestEstimateCostBusinessErrorFailure(t *testing.T) {
 }
 
 func TestEstimateCostBusinessErrorSuccessAndTolerantShapes(t *testing.T) {
-	// success:true, missing price node, bare-DTO shape and non-JSON output must
-	// all keep exit code 0 — only explicit business failure is an error.
+	// Legacy success responses remain supported; malformed or incomplete
+	// responses must no longer be mistaken for a successful quote.
 	assert.Nil(t, estimateCostBusinessError(`{"price":{"success":true},"requestId":"r"}`))
-	assert.Nil(t, estimateCostBusinessError(`{"requestId":"r"}`))
-	assert.Nil(t, estimateCostBusinessError(`not json`))
+	assert.Error(t, estimateCostBusinessError(`{"requestId":"r"}`))
+	assert.Error(t, estimateCostBusinessError(`not json`))
 	// bare DTO without the gateway "price" envelope
 	assert.NotNil(t, estimateCostBusinessError(`{"success":false,"errorCode":"E"}`))
 	assert.Nil(t, estimateCostBusinessError(`{"success":true}`))
@@ -825,8 +643,8 @@ func TestBuildEstimateCostParametersFromOpenapi(t *testing.T) {
 	assert.Equal(t, "2", parameters["shardCount"])
 	assert.Equal(t, "my-project", parameters["project"])
 	assert.Equal(t, "my-store", parameters["logstoreName"])
-	assert.Equal(t, float64(30), parameters["ttl"])
-	assert.Equal(t, float64(7), parameters["hot_ttl"])
+	assert.Equal(t, json.Number("30"), parameters["ttl"])
+	assert.Equal(t, json.Number("7"), parameters["hot_ttl"])
 	// RegionId defaulted from the profile so mapping expressions can rely on it.
 	assert.Equal(t, "cn-hangzhou", parameters["RegionId"])
 }
@@ -854,7 +672,7 @@ func TestBuildEstimateCostParametersFromOpenapiBodyVariants(t *testing.T) {
 	oc.openapiRequest.Body = `{"ttl":15}`
 	parameters, err = buildEstimateCostParametersFromOpenapi(ctx, oc)
 	assert.NoError(t, err)
-	assert.Equal(t, float64(15), parameters["ttl"])
+	assert.Equal(t, json.Number("15"), parameters["ttl"])
 
 	// Non-object body must be rejected, mirroring the RPC/ROA path contract.
 	oc = newOpenapiEstimateCostContext(api)
@@ -956,7 +774,7 @@ func TestBuildEstimateCostParametersFromFlags(t *testing.T) {
 	parameters, err := buildEstimateCostParametersFromFlags(ctx, &profile)
 	assert.NoError(t, err)
 	assert.Equal(t, "ws-123", parameters["WorkspaceId"])
-	assert.Equal(t, float64(2), parameters["Priority"])
+	assert.Equal(t, json.Number("2"), parameters["Priority"])
 	assert.NotNil(t, parameters["TrainingSpec"])
 	assert.Equal(t, "cn-hangzhou", parameters["RegionId"])
 
@@ -1079,7 +897,7 @@ func TestBuildEstimateCostParametersFromFlagsBodyAndRegionFallbacks(t *testing.T
 	bodyFlag.SetValue(`{"Period":2}`)
 	params, err := buildEstimateCostParametersFromFlags(ctx, profile)
 	assert.Nil(t, err)
-	assert.Equal(t, float64(2), params["Period"])
+	assert.Equal(t, json.Number("2"), params["Period"])
 	assert.Equal(t, "cn-shanghai", params["RegionId"], "profile region is the last fallback")
 
 	// --body that is not a JSON object fails with the actionable error.
@@ -1136,9 +954,9 @@ func TestMergeEstimateCostBodyForms(t *testing.T) {
 
 	// Raw []byte and string forms decode as JSON objects.
 	assert.Nil(t, mergeEstimateCostBody(params, []byte(`{"A":1}`)))
-	assert.Equal(t, float64(1), params["A"])
+	assert.Equal(t, json.Number("1"), params["A"])
 	assert.Nil(t, mergeEstimateCostBody(params, `{"B":2}`))
-	assert.Equal(t, float64(2), params["B"])
+	assert.Equal(t, json.Number("2"), params["B"])
 
 	// Anything else is rejected with the actionable tip.
 	err := mergeEstimateCostBody(params, 42)
@@ -1152,13 +970,12 @@ func TestEstimateCostBusinessErrorShapes(t *testing.T) {
 	err := estimateCostBusinessError(`{"success":false,"errorCode":"X","errorMessage":"m","upstreamRequestId":"r"}`)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "X")
-	assert.Contains(t, err.Error(), "upstreamRequestId: r")
+	assert.Contains(t, err.Error(), "requestId: r")
 
-	// Unparseable / non-JSON output is not the exit-code contract's business:
-	// transport and server errors surface earlier, so this returns nil.
-	assert.Nil(t, estimateCostBusinessError("not-json"))
-	// Missing success field means success.
-	assert.Nil(t, estimateCostBusinessError(`{"price":{}}`))
+	// Malformed responses must not be reported as successful quotes.
+	assert.Error(t, estimateCostBusinessError("not-json"))
+	// Missing success is a protocol error.
+	assert.Error(t, estimateCostBusinessError(`{"price":{}}`))
 }
 
 func TestFilterSupportedPricingApisEdgeShapes(t *testing.T) {
