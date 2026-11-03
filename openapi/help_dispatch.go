@@ -489,6 +489,9 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 	}
 	c.applyHostHelpLanguage(ctx)
 	service := newMachineHelpService(c.helpRepositoryForStyle(string(target.CommandStyle)))
+	if target.Level == HelpLevelAction || target.Level == HelpLevelParameter {
+		service.onCommandResolved = telemetry.SetResolvedMetaCommand
+	}
 	query := helpFlagValue(ctx, QueryFlagName, "")
 	jsonOutput := aiMode || target.Output == HelpOutputJSON || query != ""
 	opts := helpOptions{

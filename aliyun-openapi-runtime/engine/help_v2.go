@@ -55,13 +55,18 @@ func (e *Engine) BuildAPIHelp(req Request, options HelpOptions) (HelpDocument, e
 	}
 	options = requestHelpOptions(req, options)
 	service := runtimehelp.Service{Data: ldr, Responses: runtimeResponseSource{loader: ldr}}
+	var document HelpDocument
 	if options.Section == runtimehelp.SectionResponse {
-		return service.BuildResponse(product, ref.Version, ref.Name, options)
+		document, err = service.BuildResponse(product, ref.Version, ref.Name, options)
+	} else if options.ExplicitSection {
+		document, err = service.BuildRequest(product, ref.Version, ref.Name, options)
+	} else {
+		document, err = service.BuildAction(product, ref.Version, ref.Name, options)
 	}
-	if options.ExplicitSection {
-		return service.BuildRequest(product, ref.Version, ref.Name, options)
+	if err == nil {
+		req.notifyCommandResolved()
 	}
-	return service.BuildAction(product, ref.Version, ref.Name, options)
+	return document, err
 }
 
 // BuildParameterHelp builds kebab Help for one top-level API parameter.
@@ -80,9 +85,13 @@ func (e *Engine) BuildParameterHelp(req Request, parameter string, options HelpO
 		return nil, err
 	}
 	options = requestHelpOptions(req, options)
-	return (runtimehelp.Service{Data: ldr}).BuildParameter(
+	document, err := (runtimehelp.Service{Data: ldr}).BuildParameter(
 		product, ref.Version, ref.Name, parameter, options,
 	)
+	if err == nil {
+		req.notifyCommandResolved()
+	}
+	return document, err
 }
 
 // RenderHelp renders a structured Runtime Help v1 document.

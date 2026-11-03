@@ -888,6 +888,7 @@ func (c *Commando) dispatchInstalledMetaPlugin(ctx *cli.Context, productCode, ap
 		if err != nil {
 			return true, err
 		}
+		telemetry.SetResolvedMetaCommand(productCode, apiOrMethod)
 		cli.Printf(ctx.Stdout(), "%s %s\n", name, version)
 		return true, nil
 	}

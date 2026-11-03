@@ -170,7 +170,10 @@ func commandParts(args []string, scope Scope, commandPath []string) []string {
 		if plugin.NormalizePluginType(scope.PluginType) == plugin.PluginTypeGo {
 			return confirmedPluginCommandParts(args, command, scope.PluginCommandPaths)
 		}
-		return positionalParts(args)
+		if safeTelemetryIdentifier(scope.ResolvedCommand, false) {
+			return append(parts, scope.ResolvedCommand)
+		}
+		return parts
 	}
 	if len(args) == 0 || !strings.EqualFold(args[0], command) {
 		return parts

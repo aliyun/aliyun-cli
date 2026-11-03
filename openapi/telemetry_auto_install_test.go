@@ -120,6 +120,7 @@ func TestTelemetryFirstAutoInstalledPluginUsesSelectedRoute(t *testing.T) {
 				runtimeCalls++
 				require.Equal(t, rawArgs, got)
 				telemetry.SetOpenAPIRuntimeVersion("runtime-fixture")
+				telemetry.SetResolvedMetaCommand(got[0], got[1])
 				return nil
 			}
 			installCalls := 0

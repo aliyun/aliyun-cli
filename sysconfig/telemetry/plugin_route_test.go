@@ -73,6 +73,7 @@ func TestSelectedPluginRouteRefreshesFirstInstallation(t *testing.T) {
 			require.Empty(t, activeExecution.openAPIRuntimeVersion)
 			if test.pluginType == plugin.PluginTypeMeta {
 				SetOpenAPIRuntimeVersion("9.8.7")
+				SetResolvedMetaCommand(args[0], args[1])
 			}
 			End(nil)
 

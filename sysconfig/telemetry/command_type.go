@@ -46,6 +46,9 @@ type Scope struct {
 	// PluginCommandPaths contains the installed manifest's relative command
 	// paths. Missing metadata limits Go plugin collection to the root command.
 	PluginCommandPaths []string
+	// ResolvedCommand is a metadata command confirmed by the active version's
+	// API resolver, or by its built-in command handler.
+	ResolvedCommand string
 }
 
 var cliExtensions = map[string]struct{}{}

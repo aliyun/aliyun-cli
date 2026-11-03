@@ -123,6 +123,23 @@ type Request struct {
 	Lang string
 	// Host supplies region + credentials. May be nil for help or dry-run that needs neither (endpoint then resolves region-less).
 	Host runtime.Host
+	// OnCommandResolved observes the original product and command spelling after
+	// loading the API selected by its version or recognizing a built-in command.
+	// Dispatch and APIHelp notify before parameter validation.
+	// It receives no parameter tokens and is called at most once per entry point.
+	// Product Help and unresolved commands do not invoke it.
+	OnCommandResolved func(product, command string)
+}
+
+func (req *Request) notifyCommandResolved() {
+	if req.OnCommandResolved == nil {
+		return
+	}
+	observer := req.OnCommandResolved
+	// Requests are passed by value. Clear only this call's copy so a subsequent
+	// Help builder does not notify again and callers can safely reuse a request.
+	req.OnCommandResolved = nil
+	observer(req.Args[0], req.Args[1])
 }
 
 func (e *Engine) HasProduct(product string) bool {
@@ -217,6 +234,7 @@ func (e *Engine) APIHelp(req Request) error {
 	if command == listAPIVersionsCommand {
 		productMeta := ldr.LookupProduct(product)
 		if productMeta != nil && len(productMeta.Versions) > 1 {
+			req.notifyCommandResolved()
 			return printAPIVersionsHelp(req.Out, productMeta, req.Lang)
 		}
 	}
@@ -224,6 +242,7 @@ func (e *Engine) APIHelp(req Request) error {
 	if err != nil {
 		return err
 	}
+	req.notifyCommandResolved()
 	if handled, parameterErr := e.tryParameterHelp(req, api.Parameters, req.Args[2:]); handled {
 		return parameterErr
 	}
@@ -268,6 +287,7 @@ func (e *Engine) Dispatch(req Request) error {
 	if err != nil {
 		return err
 	}
+	req.notifyCommandResolved()
 
 	if handled, parameterErr := e.tryParameterHelp(req, api.Parameters, args[2:]); handled {
 		return parameterErr
@@ -347,6 +367,7 @@ func (e *Engine) dispatchBuiltin(req Request, ldr loader.Loader, product, comman
 	if command != listAPIVersionsCommand || productMeta == nil || len(productMeta.Versions) <= 1 {
 		return false, nil
 	}
+	req.notifyCommandResolved()
 	res, err := argparser.ParseWithOptions(nil, req.Args[2:], argparser.ParseOptions{
 		ExternalFlags: e.externalFlags,
 	})

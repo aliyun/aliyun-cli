@@ -123,6 +123,20 @@ func SetOpenAPIRuntimeVersion(version string) {
 	activeExecution.openAPIRuntimeVersion = version
 }
 
+// SetResolvedMetaCommand observes an API already resolved for this invocation's
+// selected version, or an explicitly recognized built-in metadata command. It
+// performs no metadata lookup and never interprets trailing invocation values.
+func SetResolvedMetaCommand(product, command string) {
+	defer recoverCollectionPanic()
+	if activeExecution == nil || executionEnded || activeExecution.scope.PluginType != plugin.PluginTypeMeta {
+		return
+	}
+	if !strings.EqualFold(product, activeExecution.scope.CommandToken) || !safeTelemetryIdentifier(command, false) {
+		return
+	}
+	activeExecution.scope.ResolvedCommand = command
+}
+
 // SetPluginRoute records the installed plugin selected by the host, including
 // plugins installed after Begin. Capture this snapshot before execution so
 // failures and direct plugin exits retain the same owner and pipeline.

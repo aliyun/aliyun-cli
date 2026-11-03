@@ -315,11 +315,12 @@ func Dispatch(ctx *cli.Context, rawArgs []string) error {
 
 	telemetry.SetOpenAPIRuntimeVersion(runtime.Version)
 	return engineDispatch(engine.Request{
-		Args:   rawArgs,
-		Out:    ctx.Stdout(),
-		Lang:   lang,
-		Host:   host,
-		AIMode: aiModeEnabled,
+		Args:              rawArgs,
+		Out:               ctx.Stdout(),
+		Lang:              lang,
+		Host:              host,
+		AIMode:            aiModeEnabled,
+		OnCommandResolved: telemetry.SetResolvedMetaCommand,
 	})
 }
 
@@ -434,10 +435,11 @@ func runtimeHelpRequest(ctx *cli.Context, rawArgs, args []string) engine.Request
 		lang = explicit
 	}
 	return engine.Request{
-		Args:   args,
-		Out:    ctx.Stdout(),
-		Lang:   lang,
-		AIMode: helpAIMode(ctx, rawArgs),
+		Args:              args,
+		Out:               ctx.Stdout(),
+		Lang:              lang,
+		AIMode:            helpAIMode(ctx, rawArgs),
+		OnCommandResolved: telemetry.SetResolvedMetaCommand,
 	}
 }
 
