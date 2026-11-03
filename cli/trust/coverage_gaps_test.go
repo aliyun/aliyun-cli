@@ -141,6 +141,8 @@ func TestLoadPersistedRootAndClearCachesErrors(t *testing.T) {
 	assert.Error(t, err)
 	missing := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(missing, "recovery-patch.json"), []byte("{}"), 0600))
+	client.cfg.RecoveryKeys = nil
+	client.cfg.RecoveryRole = Role{}
 	_, err = client.loadPersistedRoot(missing, anchor, State{RecoveryEpoch: 1}, now, nil)
 	assert.ErrorContains(t, err, "recovery trust anchor is not configured")
 
@@ -180,6 +182,7 @@ func TestFetchStatusAndRecoveryErrorPaths(t *testing.T) {
 
 func TestFetchArtifactRejectsMissingBootstrapAndAcceptsExpiredRoot(t *testing.T) {
 	f := newTrustFixture(t)
+	withoutBuiltinAnchors(t)
 	empty := New(Config{CacheDir: t.TempDir(), SourceBase: f.client.cfg.SourceBase})
 	_, err := empty.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
 	assert.ErrorContains(t, err, "bootstrap root is not configured")

@@ -394,7 +394,38 @@ func TestTrustURLHelpersRejectUnsafeDestinations(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func withoutBuiltinAnchors(t *testing.T) {
+	t.Helper()
+	root, keys, role := BuiltinRootEnvelope, BuiltinRecoveryKeysJSON, BuiltinRecoveryRoleJSON
+	root64, keys64, role64 := BuiltinRootEnvelopeBase64, BuiltinRecoveryKeysBase64, BuiltinRecoveryRoleBase64
+	BuiltinRootEnvelope, BuiltinRecoveryKeysJSON, BuiltinRecoveryRoleJSON = "", "", ""
+	BuiltinRootEnvelopeBase64, BuiltinRecoveryKeysBase64, BuiltinRecoveryRoleBase64 = "", "", ""
+	t.Cleanup(func() {
+		BuiltinRootEnvelope, BuiltinRecoveryKeysJSON, BuiltinRecoveryRoleJSON = root, keys, role
+		BuiltinRootEnvelopeBase64, BuiltinRecoveryKeysBase64, BuiltinRecoveryRoleBase64 = root64, keys64, role64
+	})
+}
+
+func TestBuiltinAnchorsLoadWithoutLinkerFlags(t *testing.T) {
+	client := New(Config{})
+	root, err := client.bootstrapRoot(time.Date(2026, 10, 22, 8, 26, 44, 0, time.UTC))
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"root-20261022082644-a",
+		"root-20261022082644-b",
+		"root-20261022082644-c",
+	}, root.Roles["root"].KeyIDs)
+	assert.Equal(t, 2, root.Roles["root"].Threshold)
+	assert.Equal(t, []string{
+		"recovery-20261022082644-a",
+		"recovery-20261022082644-b",
+		"recovery-20261022082644-c",
+	}, client.cfg.RecoveryRole.KeyIDs)
+	assert.Equal(t, 2, client.cfg.RecoveryRole.Threshold)
+}
+
 func TestBootstrapFailsClosedWithoutEmbeddedMaterial(t *testing.T) {
+	withoutBuiltinAnchors(t)
 	client := New(Config{
 		CacheDir:     t.TempDir(),
 		DiscoveryURL: "https://api.aliyun.com/.well-known/aliyun-cli-trust.json",

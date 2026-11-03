@@ -1,6 +1,8 @@
 package plugin
 
 import (
+	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -42,15 +44,18 @@ func TestPluginSourceOverrideRejectsInvalidScheme(t *testing.T) {
 }
 
 func TestHiddenInstallCommandsPropagateIndexErrors(t *testing.T) {
+	old := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = old })
+	http.DefaultTransport = managerBoundaryTransport(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("trust offline")
+	})
 	for _, command := range []*cli.Command{newInstallAllCommand(), newInstallCustomCommand()} {
 		t.Run(command.Name, func(t *testing.T) {
 			t.Setenv(EnvPluginsDir, t.TempDir())
 			ctx := newTestContext()
 			ctx.EnterCommand(command)
 			ctx.Flags().Get("enable-pre").SetAssigned(true)
-			// Official source always verifies signatures first. Test binaries
-			// do not embed a trust root, so install fails closed before HTTP.
-			require.ErrorContains(t, command.Run(ctx, nil), "artifact trust bootstrap root is not configured")
+			require.ErrorContains(t, command.Run(ctx, nil), "failed to verify plugin index")
 		})
 	}
 }
