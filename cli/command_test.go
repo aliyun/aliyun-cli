@@ -396,7 +396,7 @@ func TestExecuteHelp(t *testing.T) {
 		fmt.Fprint(ctx.Stdout(), "test execute help")
 		return nil
 	}
-	cmd.executeHelp(ctx, nil)
+	assert.NoError(t, cmd.executeHelp(ctx, nil))
 	assert.Equal(t, "test execute help", buf.String())
 
 	buf.Reset()
@@ -406,6 +406,9 @@ func TestExecuteHelp(t *testing.T) {
 	cmd.Help = func(ctx *Context, args []string) error {
 		return errors.New("test help error")
 	}
-	cmd.executeHelp(ctx, nil)
+	err := cmd.executeHelp(ctx, nil)
+	assert.EqualError(t, err, "test help error")
+	assert.Empty(t, buf2.String(), "Help errors must reach the completion observer before rendering")
+	cmd.processError(ctx, err)
 	assert.Equal(t, "\x1b[1;31mERROR: test help error\n\x1b[0m", buf2.String())
 }

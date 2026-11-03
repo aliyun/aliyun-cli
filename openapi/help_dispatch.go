@@ -220,6 +220,7 @@ func (c *Commando) delegateInstalledPluginHelp(ctx *cli.Context, args []string) 
 		// --help` reports "unknown command" for a command that runs.
 		return false, nil
 	}
+	telemetry.SetPluginRoute(local)
 	ok, err := goPluginHelpDispatch(product, pluginArgs, ctx)
 	if err != nil {
 		return true, &externalPluginError{err: err}
@@ -575,10 +576,16 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 	if err != nil {
 		var structured *machineHelpError
 		if errors.As(err, &structured) {
+			adapted := adaptMachineHelpTargetError(target, structured, c.library)
 			if jsonOutput && !aiMode {
+				// Keep the JSON document while exposing the same typed cause as
+				// text Help to completion observers and error classifiers.
+				if adapted != structured && structured.cause == nil {
+					structured.cause = adapted
+				}
 				return structured
 			}
-			return adaptMachineHelpTargetError(target, structured, c.library)
+			return adapted
 		}
 		return err
 	}

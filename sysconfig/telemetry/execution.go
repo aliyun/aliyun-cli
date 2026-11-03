@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
 )
 
@@ -119,6 +120,25 @@ func SetOpenAPIRuntimeVersion(version string) {
 		return
 	}
 	activeExecution.openAPIRuntimeVersion = version
+}
+
+// SetPluginRoute records the installed plugin selected by the host, including
+// plugins installed after Begin. Capture this snapshot before execution so
+// failures and direct plugin exits retain the same owner and pipeline.
+func SetPluginRoute(local *plugin.LocalPlugin) {
+	defer recoverCollectionPanic()
+	if activeExecution == nil || executionEnded || local == nil {
+		return
+	}
+	scope := scopeFromLocalPlugin(activeExecution.scope.CommandToken, local)
+	if scope.PluginType == plugin.PluginTypeMeta {
+		scope.CommandType = CommandTypePluginMeta
+	} else {
+		scope.CommandType = CommandTypePluginGo
+	}
+	activeExecution.scope = scope
+	// An actual metadata-runtime dispatch marks its version separately.
+	activeExecution.openAPIRuntimeVersion = ""
 }
 
 // SetOpenAPILegacyRoute replaces a pre-routing plugin candidate when the host

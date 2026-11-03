@@ -300,8 +300,7 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 func (c *Command) executeInner(ctx *Context, args []string) error {
 	if c.RawArgs && ctx.completion == nil {
 		if (ctx.help || rawArgsRequestHelp(ctx, args)) && !c.SkipDefaultHelp {
-			c.executeHelp(ctx, args)
-			return nil
+			return c.executeHelp(ctx, args)
 		}
 		return c.Run(ctx, args)
 	}
@@ -390,12 +389,10 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 
 	if ctx.help {
 		if !c.SkipDefaultHelp {
-			c.executeHelp(ctx, callArgs)
-			return nil
+			return c.executeHelp(ctx, callArgs)
 		}
 	} else if c.Run == nil {
-		c.executeHelp(ctx, callArgs)
-		return nil
+		return c.executeHelp(ctx, callArgs)
 	}
 
 	return c.Run(ctx, callArgs)
@@ -466,13 +463,9 @@ func (c *Command) processError(ctx *Context, err error) {
 	Exit(exitCode)
 }
 
-func (c *Command) executeHelp(ctx *Context, args []string) {
+func (c *Command) executeHelp(ctx *Context, args []string) error {
 	if c.Help != nil {
-		err := c.Help(ctx, args)
-		if err != nil {
-			c.processError(ctx, err)
-		}
-		return
+		return c.Help(ctx, args)
 	}
 
 	c.PrintHead(ctx)
@@ -481,4 +474,5 @@ func (c *Command) executeHelp(ctx *Context, args []string) {
 	c.PrintSubCommands(ctx)
 	c.PrintFlags(ctx)
 	c.PrintTail(ctx)
+	return nil
 }

@@ -6,7 +6,7 @@
 
 Alibaba Cloud CLI telemetry is enabled by default. After command execution, the CLI collects structured usage information and sends it to Alibaba Cloud over HTTPS from a background process. This information helps analyze feature usage, compatibility, execution results, and performance to improve product reliability and usability.
 
-Collection covers operations such as ordinary commands, credential configuration, and plugin management, including local execution results that do not involve a cloud API request. `aliyun configure telemetry` and its management subcommands do not collect telemetry about themselves. The original command does not wait for the telemetry network upload; disabling telemetry does not affect normal CLI functionality.
+Collection covers operations such as ordinary commands, credential configuration, and plugin management, including local execution results that do not involve a cloud API request. Disabling telemetry does not affect normal CLI functionality.
 
 ## What information is collected
 
@@ -106,7 +106,7 @@ Temporary event files pass data between local processes; they are not complete c
 
 `telemetry.log` automatically records collection, event persistence, and upload status with fixed failure reasons in JSON Lines format. Use timestamps, process IDs, and `eventId` to correlate stages and identify events that were not generated, could not be saved, or failed to upload. Upload records also include HTTP status codes, duration, and validated response identifiers (`requestId` and `telemetryRequestId`) where supplied by the server; these identifiers are omitted when no response is received. These logs stay local and contain no command lines, business parameter values, credentials, business file paths, request or response bodies, or raw error messages.
 
-Logs rotate at 10 MiB per file, retaining up to 5 backups (`telemetry.log.1` through `telemetry.log.5`). Local diagnostics can still record skip reasons when telemetry is disabled. Diagnostic logging failures do not affect command execution.
+Logs rotate at 10 MiB per file, retaining up to 5 backups (`telemetry.log.1` through `telemetry.log.5`). Diagnostic logging failures do not affect command execution.
 
 Local diagnostic logging is enabled by default. Use this independent environment variable to stop writing logs without affecting telemetry event collection, persistence, or upload:
 

@@ -115,9 +115,11 @@ func commandParts(args []string, scope Scope) []string {
 	}
 	if scope.PluginName != "" || scope.PluginType != "" {
 		if plugin.NormalizePluginType(scope.PluginType) == plugin.PluginTypeGo {
-			// Go plugins have no business positional arguments. Once options
-			// begin, later tokens may be repeated or multi-value option inputs;
-			// never promote them back into the command hierarchy.
+			// Go plugin command definitions do not accept positional arguments;
+			// business inputs are passed through flags. Tokens before the first
+			// flag are therefore command/subcommand names. Once options begin,
+			// later tokens may be repeated or multi-value option inputs; never
+			// promote them back into the command hierarchy.
 			for i, arg := range args {
 				if strings.HasPrefix(arg, "-") {
 					return args[:i]

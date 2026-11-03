@@ -637,6 +637,13 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				}
 			}
 
+			// The selected Go plugin may have been installed after telemetry
+			// began. Record its current manifest before preparation or execution
+			// can fail or forward a subprocess exit code.
+			if local, lookupErr := plugin.LookupLocalPlugin(args[0]); lookupErr == nil {
+				telemetry.SetPluginRoute(local)
+			}
+
 			// Prepare config related env for plugin
 			// Only prepare credentials if it's NOT a version command AND NOT a help request
 			// AND it has more than 2 arguments (product + api + more)
@@ -867,10 +874,11 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 // dispatchInstalledMetaPlugin routes an installed metadata plugin through the in-process OpenAPI runtime.
 // It returns handled=false for Go plugins so the caller can continue to the external binary execution path.
 func (c *Commando) dispatchInstalledMetaPlugin(ctx *cli.Context, productCode, apiOrMethod string, pluginArgs []string) (bool, error) {
-	ptype, ok := plugin.InstalledPluginType(productCode)
-	if !ok || ptype != plugin.PluginTypeMeta {
+	local, lookupErr := plugin.LookupLocalPlugin(productCode)
+	if lookupErr != nil || local == nil || !local.IsMeta() {
 		return false, nil
 	}
+	telemetry.SetPluginRoute(local)
 	if err := plugin.ValidatePluginCliVersion(productCode); err != nil {
 		return true, err
 	}
