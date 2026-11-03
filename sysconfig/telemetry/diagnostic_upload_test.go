@@ -3,6 +3,7 @@ package telemetry
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,6 +17,19 @@ import (
 )
 
 const diagnosticUploadEventID = "9d30cb18-244d-4bda-9f4a-8d6fd2267c83"
+
+type telemetryTimeoutTransport struct{}
+
+func (telemetryTimeoutTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Body != nil {
+		defer req.Body.Close()
+	}
+	if _, ok := req.Context().Deadline(); !ok {
+		return nil, errors.New("test transport requires a request deadline")
+	}
+	<-req.Context().Done()
+	return nil, req.Context().Err()
+}
 
 func readUploadDiagnostics(t *testing.T, configDir string) ([]diagnosticRecord, string) {
 	t.Helper()
@@ -229,10 +243,13 @@ func TestSpawnUploadDiagnosticsStartFailure(t *testing.T) {
 
 func TestTelemetryUploadResultClassifiesTimeoutAndMarshalFailure(t *testing.T) {
 	t.Run("timeout", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-		defer server.Close()
-		t.Setenv("ALIBABA_CLOUD_CLI_TELEMETRY_ENDPOINT", server.URL)
-		result := postTelemetryBatchResult(nil, &http.Client{Timeout: time.Nanosecond})
+		t.Setenv("ALIBABA_CLOUD_CLI_TELEMETRY_ENDPOINT", "http://telemetry.invalid/events")
+		// Wait for the actual request deadline instead of racing an immediate
+		// HTTP 200 against a sub-millisecond timer on the host platform.
+		result := postTelemetryBatchResult(nil, &http.Client{
+			Timeout:   20 * time.Millisecond,
+			Transport: telemetryTimeoutTransport{},
+		})
 		require.False(t, result.success)
 		require.Equal(t, "timeout", result.errorKind)
 		require.Zero(t, result.httpStatus)
