@@ -163,7 +163,7 @@ func TestUnsignedFallbackHelpersAndVerifiedIndexErrors(t *testing.T) {
 	assert.ErrorContains(t, err, "failed to decode verified plugin index")
 }
 
-func TestVerifiedInstallRecordsTrustChecksumAndLength(t *testing.T) {
+func TestVerifiedInstallRecordsTrustChecksum(t *testing.T) {
 	body := []byte("plugin-archive")
 	sum := sha256.Sum256(body)
 	checksum := hex.EncodeToString(sum[:])
@@ -184,20 +184,17 @@ func TestVerifiedInstallRecordsTrustChecksumAndLength(t *testing.T) {
 		Name: "aliyun-cli-fc",
 		Versions: map[string]VersionInfo{
 			"1.0.0": {Platforms: map[string]PlatformInfo{
-				PluginPlatformAny: {URL: server.URL + "/pkg.tgz", Checksum: checksum, Length: int64(len(body) + 1)},
+				PluginPlatformAny: {URL: server.URL + "/pkg.tgz", Checksum: checksum},
 			}},
 		},
 	}
 	err := manager.installPlugin(ctx, plugin, "1.0.0", false, false)
-	assert.ErrorContains(t, err, "plugin length verification failed")
+	assert.Error(t, err)
 	require.NotNil(t, manager.indexTrustVerification)
 	assert.Equal(t, checksum, manager.indexTrustVerification.Checksum)
 
-	plugin.Versions["1.0.0"].Platforms[PluginPlatformAny] = PlatformInfo{
-		URL: server.URL + "/pkg.tgz", Checksum: checksum, Length: int64(len(body)),
-	}
 	archive, err := manager.downloadAndVerifyPlugin(ctx, &PlatformInfo{
-		URL: server.URL + "/pkg.tgz", Checksum: checksum, Length: int64(len(body)),
+		URL: server.URL + "/pkg.tgz", Checksum: checksum,
 	}, "aliyun-cli-fc", "1.0.0")
 	require.NoError(t, err)
 	assert.NotEmpty(t, archive)

@@ -747,17 +747,6 @@ func (m *Manager) downloadAndVerifyPlugin(ctx *cli.Context, platInfo *PlatformIn
 			actualPluginName, version, platInfo.Checksum, actualChecksum,
 		)
 	}
-	if platInfo.Length > 0 {
-		info, err := os.Stat(archivePath)
-		if err != nil {
-			os.RemoveAll(tmpDir)
-			return "", fmt.Errorf("failed to stat downloaded plugin: %w", err)
-		}
-		if info.Size() != platInfo.Length {
-			os.RemoveAll(tmpDir)
-			return "", fmt.Errorf("plugin length verification failed: expected %d, got %d", platInfo.Length, info.Size())
-		}
-	}
 	return archivePath, nil
 }
 

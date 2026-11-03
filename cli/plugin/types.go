@@ -103,7 +103,6 @@ type VersionMetadata struct {
 type PlatformInfo struct {
 	URL      string `json:"url"`
 	Checksum string `json:"checksum"`
-	Length   int64  `json:"length,omitempty"`
 }
 
 type LocalManifest struct {
