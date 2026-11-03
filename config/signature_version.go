@@ -23,8 +23,8 @@ import (
 )
 
 // EnvSignatureVersion selects the OpenAPI request signature version.
-// When present (including empty), it overrides profile signature_version but
-// loses to an assigned --cli-sign-version.
+// After Profile.OverwriteWithFlags, callers should read profile.SignatureVersion
+// directly; the env is only a fallback when profile and flags are unset.
 const EnvSignatureVersion = "ALIBABA_CLOUD_SIGNATURE_VERSION"
 
 // SignatureVersionV4 enables ACS4-HMAC-SHA256 via SignatureVersion = "v4".
@@ -46,8 +46,7 @@ func NormalizeSignatureVersion(v string) (string, error) {
 }
 
 // CliSignVersionFromFlags returns the --cli-sign-version value and whether the
-// flag was assigned. An assigned empty value clears the effective version for
-// this invocation (overrides env / profile).
+// flag was assigned. An assigned empty value clears the effective version.
 func CliSignVersionFromFlags(fs *cli.FlagSet) (value string, assigned bool) {
 	if fs == nil {
 		return "", false
@@ -63,34 +62,75 @@ func CliSignVersionFromFlags(fs *cli.FlagSet) (value string, assigned bool) {
 	return strings.TrimSpace(v), true
 }
 
-// EffectiveSignatureVersion returns the active signature version string (unvalidated).
-// Precedence: assigned --cli-sign-version (including empty) >
-// present ALIBABA_CLOUD_SIGNATURE_VERSION (including empty) >
-// profile.signature_version.
-func (cp *Profile) EffectiveSignatureVersion(cliSignVersion string, cliAssigned bool) string {
-	if cliAssigned {
-		return strings.TrimSpace(cliSignVersion)
+// ResolveSignatureVersion applies precedence: command flag (including empty) >
+// profile value > environment variable > default (empty).
+// profileValue is the signature_version already loaded from the profile file
+// (before flag/env overlay). Pass "" when no profile is available.
+func ResolveSignatureVersion(cliValue string, cliAssigned bool, profileValue string) (string, error) {
+	var raw string
+	switch {
+	case cliAssigned:
+		raw = cliValue
+	case strings.TrimSpace(profileValue) != "":
+		raw = profileValue
+	default:
+		if v, ok := os.LookupEnv(EnvSignatureVersion); ok {
+			raw = v
+		}
 	}
-	if v, ok := os.LookupEnv(EnvSignatureVersion); ok {
-		return strings.TrimSpace(v)
-	}
+	return NormalizeSignatureVersion(raw)
+}
+
+// applySignatureVersionFromFlags overlays --cli-sign-version / env onto the
+// profile field using Flag > Profile > Env precedence. An assigned empty flag
+// clears the value and is not backfilled by the environment.
+func (cp *Profile) applySignatureVersionFromFlags(ctx *cli.Context) {
 	if cp == nil {
-		return ""
+		return
 	}
-	return strings.TrimSpace(cp.SignatureVersion)
+	cliValue, cliAssigned := "", false
+	if ctx != nil {
+		cliValue, cliAssigned = CliSignVersionFromFlags(ctx.Flags())
+	}
+	resolved, err := ResolveSignatureVersion(cliValue, cliAssigned, cp.SignatureVersion)
+	if err == nil {
+		cp.SignatureVersion = resolved
+		return
+	}
+	// Keep the raw selected value so Validate can surface the error.
+	switch {
+	case cliAssigned:
+		cp.SignatureVersion = strings.TrimSpace(cliValue)
+	case strings.TrimSpace(cp.SignatureVersion) != "":
+		cp.SignatureVersion = strings.TrimSpace(cp.SignatureVersion)
+	default:
+		if v, ok := os.LookupEnv(EnvSignatureVersion); ok {
+			cp.SignatureVersion = strings.TrimSpace(v)
+		}
+	}
 }
 
-// ResolvedSignatureVersion returns the normalized active signature version.
-func (cp *Profile) ResolvedSignatureVersion(cliSignVersion string, cliAssigned bool) (string, error) {
-	return NormalizeSignatureVersion(cp.EffectiveSignatureVersion(cliSignVersion, cliAssigned))
-}
-
-// UseSignatureV4 reports whether OpenAPI calls should use signature V4.
-// Empty keeps the default signing path. Unsupported values return an error.
-func (cp *Profile) UseSignatureV4(cliSignVersion string, cliAssigned bool) (bool, error) {
-	v, err := cp.ResolvedSignatureVersion(cliSignVersion, cliAssigned)
+// ValidateSignatureVersion validates profile.SignatureVersion after overlays.
+func (cp *Profile) ValidateSignatureVersion() error {
+	if cp == nil {
+		return nil
+	}
+	normalized, err := NormalizeSignatureVersion(cp.SignatureVersion)
 	if err != nil {
+		return err
+	}
+	cp.SignatureVersion = normalized
+	return nil
+}
+
+// UseSignatureV4 reports whether the already-resolved profile.SignatureVersion
+// selects signature V4. Call after OverwriteWithFlags.
+func (cp *Profile) UseSignatureV4() (bool, error) {
+	if err := cp.ValidateSignatureVersion(); err != nil {
 		return false, err
 	}
-	return v == SignatureVersionV4, nil
+	if cp == nil {
+		return false, nil
+	}
+	return cp.SignatureVersion == SignatureVersionV4, nil
 }

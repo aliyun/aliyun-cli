@@ -400,7 +400,7 @@ Only kebab-case commands are supported (for example `aliyun ecs describe-instanc
 | `v4` | Use signature V4 |
 | empty | Clear a configured value and restore the default signing path |
 
-Any other value is rejected. Precedence: command flag > environment variable > profile. An empty value follows the same precedence and can override a profile-level `v4`.
+Any other value is rejected. Precedence: command flag > profile > environment variable > default. Passing `--cli-sign-version ''` clears the value and restores the default; it is not backfilled by an environment `v4`.
 
 Enable it for one command:
 
@@ -444,7 +444,7 @@ Environment variables can select a profile or fill fields not supplied by flags/
 | `ALIBABA_CLOUD_REGION_ID` | Default region |
 | `ALIBABA_CLOUD_STS_ENDPOINT` | Override the STS endpoint |
 | `ALIBABA_CLOUD_ENDPOINT` | Override the product endpoint |
-| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI signature version: only `v4`; set empty to clear and use default (overrides profile `signature_version`) |
+| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI signature version: only `v4`; used only when the flag is unset and the profile value is empty; set empty to clear and use default |
 | `ALIBABA_CLOUD_CREDENTIALS_URI` | CredentialsURI source |
 | `ALIBABA_CLOUD_OIDC_PROVIDER_ARN` | OIDC provider ARN |
 | `ALIBABA_CLOUD_OIDC_TOKEN_FILE` | OIDC token file |

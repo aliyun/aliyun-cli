@@ -412,7 +412,7 @@ Saving profile[uri] ...Done.
 | `v4` | 使用签名 V4 |
 | 空值 | 清空已配置的签名版本，恢复默认签名 |
 
-其他值会报错不支持。优先级：命令行 flag > 环境变量 > Profile。空值同样遵循该优先级，可用于覆盖 Profile 中的 `v4`。
+其他值会报错不支持。优先级：命令行 flag > Profile > 环境变量 > 默认行为。传入 `--cli-sign-version ''` 会清空并恢复默认，且不会再被环境变量中的 `v4` 补回。
 
 单次命令开启：
 
@@ -456,7 +456,7 @@ export ALIBABA_CLOUD_SIGNATURE_VERSION=
 | `ALIBABA_CLOUD_REGION_ID` | 默认地域 |
 | `ALIBABA_CLOUD_STS_ENDPOINT` | 覆盖 STS Endpoint |
 | `ALIBABA_CLOUD_ENDPOINT` | 覆盖产品 Endpoint |
-| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI 签名版本：当前仅支持 `v4`；设为空可清空并恢复默认（优先于 Profile 中的 `signature_version`） |
+| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI 签名版本：当前仅支持 `v4`；仅在未设置 flag 且 Profile 为空时生效；设为空可清空并恢复默认 |
 | `ALIBABA_CLOUD_CREDENTIALS_URI` | CredentialsURI 地址 |
 | `ALIBABA_CLOUD_OIDC_PROVIDER_ARN` | OIDC Provider ARN |
 | `ALIBABA_CLOUD_OIDC_TOKEN_FILE` | OIDC Token 文件 |

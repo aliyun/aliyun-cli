@@ -70,6 +70,12 @@ type cliHost struct {
 func (h *cliHost) load() {
 	h.once.Do(func() {
 		h.profile, h.loadErr = config.LoadProfileWithContext(h.ctx)
+		// LoadProfileWithContext only overlays flags when InConfigureMode is set
+		// (commando path). Runtime host always needs Flag > Profile > Env for
+		// signature version and other request overrides.
+		if h.loadErr == nil && h.ctx != nil {
+			h.profile.OverwriteWithFlags(h.ctx)
+		}
 	})
 }
 
@@ -104,14 +110,20 @@ func (h *cliHost) Settings() runtime.Settings {
 			s.SkipSecureVerify = true
 		}
 		s.UserAgent = buildUserAgentSuffix(h.ctx)
-		if h.loadErr == nil {
-			cliValue, cliAssigned := config.CliSignVersionFromFlags(h.ctx.Flags())
-			s.SignatureVersion = h.profile.EffectiveSignatureVersion(cliValue, cliAssigned)
-		} else if v, assigned := config.CliSignVersionFromFlags(h.ctx.Flags()); assigned {
-			s.SignatureVersion = v
+	}
+	if h.loadErr == nil {
+		// LoadProfileWithContext already ran OverwriteWithFlags
+		// (flag > profile > env); read the resolved field directly.
+		_ = h.profile.ValidateSignatureVersion()
+		s.SignatureVersion = h.profile.SignatureVersion
+	} else if h.ctx != nil {
+		// No usable profile: flag (including empty) > env > default.
+		cliValue, cliAssigned := config.CliSignVersionFromFlags(h.ctx.Flags())
+		if resolved, err := config.ResolveSignatureVersion(cliValue, cliAssigned, ""); err == nil {
+			s.SignatureVersion = resolved
+		} else if cliAssigned {
+			s.SignatureVersion = cliValue
 		}
-	} else if h.loadErr == nil {
-		s.SignatureVersion = h.profile.EffectiveSignatureVersion("", false)
 	}
 	return s
 }

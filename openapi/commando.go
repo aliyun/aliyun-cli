@@ -977,8 +977,7 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
 	// PascalCase / Restful legacy path still uses the V1 Golang SDK, which does
 	// not support signature V4. Fail closed instead of signing incorrectly.
-	cliValue, cliAssigned := config.CliSignVersionFromFlags(ctx.Flags())
-	if useV4, err := c.profile.UseSignatureV4(cliValue, cliAssigned); err != nil {
+	if useV4, err := c.profile.UseSignatureV4(); err != nil {
 		return err
 	} else if useV4 {
 		return cli.NewErrorWithTip(

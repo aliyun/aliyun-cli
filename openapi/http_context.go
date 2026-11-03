@@ -70,9 +70,7 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	if err != nil {
 		return
 	}
-	cliValue, cliAssigned := config.CliSignVersionFromFlags(ctx.Flags())
-	signVersion, err := cp.ResolvedSignatureVersion(cliValue, cliAssigned)
-	if err != nil {
+	if err = cp.ValidateSignatureVersion(); err != nil {
 		return nil, err
 	}
 	conf := openapiClient.Config{
@@ -86,7 +84,7 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	legacy := strings.EqualFold(product.Code, "fnf") || strings.EqualFold(product.GetLowerCode(), "fnf")
 	if legacy {
 		conf.SignatureAlgorithm = tea.String("v2")
-	} else if signVersion == config.SignatureVersionV4 {
+	} else if cp.SignatureVersion == config.SignatureVersionV4 {
 		conf.SignatureVersion = tea.String(config.SignatureVersionV4)
 		useV4 = true
 	}

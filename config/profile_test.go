@@ -1961,20 +1961,21 @@ func TestGetRuntimeEnv_SignatureVersion(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, SignatureVersionV4, envs[EnvSignatureVersion])
 
+	// Always forward the already-resolved profile field (including empty),
+	// so an explicit clear overrides a parent-process env in plugins.
 	p.SignatureVersion = ""
-	envs, err = p.GetRuntimeEnv(newCtx())
-	assert.NoError(t, err)
-	_, has := envs[EnvSignatureVersion]
-	assert.False(t, has)
-
-	// Present empty env clears profile v4 and must still be forwarded.
-	p.SignatureVersion = SignatureVersionV4
-	t.Setenv(EnvSignatureVersion, "")
 	envs, err = p.GetRuntimeEnv(newCtx())
 	assert.NoError(t, err)
 	val, has := envs[EnvSignatureVersion]
 	assert.True(t, has)
 	assert.Empty(t, val)
+
+	// GetRuntimeEnv does not re-apply env; profile > env was resolved earlier.
+	p.SignatureVersion = SignatureVersionV4
+	t.Setenv(EnvSignatureVersion, "")
+	envs, err = p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	assert.Equal(t, SignatureVersionV4, envs[EnvSignatureVersion])
 }
 
 func TestGetRuntimeEnv_OptionalFieldsOmitted(t *testing.T) {

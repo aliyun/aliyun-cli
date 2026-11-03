@@ -57,6 +57,7 @@ func TestGetOpenapiClientSignatureV4FromEnv(t *testing.T) {
 		AccessKeySecret: "secret",
 		RegionId:        "cn-hangzhou",
 	}
+	profile.OverwriteWithFlags(ctx)
 	client, err := GetOpenapiClient(profile, ctx, &meta.Product{Code: "Ecs", GlobalEndpoint: "ecs.cn-hangzhou.aliyuncs.com"})
 	require.NoError(t, err)
 	assert.Equal(t, config.SignatureVersionV4, tea.StringValue(client.SignatureVersion))
@@ -77,6 +78,7 @@ func TestGetOpenapiClientSignatureV4FromCliSignVersionFlag(t *testing.T) {
 		AccessKeySecret: "secret",
 		RegionId:        "cn-hangzhou",
 	}
+	profile.OverwriteWithFlags(ctx)
 	client, err := GetOpenapiClient(profile, ctx, &meta.Product{Code: "Ecs", GlobalEndpoint: "ecs.cn-hangzhou.aliyuncs.com"})
 	require.NoError(t, err)
 	assert.Equal(t, config.SignatureVersionV4, tea.StringValue(client.SignatureVersion))
@@ -119,6 +121,7 @@ func TestProcessInvokeRejectsSignatureV4FromCliSignVersionFlag(t *testing.T) {
 		AccessKeySecret: "secret",
 		RegionId:        "cn-hangzhou",
 	}}
+	c.profile.OverwriteWithFlags(ctx)
 	err := c.processInvoke(ctx, "ecs", "DescribeInstances", "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "signature version v4 is not supported for PascalCase")
@@ -165,7 +168,7 @@ func TestGetOpenapiClientEmptySignatureUsesDefault(t *testing.T) {
 }
 
 func TestGetOpenapiClientEmptyFlagClearsProfileV4(t *testing.T) {
-	require.NoError(t, os.Unsetenv(config.EnvSignatureVersion))
+	t.Setenv(config.EnvSignatureVersion, "v4")
 	_, ctx, _, _ := newCanonicalHelpTestContext(t)
 	config.AddFlags(ctx.Flags())
 	f := config.CliSignVersionFlag(ctx.Flags())
@@ -179,6 +182,7 @@ func TestGetOpenapiClientEmptyFlagClearsProfileV4(t *testing.T) {
 		RegionId:         "cn-hangzhou",
 		SignatureVersion: config.SignatureVersionV4,
 	}
+	profile.OverwriteWithFlags(ctx)
 	client, err := GetOpenapiClient(profile, ctx, &meta.Product{Code: "Ecs", GlobalEndpoint: "ecs.cn-hangzhou.aliyuncs.com"})
 	require.NoError(t, err)
 	assert.Empty(t, tea.StringValue(client.SignatureVersion))
@@ -212,6 +216,7 @@ func TestGetOpenapiClientSignatureV4EmptyProductCodeFallsBackToLower(t *testing.
 		RegionId:        "cn-hangzhou",
 		Endpoint:        "ecs.cn-hangzhou.aliyuncs.com",
 	}
+	profile.OverwriteWithFlags(ctx)
 	client, err := GetOpenapiClient(profile, ctx, &meta.Product{Code: ""})
 	require.NoError(t, err)
 	assert.Equal(t, config.SignatureVersionV4, tea.StringValue(client.SignatureVersion))
