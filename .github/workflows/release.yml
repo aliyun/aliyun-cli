@@ -34,9 +34,6 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
       CLI_RELEASE_SIGNING_KEY: ${{ secrets.CLI_RELEASE_SIGNING_KEY }}
-      CLI_TRUST_ROOT_ENVELOPE_BASE64: ${{ vars.CLI_TRUST_ROOT_ENVELOPE_BASE64 }}
-      CLI_TRUST_RECOVERY_KEYS_BASE64: ${{ vars.CLI_TRUST_RECOVERY_KEYS_BASE64 }}
-      CLI_TRUST_RECOVERY_ROLE_BASE64: ${{ vars.CLI_TRUST_RECOVERY_ROLE_BASE64 }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -115,9 +112,6 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
       CLI_RELEASE_SIGNING_KEY: ${{ secrets.CLI_RELEASE_SIGNING_KEY }}
-      CLI_TRUST_ROOT_ENVELOPE_BASE64: ${{ vars.CLI_TRUST_ROOT_ENVELOPE_BASE64 }}
-      CLI_TRUST_RECOVERY_KEYS_BASE64: ${{ vars.CLI_TRUST_RECOVERY_KEYS_BASE64 }}
-      CLI_TRUST_RECOVERY_ROLE_BASE64: ${{ vars.CLI_TRUST_RECOVERY_ROLE_BASE64 }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -160,9 +154,6 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CLI_RELEASE_SIGNING_KEY: ${{ secrets.CLI_RELEASE_SIGNING_KEY }}
-      CLI_TRUST_ROOT_ENVELOPE_BASE64: ${{ vars.CLI_TRUST_ROOT_ENVELOPE_BASE64 }}
-      CLI_TRUST_RECOVERY_KEYS_BASE64: ${{ vars.CLI_TRUST_RECOVERY_KEYS_BASE64 }}
-      CLI_TRUST_RECOVERY_ROLE_BASE64: ${{ vars.CLI_TRUST_RECOVERY_ROLE_BASE64 }}
     steps:
       - uses: actions/checkout@v4
         with:

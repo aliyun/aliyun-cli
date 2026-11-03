@@ -3,7 +3,6 @@ package trust
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -66,21 +65,13 @@ func New(cfg Config) *Client {
 		cfg.RecoveryHosts = appendHost(cfg.RecoveryHosts, host)
 	}
 	if len(cfg.BootstrapRoot) == 0 {
-		cfg.BootstrapRoot = builtinMaterial(
-			BuiltinRootEnvelope, BuiltinRootEnvelopeBase64,
-		)
+		cfg.BootstrapRoot = []byte(BuiltinRootEnvelope)
 	}
 	if len(cfg.RecoveryKeys) == 0 {
-		_ = strictJSON(
-			builtinMaterial(BuiltinRecoveryKeysJSON, BuiltinRecoveryKeysBase64),
-			&cfg.RecoveryKeys,
-		)
+		_ = strictJSON([]byte(BuiltinRecoveryKeysJSON), &cfg.RecoveryKeys)
 	}
 	if cfg.RecoveryRole.Threshold == 0 {
-		_ = strictJSON(
-			builtinMaterial(BuiltinRecoveryRoleJSON, BuiltinRecoveryRoleBase64),
-			&cfg.RecoveryRole,
-		)
+		_ = strictJSON([]byte(BuiltinRecoveryRoleJSON), &cfg.RecoveryRole)
 	}
 	if cfg.CacheDir == "" {
 		if home, err := os.UserHomeDir(); err == nil {
@@ -88,16 +79,6 @@ func New(cfg Config) *Client {
 		}
 	}
 	return &Client{cfg: cfg}
-}
-
-func builtinMaterial(plain, encoded string) []byte {
-	if strings.TrimSpace(encoded) != "" {
-		if decoded, err := base64.StdEncoding.DecodeString(encoded); err == nil {
-			return decoded
-		}
-		return nil
-	}
-	return []byte(plain)
 }
 
 func DiscoveryURLForSite(site string) string {

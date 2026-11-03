@@ -397,12 +397,9 @@ func TestTrustURLHelpersRejectUnsafeDestinations(t *testing.T) {
 func withoutBuiltinAnchors(t *testing.T) {
 	t.Helper()
 	root, keys, role := BuiltinRootEnvelope, BuiltinRecoveryKeysJSON, BuiltinRecoveryRoleJSON
-	root64, keys64, role64 := BuiltinRootEnvelopeBase64, BuiltinRecoveryKeysBase64, BuiltinRecoveryRoleBase64
 	BuiltinRootEnvelope, BuiltinRecoveryKeysJSON, BuiltinRecoveryRoleJSON = "", "", ""
-	BuiltinRootEnvelopeBase64, BuiltinRecoveryKeysBase64, BuiltinRecoveryRoleBase64 = "", "", ""
 	t.Cleanup(func() {
 		BuiltinRootEnvelope, BuiltinRecoveryKeysJSON, BuiltinRecoveryRoleJSON = root, keys, role
-		BuiltinRootEnvelopeBase64, BuiltinRecoveryKeysBase64, BuiltinRecoveryRoleBase64 = root64, keys64, role64
 	})
 }
 
@@ -723,14 +720,6 @@ func TestNewUsesConfiguredPluginSite(t *testing.T) {
 
 	assert.Equal(t, DiscoveryURLIntl, client.cfg.DiscoveryURL)
 	assert.Contains(t, client.cfg.MetadataHosts, "api.alibabacloud.com")
-}
-
-func TestBuiltinMaterialPrefersLinkerInjectedBase64(t *testing.T) {
-	assert.Equal(t, []byte("encoded"), builtinMaterial(
-		"plain", base64.StdEncoding.EncodeToString([]byte("encoded")),
-	))
-	assert.Nil(t, builtinMaterial("plain", "not-base64"))
-	assert.Equal(t, []byte("plain"), builtinMaterial("plain", ""))
 }
 
 // The release platform (portal-cluster-v2 _validate_recovery_payload) publishes
