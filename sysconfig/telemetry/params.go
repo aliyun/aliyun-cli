@@ -20,15 +20,9 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 )
 
-// These commands accept paths after their command or operation name.
-var fixedCommandDepthByToken = map[string]int{
-	"oss":        2,
-	"ossutil":    2,
-	"go-migrate": 1,
-}
-
+// ExtractParamNames preserves the order, case, and repetitions of recognized
+// option names while omitting their values.
 func ExtractParamNames(args []string) []string {
-	seen := make(map[string]struct{})
 	var names []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -39,10 +33,7 @@ func ExtractParamNames(args []string) []string {
 		if name == "" {
 			continue
 		}
-		if _, ok := seen[name]; !ok {
-			seen[name] = struct{}{}
-			names = append(names, name)
-		}
+		names = append(names, name)
 		if !inline && i+1 < len(args) {
 			// Without the command's flag definitions, a short dash-leading
 			// token can be a value. Prefer omitting it over exposing a value.
@@ -77,8 +68,9 @@ func telemetryFlagName(arg string) (string, bool) {
 }
 
 func positionalParts(args []string) []string {
-	// Plugin/extension protocol uses non-flag tokens for command hierarchy and
-	// passes business inputs as flag values. Both inline separators match CLI.
+	// Installed plugins pass business inputs as flag values. Extensions may
+	// accept positional business inputs, so callers must bound their hierarchy.
+	// Both inline separators match CLI.
 	var parts []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -110,14 +102,29 @@ func commandParts(args []string, scope Scope) []string {
 		return nil
 	}
 	parts := []string{command}
-	if depth, ok := fixedCommandDepthByToken[strings.ToLower(command)]; ok {
-		parts = positionalParts(args)
-		if len(parts) > depth {
-			parts = parts[:depth]
-		}
+	switch strings.ToLower(command) {
+	case "go-migrate":
 		return parts
+	case "oss", "ossutil":
+		return extensionCommandParts(args, command)
 	}
-	if scope.PluginName != "" || scope.PluginType != "" || isCLIExtension(command) {
+	// Extension argv can contain positional business inputs. Only retain paths
+	// confirmed from tool help; no confirmed prefix means root-only fallback.
+	if isCLIExtension(command) {
+		return extensionCommandParts(args, command)
+	}
+	if scope.PluginName != "" || scope.PluginType != "" {
+		if plugin.NormalizePluginType(scope.PluginType) == plugin.PluginTypeGo {
+			// Go plugins have no business positional arguments. Once options
+			// begin, later tokens may be repeated or multi-value option inputs;
+			// never promote them back into the command hierarchy.
+			for i, arg := range args {
+				if strings.HasPrefix(arg, "-") {
+					return args[:i]
+				}
+			}
+			return args
+		}
 		return positionalParts(args)
 	}
 	if len(args) == 0 || !strings.EqualFold(args[0], command) {

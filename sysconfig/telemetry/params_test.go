@@ -24,7 +24,7 @@ func TestExtractParamNamesExcludesValues(t *testing.T) {
 		{
 			"separate values and duplicate flags",
 			[]string{"ecs", "DescribeRegions", "--name", "private-name", "--name", "another-private-name", "--Tags.1.Key", "private-tag", "--output=json", "--region-id:cn-private"},
-			[]string{"--name", "--Tags.1.Key", "--output", "--region-id"},
+			[]string{"--name", "--name", "--Tags.1.Key", "--output", "--region-id"},
 		},
 		{
 			"dash leading values",
@@ -80,10 +80,13 @@ func TestCommandPartsDoNotPromotePositionalBusinessValues(t *testing.T) {
 		{"body in operation position", []string{"ecs", "{\"private\":true}"}, Scope{CommandToken: "ecs"}, "ecs"},
 		{"invalid entry point", []string{"/private/file", "private body"}, Scope{}, ""},
 		{"flag before operation", []string{"ecs", "--region-id:private-region", "DescribeRegions"}, Scope{CommandToken: "ecs"}, "ecs DescribeRegions"},
-		{"extension hierarchy", []string{"test-extension", "resource", "run", "--path", "/private/file", "--body:private body"}, Scope{CommandToken: "test-extension"}, "test-extension resource run"},
+		{"extension hierarchy is unverified", []string{"test-extension", "resource", "run", "--path", "/private/file", "--body:private body"}, Scope{CommandToken: "test-extension"}, "test-extension"},
 		{"registered ossutil extension", []string{"ossutil", "ls", "oss://private-bucket/path"}, Scope{CommandToken: "ossutil"}, "ossutil ls"},
 		{"registered ossutil copy", []string{"ossutil", "cp", "/private/file", "oss://private-bucket/path"}, Scope{CommandToken: "ossutil"}, "ossutil cp"},
 		{"oss copy", []string{"oss", "cp", "/private/file", "oss://private-bucket/path"}, Scope{CommandToken: "oss"}, "oss cp"},
+		{"oss unknown operation", []string{"oss", "private-business-input"}, Scope{CommandToken: "oss"}, "oss"},
+		{"ossutil path without operation", []string{"ossutil", "oss://private-bucket/path"}, Scope{CommandToken: "ossutil"}, "ossutil"},
+		{"ossutil operation case", []string{"ossutil", "LS", "oss://private-bucket/path"}, Scope{CommandToken: "ossutil"}, "ossutil LS"},
 		{"plugin metadata without name", []string{"custom-plugin", "resource", "list", "--body=private-body"}, Scope{CommandToken: "custom-plugin", PluginType: plugin.PluginTypeGo}, "custom-plugin resource list"},
 		{"plugin empty inline values", []string{"custom-plugin", "resource", "list", "--path=", "/private/file", "--body:", "private body"}, Scope{CommandToken: "custom-plugin", PluginType: plugin.PluginTypeGo}, "custom-plugin resource list"},
 		{"configure profile", []string{"configure", "switch", "--profile", "private-profile"}, Scope{CommandToken: "configure"}, "configure switch"},
@@ -131,6 +134,48 @@ func TestBuildEventOmitsKnownPositionalInputs(t *testing.T) {
 			data, err := json.Marshal(uploaded)
 			require.NoError(t, err)
 			require.NotContains(t, string(data), "private-input-sentinel")
+		})
+	}
+}
+
+func TestExtensionEventsDoNotCollectPositionalBusinessInputs(t *testing.T) {
+	previousExtensions := cliExtensions
+	RegisterCLIExtensions(map[string]bool{
+		"spark-submit": true, "kmscli": true, "bl": true, "dgate": true,
+		"ossutil": true, "test-extension": true,
+	})
+	t.Cleanup(func() { cliExtensions = previousExtensions })
+	for _, test := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"spark application and arguments", []string{"spark-submit", "--class", "private-sentinel.Main", "oss://private-sentinel/main.jar", "private-sentinel-business-input"}, "spark-submit"},
+		{"spark local application", []string{"spark-submit", "/private-sentinel/main.py", "private-sentinel-business-input"}, "spark-submit"},
+		{"spark only scalar input", []string{"spark-submit", "private-sentinel"}, "spark-submit"},
+		{"secret name", []string{"kmscli", "secret", "getsecret", "private-sentinel"}, "kmscli secret"},
+		{"tool positional input", []string{"bl", "chat", "private-sentinel"}, "bl"},
+		{"tool query", []string{"dgate", "query", "SELECT private-sentinel"}, "dgate"},
+		{"unverified extension hierarchy", []string{"test-extension", "resource", "private-sentinel"}, "test-extension"},
+		{"ossutil unknown operation", []string{"ossutil", "private-sentinel", "oss://private-sentinel/path"}, "ossutil"},
+		{"ossutil verified operation", []string{"ossutil", "cp", "/private-sentinel/file", "oss://private-sentinel/path"}, "ossutil cp"},
+		{"ossutil flags before operation", []string{"ossutil", "--region", "private-sentinel-region", "ls", "oss://private-sentinel/path"}, "ossutil"},
+		{"end of options", []string{"spark-submit", "--", "--private-sentinel", "private-sentinel"}, "spark-submit"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			event, err := BuildEvent(BuildInput{
+				Scope:    Scope{Active: true, Pipeline: PipelinePublic, CommandToken: test.args[0]},
+				RootArgs: test.args, InstanceID: "instance-id",
+			})
+			require.NoError(t, err)
+			require.Equal(t, test.want, event.Command)
+			require.Equal(t, CommandTypeCLIExt, event.CommandType)
+			// Check both the persisted event and the transformed upload contract.
+			for _, payload := range []any{event, newUploadEvent(event)} {
+				data, err := json.Marshal(payload)
+				require.NoError(t, err)
+				require.NotContains(t, string(data), "private-sentinel")
+			}
 		})
 	}
 }

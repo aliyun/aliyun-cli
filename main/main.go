@@ -128,6 +128,7 @@ func Main(args []string) {
 	ctx.SetInsecure(insecure)
 
 	rootCmd.AfterExecute = telemetry.HookEnd
+	cli.SetBeforeExit(telemetry.EndWithExitCode)
 	plugin.SetBeforePluginExit(telemetry.EndWithExitCode)
 	configDir := config.GetConfigPath()
 	commandArgs := sysmock.StripLeadingGlobalFlags(args)
@@ -140,6 +141,7 @@ func Main(args []string) {
 		CommandArgs:  commandArgs,
 		CommandToken: commandToken,
 		AuthMode:     string(profile.Mode),
+		AIMode:       startupAIMode(args),
 	})
 
 	if os.Getenv("GENERATE_METADATA") == "YES" {
@@ -511,8 +513,9 @@ func newRootHelpInput(root *cli.Command, catalog *canonicalmeta.ProductsIndex) (
 	return openapi.BuildRootHelpInput(root, catalog, rootCommandHelpSpecs, rootFlagHelpSpecs)
 }
 
-// Resolve AI mode without loading the broken credential configuration or
-// executing a command. Respect flag values and the positional terminator.
+// Resolve AI mode from the original invocation before command routing strips
+// global flags. Also used for startup errors without loading credential config.
+// Respect flag values and the positional terminator.
 func startupAIMode(args []string) bool {
 	flags := cli.NewFlagSet()
 	config.AddFlags(flags)
@@ -524,7 +527,7 @@ func startupAIMode(args []string) bool {
 		if arg == "--" {
 			break
 		}
-		name, value, inline := strings.Cut(arg, "=")
+		name, value, inline := cli.SplitStringWithPrefix(arg, "=:")
 		if !strings.HasPrefix(name, "-") {
 			continue
 		}
@@ -535,7 +538,7 @@ func startupAIMode(args []string) bool {
 		if flag == nil {
 			continue
 		}
-		if flag.AssignedMode != cli.AssignedNone && !inline && i+1 < len(args) {
+		if flag.AssignedMode != cli.AssignedNone && (!inline || value == "") && i+1 < len(args) {
 			i++
 			value = args[i]
 		}

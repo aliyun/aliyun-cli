@@ -29,6 +29,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/headers"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
@@ -718,6 +719,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// local command-tree error and must not be masked by an unrelated missing
 	// credential/region error. Installed and runtime plugins have already had
 	// the opportunity to own the invocation above.
+	telemetry.SetOpenAPILegacyRoute()
 	if err := c.validateCanonicalAPICommand(args, ctx); err != nil {
 		return err
 	}

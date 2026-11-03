@@ -41,6 +41,8 @@ type Scope struct {
 	PluginVer    string
 	PluginType   string
 	CommandToken string
+	// CommandType is set when the executor has selected a concrete route.
+	CommandType string
 }
 
 var cliExtensions = map[string]struct{}{}
@@ -62,9 +64,8 @@ func isCLIExtension(command string) bool {
 	return ok
 }
 
-// DetectCommandType classifies the command implementation without collecting
-// argument values. Installed plugin metadata and the registered root command
-// set are authoritative; OpenAPI command casing selects the remaining route.
+// DetectCommandType infers the candidate command implementation before routing.
+// An executor-selected Scope.CommandType takes precedence in completed events.
 func DetectCommandType(args []string) string {
 	parts := positionalParts(args)
 	if len(parts) == 0 {
@@ -83,6 +84,9 @@ func DetectCommandType(args []string) string {
 // detectCommandTypeForScope reuses plugin metadata resolved while selecting
 // the telemetry pipeline, so event construction does not read the manifest again.
 func detectCommandTypeForScope(args []string, scope Scope) string {
+	if scope.CommandType != "" {
+		return scope.CommandType
+	}
 	return classifyCommandType(positionalParts(args), scope.PluginType)
 }
 

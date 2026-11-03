@@ -16,6 +16,7 @@ The following table lists the event fields and their meanings. Some fields are p
 | --- | --- | --- |
 | Event information | `schemaVersion`, `eventId`, `eventType`, `timestamp` | Data format version, a randomly generated ID for each event, event category, and command completion time. |
 | Client information | `clientName`, `clientVersion` | Client name and CLI version. |
+| OpenAPI runtime | `openapiRuntimeVersion` | Version of `aliyun-openapi-runtime`, present only when this runtime handles the command. |
 | Installation identifier | `instanceId` | An installation identifier generated randomly on your machine. It is not derived from an account or hardware information and can be reset with `purge`. |
 | Command information | `commandType`, `command`, `parameterNames` | Command implementation type, command and subcommand names, and named parameter names. Business parameter values are not recorded. |
 | Execution results | `status`, `durationMs`, `localErrorCode`, `apiErrorCode`, `httpStatusCode` | Execution outcome, command execution duration, structured error codes, and HTTP status codes. Error message text is not recorded. |
@@ -99,8 +100,25 @@ Telemetry uses the following local files. `~` denotes the user's home directory;
 | `~/.aliyun/telemetry.json` | Stores whether telemetry is enabled. |
 | `~/.aliyun/telemetry-instance-id` | Stores the randomly generated installation identifier. |
 | `~/.aliyun/telemetry-cache/` | Stores temporary event files for the background uploader. |
+| `~/.aliyun/logs/telemetry.log` | Stores local telemetry diagnostics. |
 
 Temporary event files pass data between local processes; they are not complete command logs.
+
+`telemetry.log` automatically records collection, event persistence, and upload status with fixed failure reasons in JSON Lines format. Use timestamps, process IDs, and `eventId` to correlate stages and identify events that were not generated, could not be saved, or failed to upload. Upload records also include HTTP status codes and duration where applicable. These logs stay local and contain no command lines, business parameter values, credentials, business file paths, request or response bodies, or raw error messages.
+
+Logs rotate at 10 MiB per file, retaining up to 5 backups (`telemetry.log.1` through `telemetry.log.5`). Local diagnostics can still record skip reasons when telemetry is disabled. Diagnostic logging failures do not affect command execution.
+
+Local diagnostic logging is enabled by default. Use this independent environment variable to stop writing logs without affecting telemetry event collection, persistence, or upload:
+
+```sh
+export ALIBABA_CLOUD_CLI_TELEMETRY_LOG_DISABLE=1
+```
+
+```powershell
+$env:ALIBABA_CLOUD_CLI_TELEMETRY_LOG_DISABLE = "1"
+```
+
+Remove the variable to resume local diagnostic logging.
 
 To clear the local cache and reset the installation identifier:
 
@@ -108,9 +126,9 @@ To clear the local cache and reset the installation identifier:
 aliyun configure telemetry purge
 ```
 
-`purge` preserves your telemetry setting. If telemetry remains enabled, a later eligible command generates a new random identifier.
+`purge` preserves your telemetry setting and local diagnostic logs. If telemetry remains enabled, a later eligible command generates a new random identifier.
 
-To disable telemetry and clear existing local data, run:
+To disable telemetry and clear cached events, run:
 
 ```sh
 aliyun configure telemetry disable

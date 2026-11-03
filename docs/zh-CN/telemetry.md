@@ -16,6 +16,7 @@
 | --- | --- | --- |
 | 事件信息 | `schemaVersion`、`eventId`、`eventType`、`timestamp` | 数据格式版本、每条事件随机生成的 ID、事件类别和命令完成时间。 |
 | 客户端信息 | `clientName`、`clientVersion` | 客户端名称和 CLI 版本。 |
+| OpenAPI 运行时 | `openapiRuntimeVersion` | `aliyun-openapi-runtime` 的版本，仅在使用该运行时处理命令时记录。 |
 | 安装实例标识 | `instanceId` | 在本机随机生成的安装实例标识，不基于账号或硬件信息生成；可通过 `purge` 重置。 |
 | 命令信息 | `commandType`、`command`、`parameterNames` | 命令实现类型、命令及子命令名称、命名参数的名称；不记录业务参数值。 |
 | 执行结果 | `status`、`durationMs`、`localErrorCode`、`apiErrorCode`、`httpStatusCode` | 执行结果、命令执行耗时、结构化错误码和 HTTP 状态码；不记录错误文案。 |
@@ -99,8 +100,25 @@ aliyun configure telemetry enable
 | `~/.aliyun/telemetry.json` | 保存是否开启遥测的设置。 |
 | `~/.aliyun/telemetry-instance-id` | 保存随机生成的安装实例标识。 |
 | `~/.aliyun/telemetry-cache/` | 保存交给后台上传进程处理的临时事件文件。 |
+| `~/.aliyun/logs/telemetry.log` | 保存本地遥测诊断日志。 |
 
 临时事件文件用于本地进程之间交接数据，不是完整命令日志。
+
+`telemetry.log` 自动记录采集、事件落盘和上传的状态及固定失败原因，采用 JSON Lines 格式。可通过时间、进程 ID 和 `eventId` 关联各阶段，定位事件未生成、落盘失败或上传失败等问题；上传记录还包含适用时的 HTTP 状态码和耗时。日志仅保存在本地，不包含命令行、业务参数值、凭据、业务文件路径、请求或响应正文，以及原始错误文案。
+
+单个日志达到 10 MiB 时轮转，最多保留 5 个备份（`telemetry.log.1` 至 `telemetry.log.5`）。关闭遥测时，本地诊断仍可记录跳过原因；诊断日志写入失败不影响命令执行。
+
+本地诊断日志默认开启，可通过独立环境变量停止写入，不影响遥测事件的采集、落盘和上传：
+
+```sh
+export ALIBABA_CLOUD_CLI_TELEMETRY_LOG_DISABLE=1
+```
+
+```powershell
+$env:ALIBABA_CLOUD_CLI_TELEMETRY_LOG_DISABLE = "1"
+```
+
+移除该变量即可恢复本地诊断日志写入。
 
 清理本地缓存并重置安装实例标识：
 
@@ -108,9 +126,9 @@ aliyun configure telemetry enable
 aliyun configure telemetry purge
 ```
 
-`purge` 保留当前遥测开关设置。如果遥测仍开启，后续符合采集条件的命令会生成新的随机标识。
+`purge` 保留当前遥测开关设置和本地诊断日志。如果遥测仍开启，后续符合采集条件的命令会生成新的随机标识。
 
-如果希望关闭遥测并清理已有本地数据，依次执行：
+如果希望关闭遥测并清理事件缓存，依次执行：
 
 ```sh
 aliyun configure telemetry disable

@@ -53,56 +53,128 @@ func telemetryUploadEndpoint() string {
 }
 
 func UploadFile(configDir, pipeline, cacheFile string) error {
+	return uploadFile(configDir, pipeline, cacheFile, "")
+}
+
+func uploadFile(configDir, pipeline, cacheFile, eventID string) error {
+	record := diagnosticRecord{EventID: eventID, Pipeline: pipeline}
+	if pipeline != PipelinePublic && pipeline != PipelineInner {
+		record.Stage, record.Status, record.Reason = "upload", "skipped", "invalid_pipeline"
+		writeDiagnostic(configDir, record)
+		return nil
+	}
 	cacheDir := GetCacheDir(configDir, pipeline)
 	absCacheDir, err := filepath.Abs(cacheDir)
 	if err != nil {
+		record.Stage, record.Status, record.Reason = "cache_read", "skipped", "invalid_cache_path"
+		record.ErrorKind = diagnosticErrorKind(err)
+		writeDiagnostic(configDir, record)
 		return nil
 	}
 	absCacheFile, err := filepath.Abs(cacheFile)
 	if err != nil ||
 		filepath.Dir(absCacheFile) != absCacheDir ||
 		!strings.HasSuffix(absCacheFile, ".ndjson") {
+		record.Stage, record.Status, record.Reason = "cache_read", "skipped", "invalid_cache_path"
+		record.ErrorKind = diagnosticErrorKind(err)
+		writeDiagnostic(configDir, record)
 		return nil
 	}
+	record.Stage, record.Status = "cache_read", "started"
+	writeDiagnostic(configDir, record)
 	lines, readErr := readNDJSON(absCacheFile)
-	_ = os.Remove(absCacheFile)
-	if readErr != nil || len(lines) == 0 {
+	record.Status = "succeeded"
+	if readErr != nil {
+		record.Status, record.ErrorKind = "failed", diagnosticErrorKind(readErr)
+	}
+	writeDiagnostic(configDir, record)
+	removeUploadCache(configDir, pipeline, absCacheFile, eventID)
+	if readErr != nil {
+		return nil
+	}
+	if len(lines) == 0 {
+		record.Stage, record.Status, record.Reason = "upload", "skipped", "cache_empty"
+		writeDiagnostic(configDir, record)
 		return nil
 	}
 
 	var event Event
 	if err := json.Unmarshal(lines[0], &event); err != nil {
+		record.Stage, record.Status, record.Reason = "upload", "skipped", "invalid_event"
+		record.ErrorKind = diagnosticErrorKind(err)
+		writeDiagnostic(configDir, record)
 		return nil
 	}
+	record.EventID = event.EventID
 	if event.Pipeline != pipeline {
+		record.Stage, record.Status, record.Reason = "upload", "skipped", "pipeline_mismatch"
+		writeDiagnostic(configDir, record)
 		return nil
 	}
-	postTelemetryBatch([]uploadEvent{newUploadEvent(event)})
+	record.Stage, record.Status = "upload", "started"
+	writeDiagnostic(configDir, record)
+	result := postTelemetryBatchResult([]uploadEvent{newUploadEvent(event)}, nil)
+	record.Status, record.Reason, record.ErrorKind = "failed", result.reason, result.errorKind
+	if result.success {
+		record.Status = "succeeded"
+	}
+	record.HTTPStatus, record.DurationMs = result.httpStatus, result.durationMs
+	writeDiagnostic(configDir, record)
 	return nil
 }
 
+func removeUploadCache(configDir, pipeline, cacheFile, eventID string) {
+	record := diagnosticRecord{Stage: "cache_remove", Status: "succeeded", EventID: eventID, Pipeline: pipeline}
+	if err := os.Remove(cacheFile); err != nil {
+		record.Status, record.ErrorKind = "failed", diagnosticErrorKind(err)
+	}
+	writeDiagnostic(configDir, record)
+}
+
+type telemetryUploadResult struct {
+	success    bool
+	httpStatus int
+	reason     string
+	errorKind  string
+	durationMs int64
+}
+
 func postTelemetryBatch(batch []uploadEvent) bool {
+	return postTelemetryBatchResult(batch, nil).success
+}
+
+func postTelemetryBatchResult(batch []uploadEvent, client *http.Client) (result telemetryUploadResult) {
+	started := time.Now()
+	defer func() { result.durationMs = time.Since(started).Milliseconds() }()
 	body, err := json.Marshal(uploadBatch{Events: batch})
 	if err != nil {
-		return false
+		result.reason, result.errorKind = "marshal_failed", diagnosticErrorKind(err)
+		return result
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
+	}
 	req, err := http.NewRequest(http.MethodPost, telemetryUploadEndpoint(), bytes.NewReader(body))
 	if err != nil {
-		return false
+		result.reason, result.errorKind = "request_invalid", diagnosticErrorKind(err)
+		return result
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return false
+		result.errorKind = diagnosticErrorKind(err)
+		return result
 	}
 	defer resp.Body.Close()
+	result.httpStatus = resp.StatusCode
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return false
+		result.reason = "http_error"
+		return result
 	}
-	return true
+	result.success = true
+	return result
 }
 
 func newUploadEvent(event Event) uploadEvent {
@@ -118,6 +190,7 @@ func newUploadEvent(event Event) uploadEvent {
 		attributes["pipeline"] = PipelineInner
 	}
 	addAttribute(attributes, "commandType", event.CommandType)
+	addAttribute(attributes, "openapiRuntimeVersion", event.OpenAPIRuntimeVersion)
 	if len(event.Params) > 0 {
 		attributes["parameterNames"] = event.Params
 	}
@@ -206,10 +279,14 @@ func readNDJSON(path string) ([]json.RawMessage, error) {
 	return out, sc.Err()
 }
 
-func spawnUpload(configDir, pipeline, cacheFile string) {
+func spawnUpload(configDir, pipeline, cacheFile, eventID string) {
+	record := diagnosticRecord{Stage: "upload_spawn", Status: "started", EventID: eventID, Pipeline: pipeline}
+	writeDiagnostic(configDir, record)
 	exe, err := os.Executable()
 	if err != nil {
-		_ = os.Remove(cacheFile)
+		record.Status, record.Reason, record.ErrorKind = "failed", "executable_unavailable", diagnosticErrorKind(err)
+		writeDiagnostic(configDir, record)
+		removeUploadCache(configDir, pipeline, cacheFile, eventID)
 		return
 	}
 	cmd := exec.Command(
@@ -221,11 +298,18 @@ func spawnUpload(configDir, pipeline, cacheFile string) {
 		configDir,
 		"--cache-file",
 		cacheFile,
+		"--event-id",
+		eventID,
 	)
 	detachProcess(cmd)
 	if err := cmd.Start(); err != nil {
-		_ = os.Remove(cacheFile)
+		record.Status, record.Reason, record.ErrorKind = "failed", "process_start_failed", diagnosticErrorKind(err)
+		writeDiagnostic(configDir, record)
+		removeUploadCache(configDir, pipeline, cacheFile, eventID)
+		return
 	}
+	record.Status = "succeeded"
+	writeDiagnostic(configDir, record)
 }
 
 // RunUploadCommand handles the hidden __telemetry-upload entrypoint.
@@ -233,6 +317,7 @@ func RunUploadCommand(args []string) int {
 	configDir := ""
 	cacheFile := ""
 	pipeline := ""
+	eventID := ""
 	for i := 0; i < len(args); i++ {
 		switch {
 		case strings.HasPrefix(args[i], "--config-dir="):
@@ -256,13 +341,23 @@ func RunUploadCommand(args []string) int {
 				cacheFile = args[i+1]
 				i++
 			}
+		case strings.HasPrefix(args[i], "--event-id="):
+			eventID = strings.TrimPrefix(args[i], "--event-id=")
+		case args[i] == "--event-id":
+			if i+1 < len(args) {
+				eventID = args[i+1]
+				i++
+			}
 		}
 	}
-	if (pipeline != PipelineInner && pipeline != PipelinePublic) ||
-		configDir == "" ||
-		cacheFile == "" {
+	if configDir == "" || pipeline == "" || cacheFile == "" {
+		writeDiagnostic(configDir, diagnosticRecord{Stage: "upload", Status: "skipped", Reason: "missing_arguments", EventID: eventID, Pipeline: pipeline})
 		return 0
 	}
-	_ = UploadFile(configDir, pipeline, cacheFile)
+	if pipeline != PipelineInner && pipeline != PipelinePublic {
+		writeDiagnostic(configDir, diagnosticRecord{Stage: "upload", Status: "skipped", Reason: "invalid_pipeline", EventID: eventID})
+		return 0
+	}
+	_ = uploadFile(configDir, pipeline, cacheFile, eventID)
 	return 0
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 )
 
 var (
@@ -476,6 +477,9 @@ func (c *Commando) resolveParsedHelpTarget(ctx *cli.Context, args []string) (Hel
 }
 
 func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiMode bool) error {
+	if target.Product != "" && target.CommandStyle == CommandStyleCamel {
+		telemetry.SetOpenAPILegacyRoute()
+	}
 	if c.library == nil || c.library.helpRepo == nil {
 		return fmt.Errorf("canonical Help is unavailable: metadata repository is unavailable")
 	}

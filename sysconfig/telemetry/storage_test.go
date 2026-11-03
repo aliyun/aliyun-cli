@@ -180,7 +180,10 @@ func TestTelemetryManagementRoutesDoNotStartCollection(t *testing.T) {
 			End(nil)
 			entries, err := os.ReadDir(dir)
 			require.NoError(t, err)
-			require.Empty(t, entries)
+			require.Len(t, entries, 1, "management may only write local diagnostics")
+			require.Equal(t, "logs", entries[0].Name())
+			require.NoFileExists(t, GetInstanceIDFilePath(dir))
+			require.NoDirExists(t, filepath.Join(dir, CacheDirName))
 		})
 	}
 	for _, args := range [][]string{

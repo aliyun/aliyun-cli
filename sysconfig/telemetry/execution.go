@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
-	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
 )
 
@@ -28,17 +27,21 @@ type BeginInput struct {
 	CommandArgs  []string
 	CommandToken string
 	AuthMode     string
+	// AIMode is the effective per-command state resolved by the host, including
+	// flag, environment, agent detection, and saved configuration overrides.
+	AIMode bool
 }
 
 type activeCommandExecution struct {
-	configDir      string
-	scope          Scope
-	rootArgs       []string
-	start          time.Time
-	aiMode         bool
-	authMode       string
-	authModeSource string
-	pluginAction   *PluginManagementEvent
+	configDir             string
+	scope                 Scope
+	rootArgs              []string
+	start                 time.Time
+	aiMode                bool
+	authMode              string
+	authModeSource        string
+	pluginAction          *PluginManagementEvent
+	openAPIRuntimeVersion string
 }
 
 var activeExecution *activeCommandExecution
@@ -58,8 +61,16 @@ func resetExecutionState() {
 // Defer only within automatic telemetry entry points, never around command
 // execution or explicit telemetry management. A recoverable panic discards this
 // invocation's collection silently, without retrying it from later callbacks.
-func recoverCollectionPanic() {
+func recoverCollectionPanic(configDirs ...string) {
 	if recover() != nil {
+		configDir := ""
+		if activeExecution != nil {
+			configDir = activeExecution.configDir
+		}
+		if len(configDirs) > 0 {
+			configDir = configDirs[0]
+		}
+		writeDiagnostic(configDir, diagnosticRecord{Stage: "collection", Status: "failed", Reason: "panic"})
 		activeExecution = nil
 		executionEnded = true
 	}
@@ -98,6 +109,28 @@ func SetEffectiveAuthenticationMode(mode string) {
 		return
 	}
 	activeExecution.authMode = safeAuthenticationMode(mode)
+}
+
+// SetOpenAPIRuntimeVersion records the version reported by the runtime host
+// after it has selected the in-process OpenAPI runtime for this invocation.
+func SetOpenAPIRuntimeVersion(version string) {
+	defer recoverCollectionPanic()
+	if activeExecution == nil || executionEnded {
+		return
+	}
+	activeExecution.openAPIRuntimeVersion = version
+}
+
+// SetOpenAPILegacyRoute replaces a pre-routing plugin candidate when the host
+// selects its built-in OpenAPI path. Installed plugins do not own this call.
+func SetOpenAPILegacyRoute() {
+	defer recoverCollectionPanic()
+	if activeExecution == nil || executionEnded {
+		return
+	}
+	activeExecution.scope = scopeFromLocalPlugin(activeExecution.scope.CommandToken, nil)
+	activeExecution.scope.CommandType = CommandTypeOpenAPILegacy
+	activeExecution.openAPIRuntimeVersion = ""
 }
 
 // SetAuthenticationMode records the mode selected by an active configure
@@ -164,25 +197,34 @@ func commandExecutionDurationMs(execution *activeCommandExecution) int64 {
 }
 
 func Begin(in BeginInput) {
-	defer recoverCollectionPanic()
+	defer recoverCollectionPanic(in.ConfigDir)
 	resetExecutionState()
+	writeDiagnostic(in.ConfigDir, diagnosticRecord{Stage: "collection", Status: "started"})
 	// Managing telemetry must not create an ID or emit a new event, especially
 	// immediately after disable or purge.
 	if isTelemetryManagementCommand(in.CommandArgs) {
+		writeDiagnostic(in.ConfigDir, diagnosticRecord{Stage: "collection", Status: "skipped", Reason: "management_command"})
 		return
 	}
 	cfg, err := Load(in.ConfigDir)
 	if err != nil {
+		writeDiagnostic(in.ConfigDir, diagnosticRecord{
+			Stage: "collection", Status: "failed", Reason: "invalid_config", ErrorKind: diagnosticErrorKind(err),
+		})
 		return
 	}
 	ok, scope := SelectScope(in.CommandToken, cfg)
 	if !ok {
+		reason := "scope_inactive"
+		if Disabled(cfg) {
+			reason = "disabled"
+		}
+		writeDiagnostic(in.ConfigDir, diagnosticRecord{Stage: "collection", Status: "skipped", Reason: reason})
 		return
 	}
-	aiCfg, _ := aimode.Load(in.ConfigDir)
-	aiOn := aiCfg != nil && aiCfg.Enabled
-	beginCommandExecution(in.ConfigDir, scope, in.CommandArgs, aiOn)
+	beginCommandExecution(in.ConfigDir, scope, in.CommandArgs, in.AIMode)
 	SetEffectiveAuthenticationMode(in.AuthMode)
+	writeDiagnostic(in.ConfigDir, diagnosticRecord{Stage: "collection", Status: "succeeded", Pipeline: scope.Pipeline})
 }
 
 func isTelemetryManagementCommand(args []string) bool {
@@ -216,11 +258,21 @@ func flush(exitCode *int, err error) {
 	}
 	// A command may have disabled telemetry while this invocation was running.
 	cfg, configErr := Load(execution.configDir)
-	if configErr != nil || Disabled(cfg) {
+	if configErr != nil {
+		writeDiagnostic(execution.configDir, diagnosticRecord{
+			Stage: "collection", Status: "failed", Reason: "invalid_config", ErrorKind: diagnosticErrorKind(configErr),
+		})
+		return
+	}
+	if Disabled(cfg) {
+		writeDiagnostic(execution.configDir, diagnosticRecord{Stage: "collection", Status: "skipped", Reason: "disabled"})
 		return
 	}
 	instanceID, idErr := EnsureInstanceID(execution.configDir)
 	if idErr != nil {
+		writeDiagnostic(execution.configDir, diagnosticRecord{
+			Stage: "collection", Status: "failed", Reason: "instance_id_failed", ErrorKind: diagnosticErrorKind(idErr),
+		})
 		return
 	}
 	if classifyResult(err, exitCode) == "Success" {
@@ -229,26 +281,40 @@ func flush(exitCode *int, err error) {
 		RemoveUnvalidatedPluginNames(execution.pluginAction)
 	}
 	ev, buildErr := BuildEvent(BuildInput{
-		Scope:          execution.scope,
-		RootArgs:       execution.rootArgs,
-		InstanceID:     instanceID,
-		DurationMs:     commandExecutionDurationMs(execution),
-		Err:            err,
-		ExitCode:       exitCode,
-		AIMode:         execution.aiMode,
-		AuthMode:       execution.authMode,
-		AuthModeSource: execution.authModeSource,
-		PluginAction:   execution.pluginAction,
+		Scope:                 execution.scope,
+		RootArgs:              execution.rootArgs,
+		InstanceID:            instanceID,
+		DurationMs:            commandExecutionDurationMs(execution),
+		Err:                   err,
+		ExitCode:              exitCode,
+		AIMode:                execution.aiMode,
+		AuthMode:              execution.authMode,
+		AuthModeSource:        execution.authModeSource,
+		PluginAction:          execution.pluginAction,
+		OpenAPIRuntimeVersion: execution.openAPIRuntimeVersion,
 	})
 	if buildErr != nil {
+		writeDiagnostic(execution.configDir, diagnosticRecord{
+			Stage: "event_build", Status: "failed", ErrorKind: diagnosticErrorKind(buildErr), Pipeline: execution.scope.Pipeline,
+		})
 		return
 	}
+	writeDiagnostic(execution.configDir, diagnosticRecord{
+		Stage: "event_build", Status: "succeeded", EventID: ev.EventID, Pipeline: execution.scope.Pipeline,
+	})
 	cacheDir := GetCacheDir(execution.configDir, execution.scope.Pipeline)
 	cacheFile, writeErr := WriteEvent(cacheDir, ev)
 	if writeErr != nil {
+		writeDiagnostic(execution.configDir, diagnosticRecord{
+			Stage: "cache_write", Status: "failed", ErrorKind: diagnosticErrorKind(writeErr),
+			EventID: ev.EventID, Pipeline: execution.scope.Pipeline,
+		})
 		return
 	}
-	spawnUpload(execution.configDir, execution.scope.Pipeline, cacheFile)
+	writeDiagnostic(execution.configDir, diagnosticRecord{
+		Stage: "cache_write", Status: "succeeded", EventID: ev.EventID, Pipeline: execution.scope.Pipeline,
+	})
+	spawnUpload(execution.configDir, execution.scope.Pipeline, cacheFile, ev.EventID)
 }
 
 // HookEnd is suitable for the root command's AfterExecute callback.

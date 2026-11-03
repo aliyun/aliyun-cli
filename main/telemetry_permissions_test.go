@@ -24,6 +24,9 @@ const telemetryPermissionChildEnv = "ALIYUN_TEST_TELEMETRY_PERMISSION_CHILD"
 // Run the real CLI entrypoint in child processes, retaining os.Exit behavior
 // without adding a production hook. Other package tests run normally.
 func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == "__telemetry-extension-test" {
+		runTelemetryExtensionProcess()
+	}
 	if len(os.Args) > 1 && os.Args[1] == "__telemetry-upload" {
 		// Any test that starts an upload child must neither send telemetry nor
 		// recursively run the test suite, even without the helper marker.
