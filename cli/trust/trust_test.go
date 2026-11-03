@@ -632,7 +632,7 @@ func TestExpiredPersistedRootDoesNotBlockRecovery(t *testing.T) {
 	f.now = f.now.Add(2 * time.Minute)
 	f.publish([]byte(`{"plugins":[]}`), 2, 2, f.plugin)
 	_, err = f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
-	assert.ErrorContains(t, err, "expired")
+	require.NoError(t, err)
 
 	recovery := newTestSigner(t, "recovery", "recovery")
 	replacementSigner := newTestSigner(t, "replacement")

@@ -198,9 +198,6 @@ func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*
 	if err != nil {
 		return nil, err
 	}
-	if !now.Before(root.ExpiresAt) {
-		return nil, fmt.Errorf("trusted root version %d is expired", root.Version)
-	}
 	state.RootVersion = root.Version
 
 	keysCache := filepath.Join(cacheDir, "artifact-keys.json")
@@ -532,8 +529,8 @@ func (c *Client) bootstrapRoot(now time.Time) (Root, error) {
 	if _, _, err := VerifyEnvelope(mustJSON(envelope), root.Keys, role, "", now, nil); err != nil {
 		return root, fmt.Errorf("bootstrap root self-signature: %w", err)
 	}
-	// An expired builtin root still anchors the update and recovery chains.
-	// FetchArtifact rejects the final root if it is expired.
+	// Root expiry is not operational. The builtin root stays valid until a
+	// signed Root rotation or Recovery patch replaces it.
 	if root.Type != "root" || root.SchemaVersion != SchemaVersion || root.Version == 0 {
 		return root, fmt.Errorf("invalid bootstrap root")
 	}
@@ -541,14 +538,7 @@ func (c *Client) bootstrapRoot(now time.Time) (Root, error) {
 }
 
 func (c *Client) parseTrustedRoot(data []byte, now time.Time, deny map[string]bool) (Root, error) {
-	root, err := verifySelfSignedRoot(data, now, deny)
-	if err != nil {
-		return root, err
-	}
-	if !now.Before(root.ExpiresAt) {
-		return root, fmt.Errorf("invalid or expired trusted root")
-	}
-	return root, nil
+	return verifySelfSignedRoot(data, now, deny)
 }
 
 func verifySelfSignedRoot(data []byte, now time.Time, deny map[string]bool) (Root, error) {

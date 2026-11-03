@@ -95,8 +95,9 @@ func TestBootstrapAndSelfSignedRootErrors(t *testing.T) {
 		Keys:  []Key{signer.key},
 		Roles: map[string]Role{"root": {KeyIDs: []string{"root"}, Threshold: 1}},
 	}
-	_, err = client.parseTrustedRoot(signedJSON(t, expired, signer), now, nil)
-	assert.ErrorContains(t, err, "expired")
+	got, err := client.parseTrustedRoot(signedJSON(t, expired, signer), now, nil)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(1), got.Version)
 
 	_, err = VerifyRootUpdate(signedJSON(t, expired, signer), expired, now, nil)
 	assert.Error(t, err)
@@ -177,7 +178,7 @@ func TestFetchStatusAndRecoveryErrorPaths(t *testing.T) {
 	assert.ErrorContains(t, err, "recovery trust anchor is not configured")
 }
 
-func TestFetchArtifactRejectsMissingBootstrapAndExpiredFinalRoot(t *testing.T) {
+func TestFetchArtifactRejectsMissingBootstrapAndAcceptsExpiredRoot(t *testing.T) {
 	f := newTrustFixture(t)
 	empty := New(Config{CacheDir: t.TempDir(), SourceBase: f.client.cfg.SourceBase})
 	_, err := empty.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
@@ -185,8 +186,9 @@ func TestFetchArtifactRejectsMissingBootstrapAndExpiredFinalRoot(t *testing.T) {
 
 	f.root.ExpiresAt = f.now.Add(-time.Minute)
 	f.client.cfg.BootstrapRoot = signedJSON(t, f.root, f.rootSigner)
-	_, err = f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
-	assert.ErrorContains(t, err, "is expired")
+	artifact, err := f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"plugins":[]}`, string(artifact.Bytes))
 }
 
 func TestDiscoveryURLRejectsInvalidSourceAndQuery(t *testing.T) {
@@ -651,8 +653,9 @@ func TestVerifyRootUpdateAndTransitionErrors(t *testing.T) {
 		Keys:  []Key{nextSigner.key},
 		Roles: map[string]Role{"root": {KeyIDs: []string{"root-next"}, Threshold: 1}},
 	}
-	_, err = VerifyRootUpdate(signedJSON(t, expiredNext, oldSigner, nextSigner), old, now, nil)
-	assert.ErrorContains(t, err, "invalid or non-contiguous root update")
+	got, err := VerifyRootUpdate(signedJSON(t, expiredNext, oldSigner, nextSigner), old, now, nil)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(2), got.Version)
 }
 
 func TestVerifyEnvelopeSkipsUnknownAlgorithmAndTrailingJSON(t *testing.T) {
