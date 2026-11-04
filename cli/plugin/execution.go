@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 // IsPluginInstalled checks if a plugin is installed locally.
@@ -238,7 +239,7 @@ func runPluginCommand(binPath string, args []string, stdout io.Writer, stderr io
 		return fmt.Errorf("binary path is empty")
 	}
 
-	cmd := exec.Command(binPath, args...)
+	cmd := exec.Command(binPath, cloudendpoint.WithSuffixArgs(args)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr

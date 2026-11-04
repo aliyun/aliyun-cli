@@ -21,6 +21,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 type Context struct {
@@ -49,7 +50,7 @@ var (
 	getLatestOssUtilVersionFunc = GetLatestOssUtilVersion
 	downloadAndUnzipFunc        = DownloadAndUnzip
 	execCommandFunc             = exec.Command
-	httpGetFunc                 = http.Get
+	httpGetFunc                 = cloudendpoint.HTTPGet
 	timeNowFunc                 = time.Now
 	// runtime hooks for test
 	runtimeGOOSFunc   = func() string { return runtime.GOOS }
@@ -166,7 +167,7 @@ func (c *Context) Run(args []string) error {
 		return err
 	}
 	// run ossutil with newArgs
-	cmd := execCommandFunc(c.execFilePath, newArgs...)
+	cmd := execCommandFunc(c.execFilePath, cloudendpoint.WithSuffixArgs(newArgs)...)
 	// set env
 	envs := os.Environ()
 	for k, v := range c.envMap {
@@ -296,7 +297,7 @@ func (c *Context) Install() error {
 
 func DownloadAndUnzip(url string, destFile string, exeFilePath string, extractCenterDir string) error {
 	// download file
-	resp, err := httpGetFunc(url)
+	resp, err := httpGetFunc(cloudendpoint.WithSuffix(url))
 	if err != nil {
 		return fmt.Errorf("failed to download %s: %v", url, err)
 	}
@@ -471,6 +472,9 @@ func EncodeMapBase64(m map[string]any) (string, error) {
 
 // PrepareEnv 准备用户身份的环境变量
 func (c *Context) PrepareEnv() error {
+	if err := cloudendpoint.Validate(); err != nil {
+		return err
+	}
 	// 获取原始的所有的 env
 	envs := os.Environ()
 	envMap := make(map[string]any)
@@ -540,6 +544,9 @@ func (c *Context) PrepareEnv() error {
 		envMap["mode"] = "StsToken"
 	}
 	// common part
+	if profile.Endpoint != "" {
+		envMap["endpoint"] = cloudendpoint.WithSuffix(profile.Endpoint)
+	}
 	if profile.RegionId != "" {
 		envMap["region_id"] = profile.RegionId
 	}
@@ -680,7 +687,7 @@ func GetLatestOssUtilVersion() (string, error) {
 	}
 
 	// 创建HTTP请求
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := cloudendpoint.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request for %s: %v", url, err)
 	}

@@ -26,6 +26,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 // Routes an OpenAPI call to CloudControl GetApiPrice (POST /api/v1/price/quote)
@@ -492,9 +493,9 @@ func buildPricingContext(ctx *cli.Context) (map[string]interface{}, error) {
 
 func estimateCostEndpoint() string {
 	if v := os.Getenv(estimateCostEndpointEnv); v != "" {
-		return v
+		return endpoint.WithSuffix(v)
 	}
-	return defaultEstimateCostHost
+	return endpoint.WithSuffix(defaultEstimateCostHost)
 }
 
 func setEstimateCostEndpoint(request *requests.CommonRequest) {

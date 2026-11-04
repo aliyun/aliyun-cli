@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 // Client sts client
@@ -116,6 +118,9 @@ func (c *Client) AssumeRole(tokenTimeout uint, stsEndPoint string) (*Response, e
 
 // Private function
 func (c *Client) generateSignedURL(expiredTime uint) (string, error) {
+	if err := cloudendpoint.Validate(); err != nil {
+		return "", err
+	}
 	randId := strings.ToUpper(randStr(24))
 
 	queryStr := "SignatureVersion=" + StsSignVersion
@@ -149,7 +154,7 @@ func (c *Client) generateSignedURL(expiredTime uint) (string, error) {
 	signature := base64.StdEncoding.EncodeToString(hashSign.Sum(nil))
 
 	// Build url
-	assumeURL := StsHost + "?" + queryStr + "&Signature=" + url.QueryEscape(signature)
+	assumeURL := cloudendpoint.WithSuffix(StsHost) + "?" + queryStr + "&Signature=" + url.QueryEscape(signature)
 
 	return assumeURL, nil
 }
@@ -160,7 +165,7 @@ func (c *Client) sendRequest(url string) ([]byte, int, error) {
 	}
 	client := &http.Client{Transport: tr}
 
-	resp, err := client.Get(url)
+	resp, err := cloudendpoint.Get(client, url)
 	if err != nil {
 		return nil, -1, err
 	}

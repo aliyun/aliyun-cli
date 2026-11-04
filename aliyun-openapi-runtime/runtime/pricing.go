@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
+	"github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 )
@@ -175,9 +176,9 @@ func priceScalarString(v any) (string, bool) {
 
 func pricingEndpoint() string {
 	if v := os.Getenv(pricingEndpointEnv); v != "" {
-		return v
+		return endpoint.WithSuffix(v)
 	}
-	return defaultPricingEndpoint
+	return endpoint.WithSuffix(defaultPricingEndpoint)
 }
 
 func prettyJSON(raw []byte) string {
