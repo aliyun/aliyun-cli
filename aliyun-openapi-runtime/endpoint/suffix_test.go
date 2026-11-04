@@ -18,6 +18,8 @@ func TestWithSuffix(t *testing.T) {
 		{"127.0.0.1:8080", "127.0.0.1:8080"},
 		{"http://[::1]:8080/path", "http://[::1]:8080/path"},
 		{"https://%bad", "https://%bad"},
+		{"https://%zz", "https://%zz"},
+		{"https://ecs.aliyuncs.com:invalid/path", "https://ecs.aliyuncs.com:invalid/path"},
 		{"", ""},
 	} {
 		t.Run(tc.in, func(t *testing.T) {

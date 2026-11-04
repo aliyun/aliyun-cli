@@ -20,6 +20,11 @@ import (
 
 type suffixTransport func(*http.Request) (*http.Response, error)
 
+func TestOSSUtilRejectsInvalidEndpointSuffixBeforeLoadingProfile(t *testing.T) {
+	t.Setenv(endpoint.EnvSuffix, "invalid.example")
+	require.ErrorContains(t, NewContext(nil).PrepareEnv(), endpoint.EnvSuffix)
+}
+
 func (f suffixTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestOSSUtilVersionAndDownloadEndpointSuffix(t *testing.T) {

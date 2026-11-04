@@ -33,4 +33,6 @@ func TestOSSEndpointSuffix(t *testing.T) {
 	t.Setenv(cloudendpoint.EnvSuffix, "host:8080")
 	_, err = cmd.ossClient("bucket")
 	require.ErrorContains(t, err, cloudendpoint.EnvSuffix)
+	_, err = (&Client{}).generateSignedURL(3600)
+	require.ErrorContains(t, err, cloudendpoint.EnvSuffix)
 }

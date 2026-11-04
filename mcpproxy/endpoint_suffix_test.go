@@ -23,4 +23,5 @@ func TestMCPUpstreamEndpointSuffix(t *testing.T) {
 	require.ErrorContains(t, err, endpoint.EnvSuffix)
 	_, _, err = (&credentialAuth{}).exchange(time.Now())
 	require.ErrorContains(t, err, endpoint.EnvSuffix)
+	require.ErrorContains(t, OpenBrowser("https://signin.aliyuncs.com/"), endpoint.EnvSuffix)
 }

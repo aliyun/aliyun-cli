@@ -68,6 +68,34 @@ func TestHTTPGetUsesDefaultClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Body.Close()
+	r, err = Get(nil, "https://download.aliyuncs.com/tool.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Body.Close()
+}
+
+func TestForwardedEndpointArgumentBoundaries(t *testing.T) {
+	t.Setenv(EnvSuffix, "aliyuncs.alibaba")
+	for _, tc := range []struct {
+		name       string
+		args, want []string
+	}{
+		{"attached short flag", []string{"-eoss.aliyuncs.com"}, []string{"-eoss.aliyuncs.alibaba"}},
+		{"missing endpoint", []string{"--endpoint"}, []string{"--endpoint"}},
+		{"missing opaque value", []string{"--body"}, []string{"--body"}},
+		{"opaque endpoint-like values", []string{"--header", "-eheader.aliyuncs.com", "--cli-query", "--endpoint=query.aliyuncs.com", "--body-file", "-efile.aliyuncs.com", "--body=value.aliyuncs.com", "-e", "real.aliyuncs.com"}, []string{"--header", "-eheader.aliyuncs.com", "--cli-query", "--endpoint=query.aliyuncs.com", "--body-file", "-efile.aliyuncs.com", "--body=value.aliyuncs.com", "-e", "real.aliyuncs.alibaba"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			original := append([]string(nil), tc.args...)
+			if got := WithSuffixArgs(tc.args); !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("args = %q; want %q", got, tc.want)
+			}
+			if !reflect.DeepEqual(tc.args, original) {
+				t.Fatal("caller arguments mutated")
+			}
+		})
+	}
 }
 
 func TestForwardedEndpointArguments(t *testing.T) {

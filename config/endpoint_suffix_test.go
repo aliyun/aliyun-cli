@@ -40,4 +40,7 @@ func TestPluginRuntimeEndpointSuffix(t *testing.T) {
 	EndpointFlag(ctx.Flags()).SetValue("override.aliyuncs.com")
 	EndpointFlag(ctx.Flags()).SetAssigned(true)
 	require.Equal(t, "override.aliyuncs.alibaba", BuildBaselineEnv(ctx)["ALIBABA_CLOUD_ENDPOINT"])
+	t.Setenv(endpoint.EnvSuffix, "invalid.example")
+	_, err = (&Profile{Mode: External, ProcessCommand: "must-not-run"}).GetRuntimeEnv(nil)
+	require.ErrorContains(t, err, endpoint.EnvSuffix)
 }
