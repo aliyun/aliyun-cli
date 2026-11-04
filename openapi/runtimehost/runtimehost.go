@@ -32,6 +32,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/headers"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime"
@@ -312,12 +313,15 @@ func Dispatch(ctx *cli.Context, rawArgs []string) error {
 	}
 	_, aiModeEnabled := aiModeForCommand(ctx)
 
+	telemetry.SetOpenAPIRuntimeVersion(runtime.Version)
 	return engineDispatch(engine.Request{
-		Args:   rawArgs,
-		Out:    ctx.Stdout(),
-		Lang:   lang,
-		Host:   host,
-		AIMode: aiModeEnabled,
+		Args:              rawArgs,
+		Out:               ctx.Stdout(),
+		Lang:              lang,
+		Host:              host,
+		AIMode:            aiModeEnabled,
+		OnCommandResolved: telemetry.SetResolvedMetaCommand,
+		OnParameterNames:  telemetry.SetRuntimeParameterNames,
 	})
 }
 
@@ -416,11 +420,13 @@ func TryHelp(ctx *cli.Context, rawArgs []string) (handled bool, err error) {
 			return false, nil
 		}
 		request := runtimeHelpRequest(ctx, rawArgs, args)
+		telemetry.SetOpenAPIRuntimeVersion(runtime.Version)
 		return true, Engine().ProductHelp(request)
 	}
 	if strings.ToLower(command) != command || !Engine().Resolvable(product, command) {
 		return false, nil
 	}
+	telemetry.SetOpenAPIRuntimeVersion(runtime.Version)
 	return true, Engine().APIHelp(runtimeHelpRequest(ctx, rawArgs, args))
 }
 
@@ -430,10 +436,12 @@ func runtimeHelpRequest(ctx *cli.Context, rawArgs, args []string) engine.Request
 		lang = explicit
 	}
 	return engine.Request{
-		Args:   args,
-		Out:    ctx.Stdout(),
-		Lang:   lang,
-		AIMode: helpAIMode(ctx, rawArgs),
+		Args:              args,
+		Out:               ctx.Stdout(),
+		Lang:              lang,
+		AIMode:            helpAIMode(ctx, rawArgs),
+		OnCommandResolved: telemetry.SetResolvedMetaCommand,
+		OnParameterNames:  telemetry.SetRuntimeParameterNames,
 	}
 }
 

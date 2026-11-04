@@ -109,6 +109,10 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 		value = s
 	}
 	if flag != nil {
+		if observer, ok := p.detector.(interface{ recordParsedFlag(string, int, int, bool) }); ok {
+			name, _, _ := SplitStringWithPrefix(s, "=:")
+			observer.recordParsedFlag(name, p.current-1, len(p.args), !flag.dynamicUnknown)
+		}
 		err = flag.setIsAssigned()
 		if err != nil {
 			return

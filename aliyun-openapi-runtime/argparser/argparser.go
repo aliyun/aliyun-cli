@@ -68,6 +68,14 @@ func Parse(params []meta.Parameter, args []string) (*Result, error) {
 
 // ParseWithOptions parses engine/API arguments while syntactically consuming external flags whose values are already owned by the embedding host.
 func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions) (*Result, error) {
+	var parameterNames []string
+	if opts.OnParameterNames != nil {
+		defer func() {
+			// Observing names must not change the command's parsing behavior.
+			defer func() { _ = recover() }()
+			opts.OnParameterNames(append([]string(nil), parameterNames...))
+		}()
+	}
 	apiParams := newParamIndex(params)
 	externalFlags, err := newExternalFlagIndex(opts.ExternalFlags)
 	if err != nil {
@@ -80,6 +88,10 @@ func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions)
 		tok := args[i]
 		// Runtime-owned flags, long and shorthand, have highest priority.
 		if _, spec, inlineVal, hasInline, ok := reservedFlags.match(tok); ok {
+			if opts.OnParameterNames != nil {
+				name, _, _ := strings.Cut(tok, "=")
+				parameterNames = append(parameterNames, name)
+			}
 			i++
 			i, err = consumeReservedFlag(args, i, externalFlags, apiParams, spec, inlineVal, hasInline, &res.Reserved)
 			if err != nil {
@@ -90,6 +102,10 @@ func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions)
 
 		// Host-owned external flags have priority over API metadata parameters.
 		if spec, inlineVal, hasInline, ok := externalFlags.match(tok); ok {
+			if opts.OnParameterNames != nil {
+				name, _, _ := splitExternalToken(tok)
+				parameterNames = append(parameterNames, name)
+			}
 			i++
 			i, err = consumeExternalFlag(args, i, externalFlags, apiParams, spec, inlineVal, hasInline)
 			if err != nil {
@@ -106,6 +122,10 @@ func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions)
 		p := apiParams.lookup(name)
 		if p == nil {
 			return nil, &UnknownFlagError{Flag: name, Known: apiParams.optionNames()}
+		}
+		if opts.OnParameterNames != nil {
+			flag, _, _ := strings.Cut(tok, "=")
+			parameterNames = append(parameterNames, flag)
 		}
 		if hasInline {
 			switch p.Type {
