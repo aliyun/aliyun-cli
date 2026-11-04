@@ -4,6 +4,8 @@
 
 Alibaba Cloud CLI stores named profiles in `~/.aliyun/config.json` by default.
 
+For telemetry settings and the information collected, see [Telemetry data collection](./telemetry.md).
+
 ## Create and manage profiles
 
 For interactive local use, OAuth is the recommended starting point:

@@ -19,6 +19,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 )
 
 func NewConfigureSetCommand() *cli.Command {
@@ -63,14 +64,16 @@ func doConfigureSet(ctx *cli.Context) error {
 		}
 	}
 
+	authModeSource := telemetry.AuthModeSourceExisting
 	mode, ok := ModeFlag(flags).GetValue()
 	if ok {
 		profile.Mode = NormalizeMode(mode)
-	} else {
-		if profile.Mode == "" {
-			profile.Mode = AK
-		}
+		authModeSource = telemetry.AuthModeSourceExplicit
+	} else if profile.Mode == "" {
+		profile.Mode = AK
+		authModeSource = telemetry.AuthModeSourceDefault
 	}
+	telemetry.SetAuthenticationMode(string(profile.Mode), authModeSource)
 
 	oldTarget := cloudSSOTarget(&profile)
 	switch profile.Mode {

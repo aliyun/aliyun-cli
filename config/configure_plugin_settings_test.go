@@ -37,6 +37,7 @@ func TestConfigurePluginSettings_SourceBaseFlagOnSetOnly(t *testing.T) {
 	set := root.GetSubCommand("set")
 	require.NotNil(t, set)
 	assert.NotNil(t, set.Flags().Get("source-base"))
+	assert.NotNil(t, set.Flags().Get("site"))
 }
 
 func TestConfigurePluginSettings_Show_Default(t *testing.T) {
@@ -50,6 +51,8 @@ func TestConfigurePluginSettings_Show_Default(t *testing.T) {
 	var m map[string]any
 	require.NoError(t, json.Unmarshal(w.Bytes(), &m))
 	assert.Equal(t, "", m["source_base"])
+	assert.Equal(t, pluginsettings.SiteCN, m["site"])
+	assert.Equal(t, pluginsettings.SiteCN, m["site_effective"])
 }
 
 func TestConfigurePluginSettings_Set_ViaCommand(t *testing.T) {
@@ -68,6 +71,47 @@ func TestConfigurePluginSettings_Set_ViaCommand(t *testing.T) {
 	cfg, err := pluginsettings.Load(aliyunDir)
 	require.NoError(t, err)
 	assert.Equal(t, "https://mirror.example.com/plugins", cfg.SourceBase)
+	assert.Equal(t, pluginsettings.SiteCN, cfg.Site)
+}
+
+func TestConfigurePluginSettings_Set_SitePreservesSourceBase(t *testing.T) {
+	ctx, _, aliyunDir := testPluginSettingsIsolatedHome(t)
+	require.NoError(t, pluginsettings.Save(aliyunDir, &pluginsettings.PluginSettings{
+		SourceBase: "https://mirror.example.com/plugins",
+		Site:       pluginsettings.SiteCN,
+	}))
+	root := NewConfigurePluginSettingsCommand()
+	ctx.EnterCommand(root)
+	set := root.GetSubCommand("set")
+	require.NotNil(t, set)
+	ctx.EnterCommand(set)
+	f := ctx.Flags().Get("site")
+	require.NotNil(t, f)
+	f.SetAssigned(true)
+	f.SetValue("intl")
+	require.NoError(t, set.Run(ctx, nil))
+
+	cfg, err := pluginsettings.Load(aliyunDir)
+	require.NoError(t, err)
+	assert.Equal(t, "https://mirror.example.com/plugins", cfg.SourceBase)
+	assert.Equal(t, pluginsettings.SiteIntl, cfg.Site)
+}
+
+func TestConfigurePluginSettings_Set_InvalidSite(t *testing.T) {
+	ctx, _, _ := testPluginSettingsIsolatedHome(t)
+	root := NewConfigurePluginSettingsCommand()
+	ctx.EnterCommand(root)
+	set := root.GetSubCommand("set")
+	require.NotNil(t, set)
+	ctx.EnterCommand(set)
+	f := ctx.Flags().Get("site")
+	require.NotNil(t, f)
+	f.SetAssigned(true)
+	f.SetValue("global")
+
+	err := set.Run(ctx, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cn or intl")
 }
 
 func TestConfigurePluginSettings_Clear(t *testing.T) {
@@ -85,6 +129,7 @@ func TestConfigurePluginSettings_Clear(t *testing.T) {
 	cfg, err := pluginsettings.Load(aliyunDir)
 	require.NoError(t, err)
 	assert.Equal(t, "", cfg.SourceBase)
+	assert.Equal(t, pluginsettings.SiteCN, cfg.Site)
 }
 
 func TestConfigurePluginSettings_Set_MissingFlag(t *testing.T) {

@@ -68,6 +68,8 @@ func TestStartupAIModeCustomConfigPath(t *testing.T) {
 	for _, args := range [][]string{
 		{"--config-path", filepath.Join(dir, "config.json")},
 		{"--config-path=" + filepath.Join(dir, "config.json")},
+		{"--config-path:" + filepath.Join(dir, "config.json")},
+		{"--config-path=", filepath.Join(dir, "config.json")},
 	} {
 		if !startupAIMode(args) {
 			t.Fatalf("saved AI mode not loaded for %v", args)
