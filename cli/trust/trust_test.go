@@ -405,18 +405,18 @@ func withoutBuiltinAnchors(t *testing.T) {
 
 func TestBuiltinAnchorsLoadWithoutLinkerFlags(t *testing.T) {
 	client := New(Config{})
-	root, err := client.bootstrapRoot(time.Date(2026, 10, 22, 8, 26, 44, 0, time.UTC))
+	root, err := client.bootstrapRoot(time.Date(2026, 11, 4, 7, 24, 10, 0, time.UTC))
 	require.NoError(t, err)
 	assert.Equal(t, []string{
-		"root-20261022082644-a",
-		"root-20261022082644-b",
-		"root-20261022082644-c",
+		"root-20261104072410-a",
+		"root-20261104072410-b",
+		"root-20261104072410-c",
 	}, root.Roles["root"].KeyIDs)
 	assert.Equal(t, 2, root.Roles["root"].Threshold)
 	assert.Equal(t, []string{
-		"recovery-20261022082644-a",
-		"recovery-20261022082644-b",
-		"recovery-20261022082644-c",
+		"recovery-20261104072410-a",
+		"recovery-20261104072410-b",
+		"recovery-20261104072410-c",
 	}, client.cfg.RecoveryRole.KeyIDs)
 	assert.Equal(t, 2, client.cfg.RecoveryRole.Threshold)
 }
