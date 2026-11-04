@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -53,11 +54,19 @@ func TestReadOnlyVersionRecordReplacedAtomically(t *testing.T) {
 	if err := os.Chmod(c.versionFilePath, 0444); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = os.Chmod(c.versionFilePath, 0600) })
 	signedDgateRelease(t, c, "1.2.3", []byte("new executable"))
-	if err := c.install(); err != nil {
+	err := c.install()
+	expectedFiles := map[string]string{c.execFilePath: "new executable", c.versionFilePath: "1.2.3"}
+	if runtime.GOOS == "windows" {
+		if err == nil {
+			t.Fatal("read-only Windows version record must reject replacement")
+		}
+		expectedFiles = map[string]string{c.execFilePath: "old executable", c.versionFilePath: "1.2.2"}
+	} else if err != nil {
 		t.Fatal(err)
 	}
-	for name, expected := range map[string]string{c.execFilePath: "new executable", c.versionFilePath: "1.2.3"} {
+	for name, expected := range expectedFiles {
 		data, err := os.ReadFile(name)
 		if err != nil || string(data) != expected {
 			t.Fatalf("inconsistent installation: %s = %q, %v", name, data, err)

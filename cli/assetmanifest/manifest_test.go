@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -280,7 +281,8 @@ func TestAuthorizeIdentityAndVersion(t *testing.T) {
 			t.Fatalf("authorize: %+v %v", got, err)
 		}
 		info, err := os.Stat(p)
-		if err != nil || info.Mode().Perm() != 0600 {
+		// Windows mode bits describe read-only status, not POSIX owner permissions.
+		if err != nil || runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
 			t.Fatal("state not private")
 		}
 		if _, err := v.Authorize(r, p); err != nil {
@@ -603,7 +605,19 @@ func TestStateIOFailuresRetainOldState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if os.Geteuid() != 0 {
+	if runtime.GOOS == "windows" {
+		if err := os.Chmod(p, 0444); err != nil {
+			t.Fatal(err)
+		}
+		_, persistErr := v.Authorize(r, p)
+		if err := os.Chmod(p, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if persistErr == nil {
+			t.Fatal("read-only state replacement failure ignored")
+		}
+	}
+	if runtime.GOOS != "windows" && os.Geteuid() != 0 {
 		if err := os.Chmod(p, 0000); err != nil {
 			t.Fatal(err)
 		}

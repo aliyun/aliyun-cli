@@ -513,7 +513,7 @@ func TestSignedDgateMissingExecutableDirectoryFailsBeforeDownload(t *testing.T) 
 	f, paths := signedDgateRelease(t, c, "1.2.3", []byte("package"))
 	c.versionRemote = "1.2.3"
 	c.execFilePath = filepath.Join(c.configPath, "missing-directory", "dgate")
-	if err := c.install(); err == nil || !strings.Contains(err.Error(), "no such file") {
+	if err := c.install(); !os.IsNotExist(err) {
 		t.Fatalf("temporary-file creation error not returned: %v", err)
 	}
 	if f.requests == 0 {
