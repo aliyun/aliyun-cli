@@ -14,19 +14,17 @@
 package openapi
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
-	"net"
 	"os"
 	"regexp"
+	"time"
 
-	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
-	"github.com/aliyun/aliyun-openapi-runtime/endpoint"
+	pricingruntime "github.com/aliyun/aliyun-openapi-runtime/runtime"
 )
 
 // Routes an OpenAPI call to CloudControl GetApiPrice (POST /api/v1/price/quote)
@@ -45,77 +43,6 @@ const (
 	estimateCostProductCode = "cloudcontrol"
 )
 
-type estimateCostRequest struct {
-	PopCode    string                 `json:"popCode"`
-	PopVersion string                 `json:"popVersion"`
-	ApiName    string                 `json:"apiName"`
-	Parameters map[string]interface{} `json:"parameters"`
-}
-
-// Quote-service error codes the CLI treats specially. They are deliberately
-// distinct: "confirmed free" answers the question "what does this call cost?",
-// while "not supported" means the question cannot be answered yet. Collapsing
-// them — as this CLI did before — leaves users unable to tell a free API from
-// an unmapped one.
-const (
-	estimateCostCodeNotRequired  = "PricingNotRequired"
-	estimateCostCodeNotSupported = "PricingNotSupported"
-)
-
-// costIrrelevantQuote is what --estimate-cost prints for an API the pricing
-// side has confirmed as free.
-//
-// It is a normal result (exit code 0), not an error: the user asked what the
-// call costs and got a definitive answer — nothing. Failing the process here
-// would make scripts and agents that gate on `$?` abort on exactly the
-// operations that are free to run. "Cannot be quoted" stays an error; "costs
-// nothing" does not.
-type costIrrelevantQuote struct {
-	CostIrrelevant bool   `json:"costIrrelevant"`
-	PopCode        string `json:"popCode"`
-	PopVersion     string `json:"popVersion"`
-	ApiName        string `json:"apiName"`
-	Message        string `json:"message"`
-}
-
-// costIrrelevantMessage is the CLI's own wording for the confirmed-free
-// answer, localized using the effective CLI language rather than the server's.
-var costIrrelevantMessage = i18n.T(
-	"this OpenAPI is confirmed to incur no charge, so there is nothing to quote",
-	"该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。",
-)
-
-// newCostIrrelevantQuote renders the confirmed-free answer as JSON so the
-// normal output pipeline (--cli-query / --output / --quiet) works on it like
-// any other quote.
-func newCostIrrelevantQuote(popCode string, popVersion string, apiName string, language string) string {
-	if language == "" {
-		language = i18n.GetLanguage()
-	}
-	// Marshalling a fixed struct of one bool and four strings cannot fail, so
-	// there is no error to propagate through every caller.
-	body, _ := json.Marshal(costIrrelevantQuote{
-		CostIrrelevant: true,
-		PopCode:        popCode,
-		PopVersion:     popVersion,
-		ApiName:        apiName,
-		Message:        costIrrelevantMessage.Get(language),
-	})
-	return string(body)
-}
-
-// costIrrelevantFromError recognises the confirmed-free answer on the error
-// channel and renders it as a result document. ok=false means "this is a real
-// error, translate it normally" — kept separate from the HTTP call so the
-// classification is testable without standing up a signed quote server.
-func costIrrelevantFromError(popCode string, popVersion string, apiName string, err error, language string) (string, bool) {
-	serverErr, isServerErr := err.(*sdkerrors.ServerError)
-	if !isServerErr || serverErr.ErrorCode() != estimateCostCodeNotRequired {
-		return "", false
-	}
-	return newCostIrrelevantQuote(popCode, popVersion, apiName, language), true
-}
-
 // processEstimateCost handles --estimate-cost for both RPC and ROA(restful)
 // invokers. Must be called after invoker.Prepare(ctx) so the CommonRequest
 // carries the fully assembled parameters; otherwise required params from
@@ -128,7 +55,10 @@ func (c *Commando) processEstimateCost(ctx *cli.Context, inv Invoker) error {
 		return err
 	}
 
-	parameters, err := buildEstimateCostParameters(req)
+	parameters, err := buildEstimateCostParameters(pricingruntime.PricingParameterInput{
+		Query: req.QueryParams, Form: req.FormParams, Path: req.PathParams,
+		Body: req.Content, Region: req.RegionId,
+	})
 	if err != nil {
 		return err
 	}
@@ -149,56 +79,24 @@ func (c *Commando) processEstimateCost(ctx *cli.Context, inv Invoker) error {
 	if err != nil {
 		return err
 	}
+	return finishEstimateCost(ctx, out)
+}
+
+// finishEstimateCost classifies the complete document before output filtering.
+func finishEstimateCost(ctx *cli.Context, out string) error {
+	resultErr := estimateCostBusinessError(out)
+	var business *pricingruntime.PricingBusinessError
+	if resultErr != nil && !errors.As(resultErr, &business) {
+		return resultErr
+	}
 	if err := printEstimateCostResult(ctx, out); err != nil {
 		return err
 	}
-	// Business failure inside a 200 response (price.success == false) must fail
-	// the process: scripts and agents gate on `$?`, and an exit code of 0 with a
-	// failed quote inside the JSON reads as a successful estimate (observed in
-	// practice with several products' business failures). The JSON
-	// is already printed above, so automation can still read the full details.
-	return estimateCostBusinessError(out)
+	return resultErr
 }
 
-// estimateCostBusinessError inspects the raw quote response and returns a
-// non-nil error when the quote itself reports failure. A missing/unparseable
-// success field is treated as success — the exit-code contract only covers
-// explicit business failures, and transport/server errors are surfaced earlier
-// by invokeEstimateCost.
 func estimateCostBusinessError(out string) error {
-	type quote struct {
-		Success      *bool  `json:"success"`
-		ErrorCode    string `json:"errorCode"`
-		ErrorMessage string `json:"errorMessage"`
-		RequestId    string `json:"upstreamRequestId"`
-	}
-	var body struct {
-		// Gateway shape: {"price": {...}, "requestId": "..."}; tolerate the bare
-		// DTO shape (success at top level) in case the envelope changes.
-		Price *quote `json:"price"`
-		quote
-	}
-	if err := json.Unmarshal([]byte(out), &body); err != nil {
-		return nil
-	}
-	if body.Price == nil {
-		body.Price = &body.quote
-	}
-	if body.Price.Success == nil || *body.Price.Success {
-		return nil
-	}
-	msg := "cost estimation failed"
-	if body.Price.ErrorCode != "" {
-		msg += ": " + body.Price.ErrorCode
-	}
-	if body.Price.ErrorMessage != "" {
-		msg += ": " + body.Price.ErrorMessage
-	}
-	if body.Price.RequestId != "" {
-		msg += " (upstreamRequestId: " + body.Price.RequestId + ")"
-	}
-	return cli.NewErrorWithTip(fmt.Errorf("%s", msg),
-		"the quote response above has the full details; fix the reported parameter or retry later, the target API was NOT invoked")
+	return pricingruntime.PricingResponseError(out)
 }
 
 // PascalCase OpenAPI action name, e.g. CreateTrainingJob. Product-command
@@ -235,10 +133,7 @@ func (c *Commando) processEstimateCostByTriple(ctx *cli.Context, product *meta.P
 	if err != nil {
 		return err
 	}
-	if err := printEstimateCostResult(ctx, out); err != nil {
-		return err
-	}
-	return estimateCostBusinessError(out)
+	return finishEstimateCost(ctx, out)
 }
 
 // buildEstimateCostParametersFromFlags collects pricing parameters without
@@ -324,10 +219,7 @@ func (c *Commando) processEstimateCostOpenapi(ctx *cli.Context, oc *OpenapiConte
 	if err != nil {
 		return err
 	}
-	if err := printEstimateCostResult(ctx, out); err != nil {
-		return err
-	}
-	return estimateCostBusinessError(out)
+	return finishEstimateCost(ctx, out)
 }
 
 // buildEstimateCostParametersFromOpenapi flattens the prepared openapi-path
@@ -372,34 +264,14 @@ func buildEstimateCostParametersFromOpenapi(ctx *cli.Context, oc *OpenapiContext
 // raw `--body` bytes/string, which must decode to a JSON object — same
 // contract as the RPC/ROA path in buildEstimateCostParameters.
 func mergeEstimateCostBody(parameters map[string]interface{}, rawBody interface{}) error {
-	switch body := rawBody.(type) {
-	case map[string]interface{}:
-		for k, v := range body {
-			parameters[k] = v
-		}
-		return nil
-	case []byte:
-		return mergeEstimateCostJSONBody(parameters, body)
-	case string:
-		return mergeEstimateCostJSONBody(parameters, []byte(body))
-	default:
-		return cli.NewErrorWithTip(
-			fmt.Errorf("--estimate-cost cannot read the request body of type %T", rawBody),
-			"cost estimation merges the JSON body into pricing parameters, please pass `--body` as a JSON object")
+	if err := pricingruntime.MergePricingBody(parameters, rawBody); err != nil {
+		return cli.NewErrorWithTip(err, "cost estimation merges the JSON body into pricing parameters, please pass `--body` as a JSON object")
 	}
+	return nil
 }
 
 func mergeEstimateCostJSONBody(parameters map[string]interface{}, raw []byte) error {
-	body := make(map[string]interface{})
-	if err := json.Unmarshal(raw, &body); err != nil {
-		return cli.NewErrorWithTip(
-			fmt.Errorf("--estimate-cost requires the request body to be a JSON object: %v", err),
-			"cost estimation merges the JSON body into pricing parameters, please pass `--body` as a JSON object")
-	}
-	for k, v := range body {
-		parameters[k] = v
-	}
-	return nil
+	return mergeEstimateCostBody(parameters, raw)
 }
 
 // resolveEstimateCostApiName returns the action name of the call being
@@ -428,41 +300,11 @@ func resolveEstimateCostApiName(library *Library, inv Invoker) (string, error) {
 	return "", fmt.Errorf("--estimate-cost cannot resolve the api name for this call")
 }
 
-// buildEstimateCostParameters flattens every parameter slot of the prepared
-// request (query / form-or-body / path / JSON body) into one map. Values stay
-// strings — CLI semantics; the server normalizes dotted keys like `DataDisk.1.Size`.
-func buildEstimateCostParameters(req *requests.CommonRequest) (map[string]interface{}, error) {
-	parameters := make(map[string]interface{})
-	for k, v := range req.QueryParams {
-		if k != "" && v != "" {
-			parameters[k] = v
-		}
-	}
-	for k, v := range req.FormParams {
-		if k != "" && v != "" {
-			parameters[k] = v
-		}
-	}
-	for k, v := range req.PathParams {
-		if k != "" && v != "" {
-			parameters[k] = v
-		}
-	}
-	if len(req.Content) > 0 {
-		body := make(map[string]interface{})
-		if err := json.Unmarshal(req.Content, &body); err != nil {
-			return nil, cli.NewErrorWithTip(
-				fmt.Errorf("--estimate-cost requires the request body to be a JSON object: %v", err),
-				"cost estimation merges the JSON body into pricing parameters, please pass `--body` as a JSON object")
-		}
-		for k, v := range body {
-			parameters[k] = v
-		}
-	}
-	if req.RegionId != "" {
-		if _, ok := parameters["RegionId"]; !ok {
-			parameters["RegionId"] = req.RegionId
-		}
+// buildEstimateCostParameters adapts SDK-independent prepared parameter slots.
+func buildEstimateCostParameters(input pricingruntime.PricingParameterInput) (map[string]interface{}, error) {
+	parameters, err := pricingruntime.BuildPricingParameters(input)
+	if err != nil {
+		return nil, cli.NewErrorWithTip(err, "cost estimation merges the JSON body into pricing parameters, please pass `--body` as a JSON object")
 	}
 	return parameters, nil
 }
@@ -492,92 +334,55 @@ func buildPricingContext(ctx *cli.Context) (map[string]interface{}, error) {
 }
 
 func estimateCostEndpoint() string {
-	if v := os.Getenv(estimateCostEndpointEnv); v != "" {
-		return endpoint.WithSuffix(v)
-	}
-	return endpoint.WithSuffix(defaultEstimateCostHost)
+	return pricingruntime.PricingEndpoint()
 }
 
-func setEstimateCostEndpoint(request *requests.CommonRequest) {
-	request.Domain = estimateCostEndpoint()
-	// The legacy SDK appends Port when building the URL, so an explicit
-	// endpoint port must be kept separate from Domain.
-	if host, port, err := net.SplitHostPort(request.Domain); err == nil {
-		request.Domain = host
-		request.Port = port
+func newPricingClient(ctx *cli.Context, profile *config.Profile) (*pricingruntime.PricingClient, error) {
+	// Preserve the existing main-CLI credential modes and region requirement.
+	if profile.Mode == config.Anonymous {
+		return nil, fmt.Errorf("price mode requires authenticated credentials")
 	}
-}
-
-// invokeEstimateCost issues the signed quote request and returns the raw
-// response body. Reuses the standard authenticated client so signing and
-// credential refresh behave identically to a real OpenAPI call.
-func invokeEstimateCost(ctx *cli.Context, profile *config.Profile, popCode string, popVersion string, apiName string, parameters map[string]interface{}) (string, error) {
-	client, err := GetClient(profile, ctx)
+	if profile.Mode == config.BearerToken {
+		return nil, config.ErrBearerTokenRequiresPlugin("")
+	}
+	if profile.RegionId == "" {
+		return nil, fmt.Errorf("default RegionId is empty! run `aliyun configure` first")
+	}
+	credential, err := profile.GetCredential(ctx, nil)
 	if err != nil {
-		return "", fmt.Errorf("init estimate-cost client failed: %s", err)
+		return nil, err
 	}
-
-	content, err := json.Marshal(estimateCostRequest{
-		PopCode:    popCode,
-		PopVersion: popVersion,
-		ApiName:    apiName,
-		Parameters: parameters,
+	readTimeout, connectTimeout := 10*time.Second, 5*time.Second
+	if profile.ReadTimeout > 0 {
+		readTimeout = time.Duration(profile.ReadTimeout) * time.Second
+	}
+	if profile.ConnectTimeout > 0 {
+		connectTimeout = time.Duration(profile.ConnectTimeout) * time.Second
+	}
+	return pricingruntime.NewPricingClient(pricingruntime.PricingClientOptions{
+		Credential: credential, Region: profile.RegionId,
+		ReadTimeout: readTimeout, ConnectTimeout: connectTimeout,
+		RetryCount:       profile.RetryCount,
+		SkipSecureVerify: config.SkipSecureVerify(ctx.Flags()).IsAssigned(),
+		UserAgent:        os.Getenv("ALIYUN_USER_AGENT"),
 	})
-	if err != nil {
-		return "", err
-	}
-
-	request := requests.NewCommonRequest()
-	request.Product = estimateCostProductCode
-	request.Version = estimateCostApiVersion
-	request.Method = "POST"
-	request.PathPattern = estimateCostQuotePath
-	setEstimateCostEndpoint(request)
-	request.Scheme = "https"
-	if host := os.Getenv(estimateCostHostEnv); host != "" {
-		request.Headers["Host"] = host
-	}
-	request.SetContent(content)
-	request.SetContentType("application/json")
-
-	resp, err := client.ProcessCommonRequest(request)
-	if err != nil {
-		// A confirmed cost-irrelevant API arrives on the error channel — the
-		// quote service models it as errorCode=PricingNotRequired — but it is
-		// a successful determination. Turn it into a normal result document
-		// so callers print it and exit 0 like any other quote.
-		// Use the resolved profile explicitly: OSS quote entry points can load
-		// a different profile without changing the process-wide i18n language.
-		if out, isCostIrrelevant := costIrrelevantFromError(popCode, popVersion, apiName, err, profile.Language); isCostIrrelevant {
-			return out, nil
-		}
-		return "", translateEstimateCostError(popCode, popVersion, apiName, err)
-	}
-	return resp.GetHttpContentString(), nil
 }
 
-// translateEstimateCostError turns ccapi-side server errors into actionable
-// CLI tips. PricingNotSupported means the quote cannot be produced — surface
-// that as a friendly hint rather than a raw error string, since users mistake
-// it for a misconfiguration otherwise.
-//
-// Note it does NOT mean "free": an API confirmed to incur no charge reports
-// PricingNotRequired and is handled as a successful result upstream of here.
-// The tip says so explicitly, because reading "not supported" as "free" is a
-// billing-relevant mistake.
-func translateEstimateCostError(popCode string, popVersion string, apiName string, err error) error {
-	if serverErr, ok := err.(*sdkerrors.ServerError); ok {
-		switch serverErr.ErrorCode() {
-		case estimateCostCodeNotSupported:
-			return cli.NewErrorWithTip(
-				fmt.Errorf("no pricing information for %s/%s/%s", popCode, popVersion, apiName),
-				"no pricing mapping is registered for this OpenAPI yet, so it cannot be quoted; this does not mean the call is free — an API confirmed to be free is reported as cost-irrelevant instead")
-		case "InvalidParameter":
-			return cli.NewErrorWithTip(err,
-				"cost estimation rejected the parameters, please check them against the target API")
-		}
+// invokeEstimateCost issues only the quote-service request through SDK v2.
+func invokeEstimateCost(ctx *cli.Context, profile *config.Profile, popCode string, popVersion string, apiName string, parameters map[string]interface{}) (string, error) {
+	client, err := newPricingClient(ctx, profile)
+	if err != nil {
+		return "", fmt.Errorf("init estimate-cost client failed: %w", err)
 	}
-	return err
+	defer client.Close()
+	language := profile.Language
+	if language == "" {
+		language = i18n.GetLanguage()
+	}
+	return client.Quote(pricingruntime.PricingRequest{
+		Language: language, PopCode: popCode, PopVersion: popVersion,
+		ApiName: apiName, Parameters: parameters,
+	})
 }
 
 // printEstimateCostResult reuses the standard output pipeline so `--quiet`,

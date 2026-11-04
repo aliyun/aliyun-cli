@@ -12,6 +12,12 @@ import (
 
 type suffixHTTPClient struct{ http.RoundTripper }
 
+type suffixRoundTrip func(*http.Request) (*http.Response, error)
+
+func (f suffixRoundTrip) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
+}
+
 func (c suffixHTTPClient) Call(r *http.Request, _ *http.Transport) (*http.Response, error) {
 	return c.RoundTrip(r)
 }
@@ -48,7 +54,7 @@ func TestEndpointSuffixAssemblyAndSigning(t *testing.T) {
 				t.Fatal(err)
 			}
 			calls := 0
-			call.client.HttpClient = suffixHTTPClient{roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			call.client.HttpClient = suffixHTTPClient{suffixRoundTrip(func(r *http.Request) (*http.Response, error) {
 				calls++
 				if r.URL.Host != want || r.Host != want || r.Header.Get("Authorization") == "" {
 					t.Fatalf("unexpected signed request: host=%q Host=%q auth=%q", r.URL.Host, r.Host, r.Header.Get("Authorization"))
@@ -75,11 +81,52 @@ func TestEndpointSuffixAssemblyAndSigning(t *testing.T) {
 func TestPricingEndpointSuffix(t *testing.T) {
 	t.Setenv(endpoint.EnvSuffix, "aliyuncs.alibaba")
 	t.Setenv(pricingEndpointEnv, "")
-	if got := pricingEndpoint(); got != "cloudcontrol.aliyuncs.alibaba" {
+	if got := PricingEndpoint(); got != "cloudcontrol.aliyuncs.alibaba" {
 		t.Fatalf("endpoint = %q", got)
 	}
 	t.Setenv(pricingEndpointEnv, "custom.aliyuncs.com:8443")
-	if got := pricingEndpoint(); got != "custom.aliyuncs.alibaba:8443" {
+	if got := PricingEndpoint(); got != "custom.aliyuncs.alibaba:8443" {
 		t.Fatalf("endpoint = %q", got)
+	}
+}
+
+func TestPricingV2EndpointSuffixBeforeSigning(t *testing.T) {
+	t.Setenv(endpoint.EnvSuffix, "aliyuncs.alibaba")
+	t.Setenv(pricingEndpointEnv, "")
+	t.Setenv(pricingHostEnv, "")
+	client, err := NewPricingClient(PricingClientOptions{Credential: staticAKCredential(t), Region: "cn-hangzhou"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	calls := 0
+	client.client.HttpClient = suffixHTTPClient{suffixRoundTrip(func(r *http.Request) (*http.Response, error) {
+		calls++
+		var authorization string
+		for name, values := range r.Header {
+			if strings.EqualFold(name, "authorization") {
+				authorization = strings.Join(values, ",")
+			}
+		}
+		if r.URL.Host != "cloudcontrol.aliyuncs.alibaba" || r.Host != r.URL.Host || authorization == "" {
+			t.Fatalf("unexpected signed pricing request: %s host=%s", r.URL, r.Host)
+		}
+		if r.URL.Path != pricingQuotePath && r.URL.Path != pricingListPath {
+			t.Fatalf("unexpected pricing path: %s", r.URL.Path)
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"supportedApis":[]}`))}, nil
+	})}
+	if _, err := client.Quote(PricingRequest{PopCode: "ecs", ApiName: "RunInstances"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.ListSupportedAPIs(""); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatalf("pricing requests=%d, want 2", calls)
+	}
+	t.Setenv(endpoint.EnvSuffix, "invalid/suffix")
+	if _, err := NewPricingClient(PricingClientOptions{}); err == nil || !strings.Contains(err.Error(), endpoint.EnvSuffix) {
+		t.Fatalf("invalid suffix not rejected before credentials: %v", err)
 	}
 }
