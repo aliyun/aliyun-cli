@@ -20,6 +20,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
+	runtimeredact "github.com/aliyun/aliyun-openapi-runtime/redact"
 )
 
 // Read definitions without assigning flags or changing the command parser's
@@ -111,6 +112,15 @@ func inferToolParameterNames(args []string) []string {
 		}
 		names = append(names, name)
 		if !inline && i+1 < len(args) {
+			if sensitiveToolParameter(name) {
+				// Bridge and tool parsers may consume even a registered-looking
+				// token as a credential value. Do not infer names from that value.
+				// Keep the end-of-options delimiter visible to the outer loop.
+				if args[i+1] != "--" {
+					i++
+				}
+				continue
+			}
 			// Short dash-leading tokens can also be values. Prefer omitting
 			// an ambiguous token immediately following a value-taking option.
 			next, _ := inferredToolFlagName(args[i+1])
@@ -120,6 +130,59 @@ func inferToolParameterNames(args []string) []string {
 		}
 	}
 	return names
+}
+
+// Supplement the runtime's shared redaction policy with credential-related
+// words used in tool options. Match words rather than every occurrence of
+// "key" or "auth". Normalization affects matching only; recorded names retain
+// their original case, order, and repeated occurrences.
+var sensitiveToolParameterKeywords = []string{
+	"accesskey", "apikey", "password", "passwd", "passphrase", "secret",
+	"token", "privatekey", "authorization", "cookie", "credential", "signature",
+}
+
+func sensitiveToolParameter(name string) bool {
+	if !strings.HasPrefix(name, "--") {
+		return false
+	}
+	field := name[2:]
+	if runtimeredact.IsSensitive(field) {
+		return true
+	}
+	normalized := strings.Map(func(char rune) rune {
+		if char == '-' || char == '_' || char == '.' {
+			return -1
+		}
+		if char >= 'A' && char <= 'Z' {
+			return char + ('a' - 'A')
+		}
+		return char
+	}, field)
+	if runtimeredact.IsSensitive(normalized) {
+		return true
+	}
+	if strings.ContainsAny(field, "_.") &&
+		runtimeredact.IsSensitive(strings.ReplaceAll(strings.ReplaceAll(field, "_", "-"), ".", "-")) {
+		return true
+	}
+	// Runtime redaction also recognizes sensitive components in dotted paths.
+	if strings.Contains(field, ".") {
+		for _, component := range strings.Split(field, ".") {
+			if runtimeredact.IsSensitive(component) {
+				return true
+			}
+		}
+	}
+	switch normalized {
+	case "ak", "akid", "aksk", "sk", "pwd", "pass", "accessid", "accesssecret":
+		return true
+	}
+	for _, keyword := range sensitiveToolParameterKeywords {
+		if strings.Contains(normalized, keyword) {
+			return true
+		}
+	}
+	return false
 }
 
 func inferredToolFlagName(token string) (string, bool) {
