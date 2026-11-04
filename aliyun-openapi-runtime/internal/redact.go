@@ -180,9 +180,10 @@ func MaskBodyFull(body string) string {
 func canRedactJSON(value string) bool {
 	trimmed := strings.TrimSpace(value)
 	if first, _ := utf8.DecodeRuneInString(trimmed); unicode.Is(unicode.Cf, first) {
-		return false
+		content := strings.TrimLeftFunc(trimmed, func(r rune) bool { return unicode.Is(unicode.Cf, r) || unicode.IsSpace(r) })
+		return !looksLikeJSONDocument(content) && !strings.HasPrefix(content, "<")
 	}
-	if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") && !strings.HasPrefix(trimmed, `"`) {
+	if !looksLikeJSONDocument(trimmed) {
 		return true
 	}
 	if !json.Valid([]byte(value)) {
@@ -191,6 +192,46 @@ func canRedactJSON(value string) bool {
 	decoder := json.NewDecoder(strings.NewReader(value))
 	decoder.UseNumber()
 	return canRedactJSONValue(decoder, false)
+}
+
+func looksLikeJSONDocument(value string) bool {
+	if value == "" {
+		return false
+	}
+	switch value[0] {
+	case '{', '[':
+		if json.Valid([]byte(value)) {
+			return true
+		}
+		rest := strings.TrimSpace(value[1:])
+		if rest == "" {
+			return true
+		}
+		if value[0] == '{' {
+			return rest[0] == '"' || rest[0] == '}' || strings.ContainsAny(rest, ":=")
+		}
+		if rest[0] == '"' || rest[0] == '{' || rest[0] == '[' || rest[0] == ']' || strings.ContainsAny(rest, ":=") {
+			return true
+		}
+		decoder := json.NewDecoder(strings.NewReader(rest))
+		decoder.UseNumber()
+		if _, err := decoder.Token(); err != nil {
+			return false
+		}
+		tail := strings.TrimSpace(rest[decoder.InputOffset():])
+		return tail == "" || strings.HasPrefix(tail, ",") || strings.HasPrefix(tail, "]")
+	case '"':
+		if json.Valid([]byte(value)) {
+			return true
+		}
+		var text string
+		if json.NewDecoder(strings.NewReader(value)).Decode(&text) == nil {
+			return false
+		}
+		return !strings.ContainsAny(value, " \t\r\n“”‘’") || strings.ContainsAny(value, "{[=")
+	default:
+		return false
+	}
 }
 
 func canRedactJSONValue(decoder *json.Decoder, sensitive bool) bool {
@@ -236,8 +277,10 @@ func canRedactJSONValue(decoder *json.Decoder, sensitive bool) bool {
 // ParamStyle=json puts serialized JSON inside a form field's string value.
 // Retain its string type, and preserve the original spelling when unchanged.
 func maskEmbeddedJSON(value string) string {
-	trimmed := strings.TrimSpace(value)
-	if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") && !strings.HasPrefix(trimmed, `"`) {
+	if !canRedactJSON(value) {
+		return fmt.Sprintf("<opaque body omitted: %d bytes>", len(value))
+	}
+	if !looksLikeJSONDocument(strings.TrimSpace(value)) {
 		return value
 	}
 	var data any

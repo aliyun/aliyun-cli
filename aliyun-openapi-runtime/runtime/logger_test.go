@@ -209,6 +209,40 @@ func TestLogArgsMasksAndHandlesMarshalFailure(t *testing.T) {
 	}
 }
 
+func TestLogArgsRedactsNestedValuesWithoutMutation(t *testing.T) {
+	t.Cleanup(ResetLoggerForTest)
+	ResetLoggerForTest()
+	InitLogger("DEBUG", false)
+	var out bytes.Buffer
+	SetLoggerOutputForTest(&out)
+	const secret = "FAKE_QA_ARGUMENT_PASSWORD_20261104"
+	for _, value := range []any{
+		`{"password":"` + secret + `","name":"visible"}`,
+		`{"password":"` + secret + `",`,
+		"\ufeff{\"password\":\"" + secret + "\"}",
+		map[string]any{"password": secret, "name": "visible"},
+		[]any{map[string]any{"password": secret}},
+		json.RawMessage(`{"password":"` + secret + `","password":""}`),
+	} {
+		out.Reset()
+		args := map[string]any{"name": value, "region": "cn-hangzhou"}
+		before, _ := json.Marshal(args)
+		LogArgs(args)
+		after, _ := json.Marshal(args)
+		if strings.Contains(out.String(), secret) || !bytes.Equal(before, after) {
+			t.Fatalf("unsafe argument log: %s", &out)
+		}
+		if !strings.Contains(out.String(), "Arguments:") {
+			t.Fatal("argument log missing")
+		}
+	}
+	out.Reset()
+	LogArgs(map[string]any{"name": "[Important] ordinary text", "password": secret})
+	if !strings.Contains(out.String(), "[Important] ordinary text") || !strings.Contains(out.String(), "FAKE***") || strings.Contains(out.String(), secret) {
+		t.Fatalf("argument preview regressed: %s", &out)
+	}
+}
+
 func TestLogRequestOmitsOpaqueBody(t *testing.T) {
 	t.Cleanup(ResetLoggerForTest)
 	ResetLoggerForTest()

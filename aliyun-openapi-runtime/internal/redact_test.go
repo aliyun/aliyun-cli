@@ -316,6 +316,59 @@ func TestMaskBodyTopLevelArrayPreservesNumbers(t *testing.T) {
 	}
 }
 
+func TestMaskBodyPreservesOrdinaryScalarText(t *testing.T) {
+	for _, text := range []string{
+		"[Important] ordinary text", "[输入文档内容]", "{placeholder}", "${user}",
+		`"quoted" ordinary text`, "[2026 report]", "[name]", "{YourContent}",
+		"[base64 encode content]", "{base64}", "{resourceId}", "{regionId}", "{appName}",
+		`""，"hive"等`, `"标题示例“`, `"消息内容示例“`, "\u200b00000001\n\n",
+		"\"0\" ：parent folder is root\n\"4b648f6d11344f258df876cbdc24dc1f\" ： folderId",
+	} {
+		body, _ := json.Marshal(map[string]string{"message": text, "name": "visible"})
+		if got := MaskBodyFull(string(body)); got != string(body) {
+			t.Errorf("ordinary JSON scalar changed: got %q, want %q", got, body)
+		}
+		form := "message=" + url.QueryEscape(text) + "&name=visible"
+		if got := MaskBodyFull(form); got != form {
+			t.Errorf("ordinary form scalar changed: got %q, want %q", got, form)
+		}
+	}
+}
+
+func TestLooksLikeJSONDocument(t *testing.T) {
+	for _, value := range []string{"", "visible", "[Important] text", "[2026 report]", "{YourContent}", `"quoted" ordinary text`} {
+		if looksLikeJSONDocument(value) {
+			t.Errorf("ordinary scalar classified as JSON: %q", value)
+		}
+	}
+	for _, value := range []string{"{", "[", "{}", "[]", "[1,2]", "{password=secret}", `{"password":`, `[{"password":`, `["secret`, `[1,`, `[true,`, `[null,`, `[1`, `"secret`, `"visible"`} {
+		if !looksLikeJSONDocument(value) {
+			t.Errorf("serialized document not recognized: %q", value)
+		}
+	}
+}
+
+func TestMaskEmbeddedJSONFailsClosed(t *testing.T) {
+	const secret = "FAKE_QA_ARGUMENT_PASSWORD_20261104"
+	for _, value := range []string{
+		`{"password":"` + secret + `",`,
+		`[{"password":"` + secret + `"}`,
+		`[1,{"password":"` + secret + `"}`,
+		`[true,{"password":"` + secret + `"}`,
+		`[null,{"password":"` + secret + `"}`,
+		`{password:` + secret + `}`,
+		`[password=` + secret + `]`,
+		"\ufeff{\"password\":\"" + secret + "\"}",
+		"\u200b<Password>" + secret + "</Password>",
+		`{"password":"` + secret + `","password":""}`,
+	} {
+		want := fmt.Sprintf("<opaque body omitted: %d bytes>", len(value))
+		if got := MaskKV("name", value); got != want {
+			t.Errorf("unsafe scalar output: got %q, want %q", got, want)
+		}
+	}
+}
+
 func TestMaskBodyUnicodePrefixes(t *testing.T) {
 	const secret = "FAKE_SECRET_20261103"
 	for _, prefix := range []string{"\ufeff", "\u200b", "\u200c", "\u200d", "\u2060", "\u202e", " \t\ufeff"} {

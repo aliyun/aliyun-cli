@@ -236,22 +236,10 @@ func LogArgs(args map[string]any) {
 		Debug("Arguments: (empty)")
 		return
 	}
-	masked := make(map[string]any, len(args))
-	for k, v := range args {
-		if redact.IsSensitive(k) {
-			if s, ok := v.(string); ok {
-				masked[k] = redact.MaskValue(s)
-			} else {
-				masked[k] = "***"
-			}
-			continue
-		}
-		masked[k] = v
-	}
-	if b, err := json.Marshal(masked); err == nil {
-		Debug("Arguments: %s", string(b))
+	if b, err := json.Marshal(args); err == nil {
+		Debug("Arguments: %s", redact.MaskBodyFull(string(b)))
 	} else {
-		Debug("Arguments: (error marshaling: %v)", err)
+		Debug("Arguments: (error marshaling; opaque arguments omitted)")
 	}
 }
 

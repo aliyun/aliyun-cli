@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -96,6 +100,55 @@ func TestBtripDryRunJSONFormBody(t *testing.T) {
 	}
 }
 
+func TestCSArgumentsLogDoesNotLeakNestedPassword(t *testing.T) {
+	clearAgentDetectionEnv(t)
+	t.Setenv("ALIBABA_CLOUD_CLI_PLUGINS_DIR", t.TempDir())
+	t.Setenv("ALIBABA_CLOUD_CLI_PLUGIN_AUTO_INSTALL", "false")
+	const secret = "FAKE_QA_ARGUMENT_PASSWORD_20261104"
+	value := `{"password":"` + secret + `",`
+	captured := make(chan []byte, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		captured <- body
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+	t.Setenv("HTTP_PROXY", server.URL)
+	t.Setenv("HTTPS_PROXY", server.URL)
+	t.Setenv("NO_PROXY", "")
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":"fake-id","access_key_secret":"fake-key-secret","region_id":"cn-hangzhou","language":"en"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	args := []string{"cs", "create-cluster", "--api-version", "2015-12-15", "--biz-region-id", "cn-hangzhou", "--name", value, "--config-path", configPath, "--profile", "default", "--region", "cn-hangzhou", "--endpoint", "capture.invalid", "--insecure", "--log-level", "DEBUG"}
+	cmd := exec.Command("go", append([]string{"run", "."}, args...)...)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, "GOROOT=") {
+			cmd.Env = append(cmd.Env, entry)
+		}
+	}
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("CLI failed: %v; stderr=%s", err, &stderr)
+	}
+	if strings.Contains(stdout.String()+stderr.String(), secret) || !strings.Contains(stderr.String(), "Arguments:") || !strings.Contains(stderr.String(), "opaque body omitted") {
+		t.Fatalf("unsafe argument output: stdout=%s stderr=%s", &stdout, &stderr)
+	}
+	want, _ := json.Marshal(map[string]string{"name": value, "region_id": "cn-hangzhou"})
+	select {
+	case body := <-captured:
+		if !bytes.Equal(body, want) {
+			t.Fatalf("wire body changed: got %q, want %q", body, want)
+		}
+	default:
+		t.Fatal("local request was not captured")
+	}
+}
+
 func TestCSDryRunOmitsBOMXMLBodyFile(t *testing.T) {
 	clearAgentDetectionEnv(t)
 	t.Setenv("ALIBABA_CLOUD_CLI_PLUGINS_DIR", t.TempDir())
@@ -108,6 +161,9 @@ func TestCSDryRunOmitsBOMXMLBodyFile(t *testing.T) {
 		{"nested BOM form", "payload=%EF%BB%BF%7B%22password%22%3A%22" + secret + "%22%7D", ""},
 		{"sensitive JSON prefix", `{"password":"[` + secret + `","name":"visible"}`, `{"name":"visible","password":"[FAK***"}`},
 		{"sensitive form prefix", "password=%5B" + secret + "&name=visible", "password=[FAK***&name=visible"},
+		{"ordinary scalar", `{"message":"[Important] ordinary text","name":"visible"}`, `{"message":"[Important] ordinary text","name":"visible"}`},
+		{"ordinary placeholder", `{"message":"{YourContent}","name":"visible"}`, `{"message":"{YourContent}","name":"visible"}`},
+		{"ordinary template", `{"message":"${user}","name":"visible"}`, `{"message":"${user}","name":"visible"}`},
 	} {
 		body := []byte(tc.body)
 		for _, route := range []struct {
