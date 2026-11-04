@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -22,6 +23,16 @@ func addPluginSourceBaseFlag(cmd *cli.Command) {
 			"仅本次命令覆盖插件源根地址（例如 https://example.com/plugins）"),
 		AssignedMode: cli.AssignedOnce,
 		DefaultValue: "",
+	})
+}
+
+func addSkipSignatureVerifyFlag(cmd *cli.Command) {
+	cmd.Flags().Add(&cli.Flag{
+		Name: "skip-signature-verify",
+		Short: i18n.T(
+			"Skip signature verification for this custom plugin source or package",
+			"本次跳过自定义插件源或安装包的签名校验"),
+		AssignedMode: cli.AssignedNone,
 	})
 }
 
@@ -43,6 +54,9 @@ func newManagerWithOptionalSourceBase(ctx *cli.Context) (*Manager, error) {
 	}
 	if f := ctx.Flags().Get("prefer-go"); f != nil && f.IsAssigned() {
 		mgr.preferGo = true
+	}
+	if f := ctx.Flags().Get("skip-signature-verify"); f != nil && f.IsAssigned() {
+		mgr.skipSignatureVerify = true
 	}
 	f := ctx.Flags().Get("source-base")
 	if f == nil || !f.IsAssigned() {
@@ -103,12 +117,17 @@ func newListCommand() *cli.Command {
 			sort.Strings(names)
 
 			w := tabwriter.NewWriter(ctx.Stdout(), 20, 0, 3, ' ', 0)
-			fmt.Fprintln(w, "Name\tVersion\tDescription")
-			fmt.Fprintln(w, "----\t-------\t-----------")
+			fmt.Fprintln(w, "Name\tVersion\tTrust\tIndex Version\tDescription")
+			fmt.Fprintln(w, "----\t-------\t-----\t-------------\t-----------")
 
 			for _, name := range names {
 				p := manifest.Plugins[name]
-				fmt.Fprintf(w, "%s\t%s\t%s\n", p.Name, p.Version, p.Description)
+				trustStatus, indexVersion := "unverified", "-"
+				if p.TrustVerification != nil {
+					trustStatus = "verified"
+					indexVersion = fmt.Sprintf("%d", p.TrustVerification.IndexVersion)
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", p.Name, p.Version, trustStatus, indexVersion, p.Description)
 			}
 			w.Flush()
 			return nil
@@ -141,6 +160,7 @@ func newListRemoteCommand() *cli.Command {
 		},
 	}
 	addPluginSourceBaseFlag(cmd)
+	addSkipSignatureVerifyFlag(cmd)
 	return cmd
 }
 
@@ -154,6 +174,7 @@ func newSearchCommand() *cli.Command {
 		},
 	}
 	addPluginSourceBaseFlag(cmd)
+	addSkipSignatureVerifyFlag(cmd)
 	return cmd
 }
 
@@ -256,6 +277,15 @@ func displayInstalledPluginDetails(ctx *cli.Context, canonicalName string, p *Lo
 	if p.Inner {
 		fmt.Fprintf(out, "Inner:\t%v\n", p.Inner)
 	}
+	if verification := p.TrustVerification; verification != nil {
+		fmt.Fprintf(out, "Trust:\tverified\n")
+		fmt.Fprintf(out, "Trust key IDs:\t%s\n", strings.Join(verification.KeyIDs, ", "))
+		fmt.Fprintf(out, "Trust index version:\t%d\n", verification.IndexVersion)
+		fmt.Fprintf(out, "Trust checksum:\t%s\n", verification.Checksum)
+		fmt.Fprintf(out, "Trust verified at:\t%s\n", verification.VerifiedAt.UTC().Format(time.RFC3339))
+	} else {
+		fmt.Fprintf(out, "Trust:\tunverified\n")
+	}
 	return nil
 }
 
@@ -352,6 +382,7 @@ func newInstallCommand() *cli.Command {
 
 	addPreferGoFlag(cmd)
 	addPluginSourceBaseFlag(cmd)
+	addSkipSignatureVerifyFlag(cmd)
 	return cmd
 }
 
@@ -384,6 +415,7 @@ func newInstallAllCommand() *cli.Command {
 
 	addPreferGoFlag(cmd)
 	addPluginSourceBaseFlag(cmd)
+	addSkipSignatureVerifyFlag(cmd)
 	return cmd
 }
 
@@ -415,6 +447,7 @@ func newInstallCustomCommand() *cli.Command {
 	})
 
 	addPluginSourceBaseFlag(cmd)
+	addSkipSignatureVerifyFlag(cmd)
 	return cmd
 }
 
@@ -495,6 +528,7 @@ func newUpdateCommand() *cli.Command {
 
 	addPreferGoFlag(cmd)
 	addPluginSourceBaseFlag(cmd)
+	addSkipSignatureVerifyFlag(cmd)
 	return cmd
 }
 
@@ -572,6 +606,14 @@ func executeInstall(ctx *cli.Context, names []string, pkgRef, version string, en
 	}
 
 	if strings.TrimSpace(pkgRef) != "" {
+		lowerRef := strings.ToLower(strings.TrimSpace(pkgRef))
+		isRemote := strings.HasPrefix(lowerRef, "http://") ||
+			strings.HasPrefix(lowerRef, "https://")
+		if isRemote {
+			if f := ctx.Flags().Get("skip-signature-verify"); f == nil || !f.IsAssigned() {
+				return fmt.Errorf("remote --package URL requires --skip-signature-verify")
+			}
+		}
 		mgr.expectedPackageChecksum = strings.TrimSpace(checksum)
 		return mgr.InstallFromPackage(ctx, pkgRef)
 	}
