@@ -31,9 +31,11 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cliext/acrutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/agentbay"
 	"github.com/aliyun/aliyun-cli/v3/cliext/appmanagerutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/bl"
 	"github.com/aliyun/aliyun-cli/v3/cliext/cms2"
 	"github.com/aliyun/aliyun-cli/v3/cliext/codeup"
 	"github.com/aliyun/aliyun-cli/v3/cliext/computenestutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/dgate"
 	"github.com/aliyun/aliyun-cli/v3/cliext/ecctl"
 	"github.com/aliyun/aliyun-cli/v3/cliext/esacli"
 	"github.com/aliyun/aliyun-cli/v3/cliext/flowcli"
@@ -57,6 +59,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
@@ -69,6 +72,11 @@ var (
 func Main(args []string) {
 	stdout := newStdoutWriter()
 	stderr := newStderrWriter()
+
+	if len(args) > 0 && args[0] == "__telemetry-upload" {
+		exit(telemetry.RunUploadCommand(args[1:]))
+		return
+	}
 
 	if sysmock.FirstCommandToken(args) != "mock" {
 		result := sysmock.Intercept(sysmock.Options{
@@ -118,6 +126,18 @@ func Main(args []string) {
 	// use http force, current use in oss bridge
 	insecure, _ := ParseInSecure(args)
 	ctx.SetInsecure(insecure)
+
+	rootCmd.AfterExecute = telemetry.HookEnd
+	cli.SetBeforeExit(telemetry.EndWithExitCode)
+	plugin.SetBeforePluginExit(telemetry.EndWithExitCode)
+	configDir := config.GetConfigPath()
+	telemetry.Begin(telemetry.BeginInput{
+		ConfigDir:   configDir,
+		Context:     ctx,
+		CommandArgs: args,
+		AuthMode:    string(profile.Mode),
+		AIMode:      startupAIMode(args),
+	})
 
 	if os.Getenv("GENERATE_METADATA") == "YES" {
 		generateMetadata(rootCmd)
@@ -202,6 +222,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	addExtension(ossutil.NewOssutilCommand())
 	// AgentBay command
 	addExtension(agentbay.NewAgentBayCommand())
+	// Alibaba Cloud Model Studio command
+	addExtension(bl.NewBlCommand())
 	// tablestore command
 	addExtension(otsutil.NewOtsutilCommand())
 	// EMR Serverless spark-submit command
@@ -212,6 +234,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	addExtension(lindormcli.NewLindormCliCommand())
 	// mseutil command
 	addExtension(mseutil.NewMseutilCommand())
+	// dgate command（类型 C：不注入 AK/SK，只桥接官方二进制）
+	addExtension(dgate.NewDgateCommand())
 	// acr command
 	addExtension(acrutil.NewAcrutilCommand())
 	// codeup command
@@ -244,6 +268,7 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(mock.NewMockCommand(config.GetConfigPath))
 	commando.SetRootHelpSpecs(rootCommandHelpSpecs, rootFlagHelpSpecs)
 
+	telemetry.RegisterCLIExtensions(extensions)
 	cliext.AttachSafetyPolicy(rootCmd, extensions)
 
 	plugin.RegisterReservedTopLevelCommands(rootCmd.SubCommandNames())
@@ -394,10 +419,12 @@ var rootCommandHelpSpecs = []openapi.RootCommandSpec{
 	{Path: []string{"oss"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"ossutil"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"agentbay"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"bl"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"otsutil"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"kmscli"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"lindorm"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"mseutil"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"dgate"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"acrutil"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"codeup-cli"}, Group: openapi.RootGroupExtension},
 	{Path: []string{"saectl"}, Group: openapi.RootGroupExtension},
@@ -481,8 +508,9 @@ func newRootHelpInput(root *cli.Command, catalog *canonicalmeta.ProductsIndex) (
 	return openapi.BuildRootHelpInput(root, catalog, rootCommandHelpSpecs, rootFlagHelpSpecs)
 }
 
-// Resolve AI mode without loading the broken credential configuration or
-// executing a command. Respect flag values and the positional terminator.
+// Resolve AI mode from the original invocation before command routing strips
+// global flags. Also used for startup errors without loading credential config.
+// Respect flag values and the positional terminator.
 func startupAIMode(args []string) bool {
 	flags := cli.NewFlagSet()
 	config.AddFlags(flags)
@@ -494,7 +522,7 @@ func startupAIMode(args []string) bool {
 		if arg == "--" {
 			break
 		}
-		name, value, inline := strings.Cut(arg, "=")
+		name, value, inline := cli.SplitStringWithPrefix(arg, "=:")
 		if !strings.HasPrefix(name, "-") {
 			continue
 		}
@@ -505,7 +533,7 @@ func startupAIMode(args []string) bool {
 		if flag == nil {
 			continue
 		}
-		if flag.AssignedMode != cli.AssignedNone && !inline && i+1 < len(args) {
+		if flag.AssignedMode != cli.AssignedNone && (!inline || value == "") && i+1 < len(args) {
 			i++
 			value = args[i]
 		}

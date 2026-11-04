@@ -118,10 +118,7 @@ func (c *Commando) processOssEstimateCost(ctx *cli.Context, apiName string) erro
 	if err != nil {
 		return err
 	}
-	if err := printEstimateCostResult(ctx, out); err != nil {
-		return err
-	}
-	return estimateCostBusinessError(out)
+	return finishEstimateCost(ctx, out)
 }
 
 // buildOssEstimateCostParameters collects OpenAPI parameters from the
@@ -185,8 +182,5 @@ func EstimateOssCost(ctx *cli.Context, apiName string, parameters map[string]int
 	if err != nil {
 		return err
 	}
-	if err := printEstimateCostResult(ctx, out); err != nil {
-		return err
-	}
-	return estimateCostBusinessError(out)
+	return finishEstimateCost(ctx, out)
 }
