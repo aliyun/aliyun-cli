@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/assetmanifest"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
@@ -67,17 +68,20 @@ type Context struct {
 	execFilePath string
 	installed    bool
 
-	configPath  func() string
-	goos        func() string
-	goarch      func() string
-	command     func(string, ...string) *exec.Cmd
-	environ     func() []string
-	getwd       func() (string, error)
-	loadProfile func(*cli.Context) (config.Profile, error)
-	httpClient  *http.Client
-	releaseURL  string
-	now         func() time.Time
-	rename      func(string, string) error
+	configPath   func() string
+	goos         func() string
+	goarch       func() string
+	command      func(string, ...string) *exec.Cmd
+	environ      func() []string
+	getwd        func() (string, error)
+	loadProfile  func(*cli.Context) (config.Profile, error)
+	httpClient   *http.Client
+	releaseURL   string
+	now          func() time.Time
+	rename       func(string, string) error
+	assets       *assetmanifest.Client
+	manifest     *assetmanifest.VerifiedManifest
+	versionLocal string
 }
 
 type ExitError struct {
@@ -106,6 +110,7 @@ func NewContext(originCtx *cli.Context) *Context {
 		releaseURL:  releaseBase,
 		now:         time.Now,
 		rename:      os.Rename,
+		assets:      assetmanifest.NewClient(),
 	}
 }
 
@@ -308,6 +313,7 @@ func (c *Context) EnsureBinary() error {
 	if c.installed {
 		current, err = c.installedVersion()
 	}
+	c.versionLocal = current
 	if err == nil {
 		var asset releaseAsset
 		asset, err = c.resolveAsset(platform)
@@ -409,6 +415,11 @@ func validDigest(value string) bool {
 }
 
 func (c *Context) resolveAsset(platform string) (releaseAsset, error) {
+	verified, err := c.assets.Fetch()
+	if err != nil {
+		return releaseAsset{}, err
+	}
+	c.manifest = verified
 	data, err := c.fetch("/manifest.json", metadataLimit)
 	if err != nil {
 		return releaseAsset{}, err
@@ -431,7 +442,23 @@ func (c *Context) resolveAsset(platform string) (releaseAsset, error) {
 		return asset, fmt.Errorf("invalid bl manifest asset for %s", platform)
 	}
 	asset.Version = manifest.Version
+	entry, err := c.authorizeAsset(asset, platform)
+	if err != nil {
+		return releaseAsset{}, err
+	}
+	if !strings.EqualFold(entry.SHA256, asset.SHA256) {
+		return releaseAsset{}, fmt.Errorf("bl manifest checksum disagrees with signed asset")
+	}
 	return asset, nil
+}
+
+func (c *Context) authorizeAsset(asset releaseAsset, platform string) (assetmanifest.Entry, error) {
+	return c.manifest.Authorize(assetmanifest.Request{
+		Product: "bl", Purpose: assetmanifest.Purpose, Version: asset.Version,
+		Platform: platform, Asset: asset.File,
+		URL:            c.releaseURL + "/v" + asset.Version + "/" + asset.File,
+		CurrentVersion: c.versionLocal,
+	}, filepath.Join(c.prefixPath, ".asset-manifest-state.json"))
 }
 
 func readBounded(r io.Reader, limit int64) ([]byte, error) {
@@ -458,13 +485,40 @@ func (c *Context) fetch(path string, limit int64) ([]byte, error) {
 }
 
 func (c *Context) installAsset(asset releaseAsset) error {
-	data, err := c.fetch("/v"+asset.Version+"/"+asset.File, binaryLimit)
+	platform, err := c.platform()
 	if err != nil {
 		return err
 	}
-	digest := sha256.Sum256(data)
-	if !strings.EqualFold(hex.EncodeToString(digest[:]), asset.SHA256) {
-		return fmt.Errorf("SHA256 mismatch for %s", asset.File)
+	if !numericVersion.MatchString(asset.Version) {
+		return fmt.Errorf("invalid bl asset version")
+	}
+	expected := expectedAsset(asset.Version, platform)
+	if asset.File != expected.File || asset.Inner != expected.Inner {
+		return fmt.Errorf("invalid bl asset identity")
+	}
+	c.manifest, err = c.assets.Fetch()
+	if err != nil {
+		return err
+	}
+	if err := c.checkManagedPaths(); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(c.prefixPath, 0755); err != nil {
+		return err
+	}
+	entry, err := c.authorizeAsset(asset, platform)
+	if err != nil {
+		return err
+	}
+	if entry.Size > binaryLimit || !strings.EqualFold(entry.SHA256, asset.SHA256) {
+		return fmt.Errorf("bl asset disagrees with signed checksum or size limit")
+	}
+	data, err := c.fetch("/v"+asset.Version+"/"+asset.File, entry.Size)
+	if err != nil {
+		return err
+	}
+	if err := assetmanifest.VerifyContent(entry, bytes.NewReader(data)); err != nil {
+		return err
 	}
 	archive, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
@@ -473,14 +527,14 @@ func (c *Context) installAsset(asset releaseAsset) error {
 	if len(archive.File) != 1 {
 		return fmt.Errorf("bl ZIP must contain exactly one root executable")
 	}
-	entry := archive.File[0]
-	if entry.Name != asset.Inner || strings.ContainsAny(entry.Name, `/\`) || !entry.Mode().IsRegular() {
-		return fmt.Errorf("unsafe bl ZIP entry %q", entry.Name)
+	archiveEntry := archive.File[0]
+	if archiveEntry.Name != asset.Inner || strings.ContainsAny(archiveEntry.Name, `/\`) || !archiveEntry.Mode().IsRegular() {
+		return fmt.Errorf("unsafe bl ZIP entry %q", archiveEntry.Name)
 	}
-	if entry.UncompressedSize64 > binaryLimit {
+	if archiveEntry.UncompressedSize64 > binaryLimit {
 		return fmt.Errorf("bl executable exceeds %d bytes", binaryLimit)
 	}
-	r, err := entry.Open()
+	r, err := archiveEntry.Open()
 	if err != nil {
 		return err
 	}
@@ -509,6 +563,9 @@ func (c *Context) installAsset(asset releaseAsset) error {
 	}
 	if closeErr != nil {
 		return closeErr
+	}
+	if _, err := c.authorizeAsset(asset, platform); err != nil {
+		return err
 	}
 	return c.replaceExecutable(f.Name())
 }

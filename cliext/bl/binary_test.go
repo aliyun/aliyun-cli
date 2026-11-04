@@ -101,6 +101,7 @@ func releaseServer(t *testing.T, c *Context, a releaseAsset, payload []byte, pat
 	t.Cleanup(s.Close)
 	c.releaseURL, c.httpClient = s.URL, s.Client()
 	c.httpClient.Timeout = time.Second
+	signedManifestServer(t, c, a, payload)
 }
 
 func installOld(t *testing.T, c *Context, version string) {
@@ -245,6 +246,7 @@ func TestBinaryConcurrentFirstInstall(t *testing.T) {
 	}))
 	defer s.Close()
 	c.releaseURL, c.httpClient = s.URL, s.Client()
+	signedManifestServer(t, c, a, payload)
 	result := make(chan error, 1)
 	go func() { result <- c.EnsureBinary() }()
 	<-started
@@ -324,7 +326,9 @@ func TestBinaryManifestValidation(t *testing.T) {
 			if bad == "file" || bad == "inner" || bad == "hash" || bad == "traversal" {
 				m["assets"] = map[string]releaseAsset{binaryPlatform(t, c): a}
 			}
+			productRequests := 0
 			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				productRequests++
 				if r.URL.Path != "/manifest.json" {
 					t.Error("download before validation")
 					_, _ = w.Write(payload)
@@ -338,8 +342,15 @@ func TestBinaryManifestValidation(t *testing.T) {
 			}))
 			defer s.Close()
 			c.releaseURL = s.URL
+			// Authenticate a valid publisher entry so malformed product metadata
+			// reaches its original validation boundary rather than failing early.
+			valid, _ := assetFixture(t, "2.6.2", binaryPlatform(t, c))
+			signedManifestServer(t, c, valid, payload)
 			if err := c.EnsureBinary(); err == nil {
 				t.Fatal("invalid manifest accepted")
+			}
+			if productRequests != 1 {
+				t.Fatalf("product validation not reached: %d", productRequests)
 			}
 		})
 	}
@@ -446,6 +457,7 @@ func TestBinaryUpdateFailureContinuesInstalled(t *testing.T) {
 				}))
 				defer s.Close()
 				c.releaseURL = s.URL
+				signedManifestServer(t, c, a, payload)
 			} else {
 				releaseServer(t, c, a, payload, nil)
 			}
@@ -713,8 +725,10 @@ func TestBinaryManifestPlatformAssets(t *testing.T) {
 	}
 	c, _ := binaryContext(t)
 	c.releaseURL = "http://127.0.0.1:1"
-	if _, err := c.resolveAsset("linux-x64"); err == nil {
-		t.Fatal("failed manifest fetch ignored")
+	a, payload := assetFixture(t, "2.6.2", binaryPlatform(t, c))
+	signedManifestServer(t, c, a, payload)
+	if _, err := c.resolveAsset(binaryPlatform(t, c)); err == nil || !strings.Contains(err.Error(), "127.0.0.1:1") {
+		t.Fatalf("original product manifest fetch failure not reached: %v", err)
 	}
 }
 
@@ -760,6 +774,8 @@ func TestBinaryTimeoutAndProductionMetadataBounds(t *testing.T) {
 		}))
 		defer s.Close()
 		c.releaseURL = s.URL
+		a, payload := assetFixture(t, "2.6.2", binaryPlatform(t, c))
+		signedManifestServer(t, c, a, payload)
 		if err := c.EnsureBinary(); err == nil || !strings.Contains(err.Error(), "exceeds") {
 			t.Fatalf("oversized metadata = %v", err)
 		}
@@ -822,8 +838,10 @@ func TestBinaryRunReturnsPreparationAndInstallationErrors(t *testing.T) {
 		t.Fatal("missing flag accepted")
 	}
 	c.releaseURL = "http://127.0.0.1:1"
-	if err := c.Run([]string{"help"}); err == nil {
-		t.Fatal("first install failure not returned")
+	a, payload := assetFixture(t, "2.6.2", binaryPlatform(t, c))
+	signedManifestServer(t, c, a, payload)
+	if err := c.Run([]string{"help"}); err == nil || !strings.Contains(err.Error(), "127.0.0.1:1") {
+		t.Fatalf("original first-install failure not returned: %v", err)
 	}
 	t.Setenv(execPathEnv, filepath.Join(t.TempDir(), "missing"))
 	if err := c.Run([]string{"help"}); err == nil {
@@ -921,6 +939,7 @@ func TestBinaryManagedPathsChangedBeforeLock(t *testing.T) {
 func TestBinaryInstallRevalidatesManagedPathsAfterDownload(t *testing.T) {
 	c, _ := binaryContext(t)
 	a, payload := assetFixture(t, "2.6.2", binaryPlatform(t, c))
+	signedManifestServer(t, c, a, payload)
 	c.httpClient.Transport = binaryRoundTripper(func(*http.Request) (*http.Response, error) {
 		if err := os.MkdirAll(c.execFilePath, 0755); err != nil {
 			t.Fatal(err)
