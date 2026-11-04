@@ -341,6 +341,10 @@ func TestRunWriteFailure(t *testing.T) {
 		signal.Ignore(syscall.Signal(25))
 		args := []string{"--input", os.Getenv(marker + "_INPUT"), "--output-dir", os.Getenv(marker + "_OUTPUT"), "--secret-key-file", os.Getenv(marker + "_KEY")}
 		err := run(args, io.Discard, io.Discard)
+		// Restore the soft limit before the test runtime writes its coverage metadata.
+		if restoreErr := restoreWriteFailureLimit(); restoreErr != nil {
+			t.Fatal(restoreErr)
+		}
 		assertSafeError(t, err, "", "", "write temporary file")
 		assertOutputNames(t, args[3], []string{})
 		return
@@ -362,7 +366,7 @@ func TestRunWriteFailure(t *testing.T) {
 	}
 	// A separate test process keeps the limit and signal policy isolated;
 	// it runs the existing test binary, not a Go command or production key.
-	cmd := exec.Command("sh", "-c", `ulimit -f 1 || exit 3; exec "$@"`, "sh", executable, "-test.run=^TestRunWriteFailure$")
+	cmd := exec.Command("sh", "-c", `ulimit -S -f 1 || exit 3; exec "$@"`, "sh", executable, "-test.run=^TestRunWriteFailure$")
 	cmd.Env = append(os.Environ(), marker+"=1", marker+"_INPUT="+input, marker+"_KEY="+key, marker+"_OUTPUT="+output)
 	if result, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("write failure child: %v\n%s", err, result)
