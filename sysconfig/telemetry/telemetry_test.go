@@ -36,19 +36,6 @@ func TestTelemetryEnvironmentDisabled(t *testing.T) {
 	}
 }
 
-func TestExtractParamNames(t *testing.T) {
-	got := ExtractParamNames([]string{"rdc", "list", "--region-id", "x", "--output=json", "-q"})
-	want := []string{"--region-id", "--output", "-q"}
-	if len(got) != len(want) {
-		t.Fatalf("got %v want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("got %v want %v", got, want)
-		}
-	}
-}
-
 func TestBuildEventKeepsDeepPluginCommandHierarchy(t *testing.T) {
 	event, err := BuildEvent(BuildInput{
 		Scope: Scope{Active: true, Pipeline: PipelinePublic,

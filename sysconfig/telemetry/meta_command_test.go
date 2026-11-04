@@ -36,7 +36,7 @@ func TestMetaCommandUsesOnlyCurrentResolution(t *testing.T) {
 			require.Equal(t, want, event.Command)
 			require.Equal(t, CommandTypePluginMeta, event.CommandType)
 			require.Equal(t, "Failure", event.Result)
-			require.Equal(t, []string{"--Tag", "--Tag"}, event.Params)
+			require.Empty(t, event.Params, "command resolution alone does not confirm parameter names")
 			for _, payload := range []any{event, newUploadEvent(event)} {
 				data, err := json.Marshal(payload)
 				require.NoError(t, err)

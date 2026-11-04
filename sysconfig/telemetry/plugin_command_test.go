@@ -19,25 +19,24 @@ func TestGoPluginCommandUsesConfirmedPaths(t *testing.T) {
 				name    string
 				args    []string
 				command string
-				params  []string
 			}{
-				{"reported example", []string{"demo", "list", "--tag", "1", "2", "--vvv", "r"}, "demo list", []string{"--tag", "--vvv"}},
-				{"multiple values", []string{"demo", "List", "--tag", "private-sentinel-one", "private-sentinel-two", "--vvv", "private-sentinel-three"}, "demo List", []string{"--tag", "--vvv"}},
-				{"repeated flag", []string{"demo", "List", "--tag", "private-sentinel-one", "--tag", "private-sentinel-two", "--vvv", "private-sentinel-three"}, "demo List", []string{"--tag", "--tag", "--vvv"}},
-				{"mixed case and repeated inline flags", []string{"demo", "List", "--Tag=private-sentinel-one", "--tag:private-sentinel-two", "--Tag=private-sentinel-three", "-t=private-sentinel-four", "-t:private-sentinel-five"}, "demo List", []string{"--Tag", "--tag", "--Tag", "-t", "-t"}},
-				{"inline multiple values", []string{"demo", "Resource", "List", "--tag=private-sentinel-one", "private-sentinel-two", "--vvv:private-sentinel-three"}, "demo Resource List", []string{"--tag", "--vvv"}},
-				{"flag before subcommand", []string{"demo", "Resource", "--tag", "private-sentinel-one", "private-sentinel-two", "List"}, "demo Resource", []string{"--tag"}},
-				{"short flag multiple values", []string{"demo", "List", "-t", "private-sentinel-one", "private-sentinel-two", "--vvv", "private-sentinel-three"}, "demo List", []string{"-t", "--vvv"}},
-				{"end of options", []string{"demo", "Resource", "List", "--", "private-sentinel-one", "--private-sentinel-flag"}, "demo Resource List", nil},
-				{"root flag", []string{"demo", "--tag", "private-sentinel-one", "List"}, "demo", []string{"--tag"}},
-				{"hierarchy without flags", []string{"demo", "Resource", "Policy", "List"}, "demo Resource Policy List", nil},
-				{"malformed upload with path", []string{"demo", "upload", "/private-sentinel/customer.csv"}, "demo upload", nil},
-				{"malformed upload with scalar", []string{"demo", "upload", "private-sentinel-customer"}, "demo upload", nil},
-				{"unrecognized command", []string{"demo", "private-sentinel", "Resource", "List"}, "demo", nil},
-				{"unrecognized nested command", []string{"demo", "Resource", "private-sentinel", "Policy", "List"}, "demo Resource", nil},
-				{"intermediate group", []string{"demo", "Resource", "Policy"}, "demo Resource Policy", nil},
-				{"registered product alias", []string{"DemoAlias", "Resource", "Policy", "List", "private-sentinel"}, "DemoAlias Resource Policy List", nil},
-				{"root only", []string{"demo"}, "demo", nil},
+				{"reported example", []string{"demo", "list", "--tag", "1", "2", "--vvv", "r"}, "demo list"},
+				{"multiple values", []string{"demo", "List", "--tag", "private-sentinel-one", "private-sentinel-two", "--vvv", "private-sentinel-three"}, "demo List"},
+				{"repeated flag", []string{"demo", "List", "--tag", "private-sentinel-one", "--tag", "private-sentinel-two", "--vvv", "private-sentinel-three"}, "demo List"},
+				{"mixed case and repeated inline flags", []string{"demo", "List", "--Tag=private-sentinel-one", "--tag:private-sentinel-two", "--Tag=private-sentinel-three", "-t=private-sentinel-four", "-t:private-sentinel-five"}, "demo List"},
+				{"inline multiple values", []string{"demo", "Resource", "List", "--tag=private-sentinel-one", "private-sentinel-two", "--vvv:private-sentinel-three"}, "demo Resource List"},
+				{"flag before subcommand", []string{"demo", "Resource", "--tag", "private-sentinel-one", "private-sentinel-two", "List"}, "demo Resource"},
+				{"short flag multiple values", []string{"demo", "List", "-t", "private-sentinel-one", "private-sentinel-two", "--vvv", "private-sentinel-three"}, "demo List"},
+				{"end of options", []string{"demo", "Resource", "List", "--", "private-sentinel-one", "--private-sentinel-flag"}, "demo Resource List"},
+				{"root flag", []string{"demo", "--tag", "private-sentinel-one", "List"}, "demo"},
+				{"hierarchy without flags", []string{"demo", "Resource", "Policy", "List"}, "demo Resource Policy List"},
+				{"malformed upload with path", []string{"demo", "upload", "/private-sentinel/customer.csv"}, "demo upload"},
+				{"malformed upload with scalar", []string{"demo", "upload", "private-sentinel-customer"}, "demo upload"},
+				{"unrecognized command", []string{"demo", "private-sentinel", "Resource", "List"}, "demo"},
+				{"unrecognized nested command", []string{"demo", "Resource", "private-sentinel", "Policy", "List"}, "demo Resource"},
+				{"intermediate group", []string{"demo", "Resource", "Policy"}, "demo Resource Policy"},
+				{"registered product alias", []string{"DemoAlias", "Resource", "Policy", "List", "private-sentinel"}, "DemoAlias Resource Policy List"},
+				{"root only", []string{"demo"}, "demo"},
 			} {
 				t.Run(test.name, func(t *testing.T) {
 					event, err := BuildEvent(BuildInput{
@@ -50,14 +49,10 @@ func TestGoPluginCommandUsesConfirmedPaths(t *testing.T) {
 					})
 					require.NoError(t, err)
 					require.Equal(t, test.command, event.Command)
-					require.Equal(t, test.params, event.Params)
+					require.Empty(t, event.Params, "manifest command paths do not confirm plugin flags")
 					uploaded := newUploadEvent(event)
 					require.Equal(t, test.command, uploaded.Attributes["command"])
-					if len(test.params) == 0 {
-						require.NotContains(t, uploaded.Attributes, "parameterNames")
-					} else {
-						require.Equal(t, test.params, uploaded.Attributes["parameterNames"])
-					}
+					require.NotContains(t, uploaded.Attributes, "parameterNames")
 					for _, payload := range []any{event, uploaded} {
 						encoded, err := json.Marshal(payload)
 						require.NoError(t, err)

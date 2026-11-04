@@ -91,7 +91,9 @@ type BuildInput struct {
 	Scope    Scope
 	RootArgs []string
 	// CommandPath contains only registered names selected by the host parser.
-	CommandPath           []string
+	CommandPath []string
+	// ParameterNames contains only names confirmed by the executing parser.
+	ParameterNames        []string
 	InstanceID            string
 	DurationMs            int64
 	Err                   error
@@ -212,7 +214,7 @@ func BuildEvent(in BuildInput) (Event, error) {
 		Pipeline:              in.Scope.Pipeline,
 		CommandType:           detectCommandTypeForScope(in.RootArgs, in.Scope),
 		Command:               command,
-		Params:                ExtractParamNames(in.RootArgs),
+		Params:                append([]string(nil), in.ParameterNames...),
 		Result:                classifyResult(in.Err, in.ExitCode),
 		LocalErrorCode:        localErrorCode,
 		APIErrorCode:          apiErrorCode,

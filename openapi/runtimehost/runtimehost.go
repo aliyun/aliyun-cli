@@ -321,6 +321,7 @@ func Dispatch(ctx *cli.Context, rawArgs []string) error {
 		Host:              host,
 		AIMode:            aiModeEnabled,
 		OnCommandResolved: telemetry.SetResolvedMetaCommand,
+		OnParameterNames:  telemetry.SetRuntimeParameterNames,
 	})
 }
 
@@ -440,6 +441,7 @@ func runtimeHelpRequest(ctx *cli.Context, rawArgs, args []string) engine.Request
 		Lang:              lang,
 		AIMode:            helpAIMode(ctx, rawArgs),
 		OnCommandResolved: telemetry.SetResolvedMetaCommand,
+		OnParameterNames:  telemetry.SetRuntimeParameterNames,
 	}
 }
 

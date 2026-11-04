@@ -82,7 +82,11 @@ func TestSelectedPluginRouteRefreshesFirstInstallation(t *testing.T) {
 			require.Equal(t, test.pipeline, event.Pipeline)
 			require.Equal(t, "aliyun-cli-routefixture@1.2.3", event.Plugin)
 			require.Equal(t, "RouteFixture list-items", event.Command)
-			require.Equal(t, []string{"--Tag", "--Tag"}, event.Params)
+			if test.commandType == CommandTypePluginGo {
+				require.Equal(t, []string{"--Tag", "--Tag"}, event.Params)
+			} else {
+				require.Empty(t, event.Params, "metadata plugins require a parser snapshot")
+			}
 			if test.pluginType == plugin.PluginTypeMeta {
 				require.Equal(t, "9.8.7", event.OpenAPIRuntimeVersion)
 			} else {

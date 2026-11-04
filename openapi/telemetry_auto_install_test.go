@@ -178,7 +178,11 @@ func TestTelemetryFirstAutoInstalledPluginUsesSelectedRoute(t *testing.T) {
 			require.Equal(t, pipeline, event.Pipeline)
 			require.Equal(t, pluginName+"@1.2.3", event.Plugin)
 			require.Equal(t, strings.Join(args, " "), event.Command)
-			require.Equal(t, []string{"--private-input"}, event.Params)
+			if test.pluginType == plugin.PluginTypeGo {
+				require.Equal(t, []string{"--private-input"}, event.Params)
+			} else {
+				require.Empty(t, event.Params, "a metadata route requires a parser snapshot")
+			}
 			require.NotContains(t, string(data), "private-value-sentinel")
 			require.NotContains(t, string(data), "private-tail-sentinel")
 			require.NoDirExists(t, telemetry.GetCacheDir(configDir, otherPipeline))

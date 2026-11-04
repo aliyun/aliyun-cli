@@ -56,6 +56,12 @@ func (*ExternalFlagRejectError) LocalErrorCode() string { return "INVALID_FLAG" 
 // ParseOptions carries host-specific parser extensions for one invocation.
 type ParseOptions struct {
 	ExternalFlags []ExternalFlagSpec
+	// OnParameterNames receives one snapshot when parsing finishes, including
+	// when parsing fails. It contains only names confirmed against the API,
+	// runtime, or host flag definitions, in argv order with aliases and repeated
+	// occurrences preserved. Values and unknown names are never included.
+	// The observer owns its slice; a panic in it does not affect parsing.
+	OnParameterNames func([]string)
 }
 
 type externalFlagIndex struct {

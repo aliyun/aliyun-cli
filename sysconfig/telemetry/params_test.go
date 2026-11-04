@@ -11,59 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExtractParamNamesExcludesValues(t *testing.T) {
-	for _, test := range []struct {
-		name string
-		args []string
-		want []string
-	}{
-		{
-			"inline separators",
-			[]string{"ecs", "DescribeRegions", "--access-key-id:private-key", "--profile:private-profile", "--body={\"private\":true}", "--path:C:\\private\\file", "-q:private-query"},
-			[]string{"--access-key-id", "--profile", "--body", "--path", "-q"},
-		},
-		{
-			"separate values and duplicate flags",
-			[]string{"ecs", "DescribeRegions", "--name", "private-name", "--name", "another-private-name", "--Tags.1.Key", "private-tag", "--output=json", "--region-id:cn-private"},
-			[]string{"--name", "--name", "--Tags.1.Key", "--output", "--region-id"},
-		},
-		{
-			"dash leading values",
-			[]string{"ecs", "DescribeRegions", "--count", "-123", "--offset", "-1.25", "--body", "-private-body", "--cert", "-----BEGIN PRIVATE KEY-----", "--region-id=cn-test"},
-			[]string{"--count", "--offset", "--body", "--cert", "--region-id"},
-		},
-		{
-			"ambiguous short value is omitted",
-			[]string{"ecs", "DescribeRegions", "--body", "-x", "--output=json", "-q"},
-			[]string{"--body", "--output", "-q"},
-		},
-		{
-			"empty inline assignment still consumes a value",
-			[]string{"ecs", "DescribeRegions", "--body=", "-x", "--name:", "-y", "--output=json"},
-			[]string{"--body", "--name", "--output"},
-		},
-		{
-			"invalid flag forms",
-			[]string{"plugin-entry", "-private", "-123", "---certificate", "--/private/path", "--private body", "--{private:body}", "--valid"},
-			[]string{"--valid"},
-		},
-		{
-			"consecutive long flags are names",
-			[]string{"plugin-entry", "resource", "list", "--debug", "--verbose", "--output=json"},
-			[]string{"--debug", "--verbose", "--output"},
-		},
-		{
-			"end of options",
-			[]string{"plugin-entry", "--valid=ok", "--", "--private-business-content", "-x"},
-			[]string{"--valid"},
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			require.Equal(t, test.want, ExtractParamNames(test.args))
-		})
-	}
-}
-
 func TestCommandPartsDoNotPromotePositionalBusinessValues(t *testing.T) {
 	previousExtensions := cliExtensions
 	RegisterCLIExtensions(map[string]bool{"test-extension": true, "ossutil": true})
@@ -208,7 +155,7 @@ func TestBuildEventForInstalledPluginPreservesProtocolWithoutValues(t *testing.T
 	uploaded := newUploadEvent(event)
 	require.Equal(t, "private-plugin Resource Policy List", uploaded.Attributes["command"])
 	require.Equal(t, CommandTypePluginGo, uploaded.Attributes["commandType"])
-	require.Equal(t, []string{"--path", "--body", "--secret", "--debug", "--verbose"}, uploaded.Attributes["parameterNames"])
+	require.NotContains(t, uploaded.Attributes, "parameterNames", "plugin argv alone does not confirm parameter names")
 	data, err = json.Marshal(uploaded)
 	require.NoError(t, err)
 	for _, sensitive := range []string{"/private/customer.json", "private business body", "private-secret"} {

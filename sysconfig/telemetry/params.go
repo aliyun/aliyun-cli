@@ -73,25 +73,48 @@ func telemetryFlagDefinition(token string, flags *cli.FlagSet) *cli.Flag {
 	return nil
 }
 
-// ExtractParamNames preserves the order, case, and repetitions of recognized
-// option names while omitting their values.
-func ExtractParamNames(args []string) []string {
+func executionParameterNames(execution *activeCommandExecution) []string {
+	names := execution.parameterNames
+	commandType := detectCommandTypeForScope(execution.rootArgs, execution.scope)
+	// An installed Go plugin is only a candidate until dispatch selects it.
+	// Native OpenAPI calls can fail parsing before that decision is reached.
+	inferToolNames := !execution.runtimeParametersSet &&
+		(execution.scope.CommandType == CommandTypePluginGo || commandType == CommandTypeCLIExt)
+	if inferToolNames {
+		names = inferToolParameterNames(execution.rootArgs)
+	}
+	if execution.context != nil {
+		limit := -1
+		if execution.runtimeParametersSet || inferToolNames {
+			// The runtime snapshot or tool inference covers the product's tail.
+			// Keep only already parsed host flags preceding it to avoid duplicates.
+			limit = execution.commandArgOffset
+		}
+		names = append(execution.context.ParsedFlagNames(limit), names...)
+	}
+	return names
+}
+
+// inferToolParameterNames is best-effort observation for Go plugins and CLI
+// extensions whose parameter definitions are unavailable to the host. It cannot
+// distinguish every dash-leading business value from an option. Never use it
+// as a fallback for commands with an authoritative parser or API definition.
+func inferToolParameterNames(args []string) []string {
 	var names []string
 	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			break // Plugins may use a conventional end-of-options delimiter.
+		if args[i] == "--" {
+			break
 		}
-		name, inline := telemetryFlagName(arg)
+		name, inline := inferredToolFlagName(args[i])
 		if name == "" {
 			continue
 		}
 		names = append(names, name)
 		if !inline && i+1 < len(args) {
-			// Without the command's flag definitions, a short dash-leading
-			// token can be a value. Prefer omitting it over exposing a value.
-			nextName, _ := telemetryFlagName(args[i+1])
-			if args[i+1] != "--" && !strings.HasPrefix(nextName, "--") {
+			// Short dash-leading tokens can also be values. Prefer omitting
+			// an ambiguous token immediately following a value-taking option.
+			next, _ := inferredToolFlagName(args[i+1])
+			if args[i+1] != "--" && !strings.HasPrefix(next, "--") {
 				i++
 			}
 		}
@@ -99,22 +122,16 @@ func ExtractParamNames(args []string) []string {
 	return names
 }
 
-func telemetryFlagName(arg string) (string, bool) {
-	name := arg
-	inline := false
-	if separator := strings.IndexAny(name, "=:"); separator >= 0 {
-		// The CLI keeps waiting for a value after an empty "=" or ":".
-		inline = separator+1 < len(name)
-		name = name[:separator]
-	}
+func inferredToolFlagName(token string) (string, bool) {
+	name, value, separated := cli.SplitStringWithPrefix(token, "=:")
+	inline := separated && value != ""
 	if strings.HasPrefix(name, "---") {
-		return "", false // The CLI parser treats certificate-like tokens as values.
+		return "", false
 	}
-	if strings.HasPrefix(name, "--") {
-		if safeTelemetryIdentifier(name[2:], true) {
-			return name, inline
-		}
-	} else if len(name) == 2 && name[0] == '-' && asciiLetter(name[1]) {
+	if strings.HasPrefix(name, "--") && safeTelemetryIdentifier(name[2:], true) {
+		return name, inline
+	}
+	if len(name) == 2 && name[0] == '-' && asciiLetter(name[1]) {
 		return name, inline
 	}
 	return "", false

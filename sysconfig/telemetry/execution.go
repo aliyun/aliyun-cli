@@ -44,6 +44,9 @@ type activeCommandExecution struct {
 	authModeSource        string
 	pluginAction          *PluginManagementEvent
 	openAPIRuntimeVersion string
+	parameterNames        []string
+	runtimeParametersSet  bool
+	commandArgOffset      int
 }
 
 var activeExecution *activeCommandExecution
@@ -123,6 +126,18 @@ func SetOpenAPIRuntimeVersion(version string) {
 	activeExecution.openAPIRuntimeVersion = version
 }
 
+// SetRuntimeParameterNames replaces this invocation's runtime snapshot with
+// names confirmed by its real parser, including names before a parse failure.
+// Replacing rather than appending also avoids counting a Help parse twice.
+func SetRuntimeParameterNames(names []string) {
+	defer recoverCollectionPanic()
+	if activeExecution == nil || executionEnded {
+		return
+	}
+	activeExecution.parameterNames = append([]string(nil), names...)
+	activeExecution.runtimeParametersSet = true
+}
+
 // SetResolvedMetaCommand observes an API already resolved for this invocation's
 // selected version, or an explicitly recognized built-in metadata command. It
 // performs no metadata lookup and never interprets trailing invocation values.
@@ -154,6 +169,8 @@ func SetPluginRoute(local *plugin.LocalPlugin) {
 	activeExecution.scope = scope
 	// An actual metadata-runtime dispatch marks its version separately.
 	activeExecution.openAPIRuntimeVersion = ""
+	activeExecution.parameterNames = nil
+	activeExecution.runtimeParametersSet = false
 }
 
 // SetOpenAPILegacyRoute replaces a pre-routing plugin candidate when the host
@@ -166,6 +183,8 @@ func SetOpenAPILegacyRoute() {
 	activeExecution.scope = scopeFromLocalPlugin(activeExecution.scope.CommandToken, nil)
 	activeExecution.scope.CommandType = CommandTypeOpenAPILegacy
 	activeExecution.openAPIRuntimeVersion = ""
+	activeExecution.parameterNames = nil
+	activeExecution.runtimeParametersSet = false
 }
 
 // SetAuthenticationMode records the mode selected by an active configure
@@ -236,9 +255,12 @@ func Begin(in BeginInput) {
 	resetExecutionState()
 	writeDiagnostic(in.ConfigDir, diagnosticRecord{Stage: "collection", Status: "started"})
 	var flags *cli.FlagSet
+	commandArgOffset := 0
 	if in.Context != nil {
 		flags = in.Context.Flags()
+		originalLength := len(in.CommandArgs)
 		in.CommandArgs = stripLeadingTelemetryFlags(in.CommandArgs, flags)
+		commandArgOffset = originalLength - len(in.CommandArgs)
 		in.CommandToken = ""
 		if len(in.CommandArgs) > 0 {
 			in.CommandToken = in.CommandArgs[0]
@@ -268,6 +290,7 @@ func Begin(in BeginInput) {
 	}
 	beginCommandExecution(in.ConfigDir, scope, in.CommandArgs, in.AIMode)
 	activeExecution.context = in.Context
+	activeExecution.commandArgOffset = commandArgOffset
 	SetEffectiveAuthenticationMode(in.AuthMode)
 	writeDiagnostic(in.ConfigDir, diagnosticRecord{Stage: "collection", Status: "succeeded", Pipeline: scope.Pipeline})
 }
@@ -337,6 +360,7 @@ func flush(exitCode *int, err error) {
 		Scope:                 execution.scope,
 		RootArgs:              execution.rootArgs,
 		CommandPath:           commandPath,
+		ParameterNames:        executionParameterNames(execution),
 		InstanceID:            instanceID,
 		DurationMs:            commandExecutionDurationMs(execution),
 		Err:                   err,

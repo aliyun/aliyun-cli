@@ -129,6 +129,10 @@ type Request struct {
 	// It receives no parameter tokens and is called at most once per entry point.
 	// Product Help and unresolved commands do not invoke it.
 	OnCommandResolved func(product, command string)
+	// OnParameterNames observes only option names confirmed by the parser for
+	// this call, including on parsing failure. Original spelling, order, and
+	// repetitions are preserved; option values are never included.
+	OnParameterNames func([]string)
 }
 
 func (req *Request) notifyCommandResolved() {
@@ -203,7 +207,8 @@ func (e *Engine) ProductHelp(req Request) error {
 		return errors.New("product is required")
 	}
 	parsed, err := argparser.ParseWithOptions(nil, req.Args[1:], argparser.ParseOptions{
-		ExternalFlags: e.externalFlags,
+		ExternalFlags:    e.externalFlags,
+		OnParameterNames: req.OnParameterNames,
 	})
 	if err != nil {
 		return &UsageError{Code: "INVALID_ARGUMENT", Err: err}
@@ -247,7 +252,8 @@ func (e *Engine) APIHelp(req Request) error {
 		return parameterErr
 	}
 	parsed, err := argparser.ParseWithOptions(api.Parameters, req.Args[2:], argparser.ParseOptions{
-		ExternalFlags: e.externalFlags,
+		ExternalFlags:    e.externalFlags,
+		OnParameterNames: req.OnParameterNames,
 	})
 	if err != nil {
 		return &UsageError{Code: "INVALID_ARGUMENT", Err: err}
@@ -293,7 +299,8 @@ func (e *Engine) Dispatch(req Request) error {
 		return parameterErr
 	}
 	res, err := argparser.ParseWithOptions(api.Parameters, args[2:], argparser.ParseOptions{
-		ExternalFlags: e.externalFlags,
+		ExternalFlags:    e.externalFlags,
+		OnParameterNames: req.OnParameterNames,
 	})
 	if err != nil {
 		var ufe *argparser.UnknownFlagError
@@ -369,7 +376,8 @@ func (e *Engine) dispatchBuiltin(req Request, ldr loader.Loader, product, comman
 	}
 	req.notifyCommandResolved()
 	res, err := argparser.ParseWithOptions(nil, req.Args[2:], argparser.ParseOptions{
-		ExternalFlags: e.externalFlags,
+		ExternalFlags:    e.externalFlags,
+		OnParameterNames: req.OnParameterNames,
 	})
 	if err != nil {
 		return true, &UsageError{Code: "INVALID_ARGUMENT", Err: err}

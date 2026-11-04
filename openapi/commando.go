@@ -1773,6 +1773,7 @@ func (c *Commando) CheckApiParamWithBuildInArgs(ctx *cli.Context, api *canonical
 	if api == nil {
 		return
 	}
+	ctx.SetParsedFlagValidator(legacyParameterFlagValidator(api))
 	for _, p := range api.LegacyTopLevelParameters() {
 		// 如果参数中包含了known参数，且 known参数已经被赋值，则将 known 参数拷贝给 unknown 参数
 		if ep, ok := ctx.Flags().GetValue(p.LegacyName()); ok {

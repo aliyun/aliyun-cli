@@ -19,8 +19,11 @@ import (
 
 const telemetryMetaCommandProduct = "telemetrymetafixture"
 
-func telemetryMetaCommandFixture(t *testing.T, corruptAPI bool) string {
+func telemetryMetaCommandFixture(t *testing.T, corruptAPI bool, parameters ...schema.ArgumentDefinition) string {
 	t.Helper()
+	if parameters == nil {
+		parameters = []schema.ArgumentDefinition{{Name: "name", RawName: "Name", Type: "string", Location: "Query", Options: []string{"--name"}}}
+	}
 	pluginsDir := t.TempDir()
 	const packageName = "aliyun-cli-telemetrymetafixture"
 	packageDir := filepath.Join(pluginsDir, packageName)
@@ -47,7 +50,7 @@ func telemetryMetaCommandFixture(t *testing.T, corruptAPI bool) string {
 		definition := schema.CommandDefinition{
 			Name: api.name, CmdName: api.command,
 			Operation:  &schema.OperationConfig{Action: api.name, APIVersion: api.version, Method: "POST", APIStyle: "RPC", Protocol: "HTTPS"},
-			Parameters: []schema.ArgumentDefinition{{Name: "name", RawName: "Name", Type: "string", Location: "Query", Options: []string{"--name"}}},
+			Parameters: parameters,
 		}
 		raw, err := json.Marshal(definition)
 		require.NoError(t, err)
