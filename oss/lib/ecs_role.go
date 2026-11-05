@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
@@ -127,7 +128,7 @@ func (roleBuild *EcsRoleAKBuild) HttpReqAk() (STSAkJson, error) {
 		Timeout: 15 * time.Second,
 	}
 
-	resp, err := c.Get(roleBuild.url)
+	resp, err := cloudendpoint.Get(c, roleBuild.url)
 	if err != nil {
 		LogError("insight getAK,http client get error,url is %s,%s\n", roleBuild.url, err.Error())
 		return akJson, err

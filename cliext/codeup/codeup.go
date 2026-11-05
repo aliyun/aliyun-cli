@@ -15,6 +15,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 type Context struct {
@@ -128,7 +129,7 @@ func (c *Context) Install() error {
 }
 
 func DownloadAndExtract(url string, destFile string, exeFilePath string) error {
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := cloudendpoint.NewRequest("GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request for %s: %v", url, err)
 	}
@@ -333,7 +334,7 @@ func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
 }
 
 func (c *Context) ExecuteCodeupCli(args []string) error {
-	cmd := execCommandFunc(c.execFilePath, args...)
+	cmd := execCommandFunc(c.execFilePath, cloudendpoint.WithSuffixArgs(args)...)
 	cmd.Stdout = c.originCtx.Stdout()
 	cmd.Stderr = c.originCtx.Stderr()
 	cmd.Stdin = os.Stdin

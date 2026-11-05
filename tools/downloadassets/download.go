@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli/publishsig"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 const (
@@ -206,7 +207,7 @@ func downloadFile(ctx context.Context, client *http.Client, assetURL, token, des
 	reqCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, assetURL, nil)
+	req, err := cloudendpoint.NewRequestWithContext(reqCtx, http.MethodGet, assetURL, nil)
 	if err != nil {
 		return err
 	}

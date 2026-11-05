@@ -33,6 +33,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
+	"github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
 	runtime "github.com/aliyun/aliyun-openapi-runtime/runtime"
 
@@ -1130,7 +1131,8 @@ func effectiveDryRunRegion(ctx *cli.Context, profile *config.Profile) string {
 	return ""
 }
 
-func dryRunOpenapiEndpoint(ctx *cli.Context, o *OpenapiContext) string {
+func dryRunOpenapiEndpoint(ctx *cli.Context, o *OpenapiContext) (resolved string) {
+	defer func() { resolved = endpoint.WithSuffix(resolved) }()
 	h := o.HttpContext
 	if h.openapiRequest != nil && h.openapiRequest.EndpointOverride != nil {
 		if v := *h.openapiRequest.EndpointOverride; v != "" {

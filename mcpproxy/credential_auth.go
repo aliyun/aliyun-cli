@@ -26,6 +26,7 @@ import (
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
 	"github.com/alibabacloud-go/tea/dara"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 const credentialRefreshSkew = 60 * time.Second
@@ -109,6 +110,9 @@ func (c credentialHTTPClient) Call(request *http.Request, _ *http.Transport) (*h
 }
 
 func (a *credentialAuth) exchange(startedAt time.Time) (string, time.Time, error) {
+	if err := cloudendpoint.Validate(); err != nil {
+		return "", time.Time{}, err
+	}
 	endpoint, clientID := "ramoauth.aliyuncs.com", "4071151845732613353"
 	switch a.region {
 	case RegionCN:
@@ -117,6 +121,7 @@ func (a *credentialAuth) exchange(startedAt time.Time) (string, time.Time, error
 	default:
 		return "", time.Time{}, fmt.Errorf("unsupported MCP credential authentication region")
 	}
+	endpoint = cloudendpoint.WithSuffix(endpoint)
 	if a.source == nil {
 		return "", time.Time{}, fmt.Errorf("MCP credential source is not configured")
 	}
