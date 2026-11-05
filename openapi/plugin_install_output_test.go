@@ -59,6 +59,7 @@ func TestCommandPluginInstallOutput(t *testing.T) {
 				mgr, err := plugin.NewManager()
 				require.NoError(t, err)
 				require.NoError(t, mgr.ApplySourceBaseOverride(baseURL))
+				mgr.AllowUnsignedFallback()
 				var stdout, stderr bytes.Buffer
 				ctx := cli.NewCommandContext(&stdout, &stderr)
 				command := NewCommando(&stdout, config.Profile{Language: "en"})

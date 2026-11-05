@@ -24,7 +24,8 @@ type machineHelpRepository interface {
 }
 
 type machineHelpService struct {
-	repository machineHelpRepository
+	repository        machineHelpRepository
+	onCommandResolved func(product, command string)
 }
 
 type machineHelpErrorBody struct {
@@ -822,6 +823,9 @@ func (s *machineHelpService) resolveAPI(code, command, requestedVersion string) 
 	api, err := s.repository.GetAPI(product.Code, selected, apiName)
 	if err != nil {
 		return nil, err
+	}
+	if api != nil && s.onCommandResolved != nil {
+		s.onCommandResolved(code, command)
 	}
 	return &resolvedMachineHelpAPI{
 		Product:  *product,
