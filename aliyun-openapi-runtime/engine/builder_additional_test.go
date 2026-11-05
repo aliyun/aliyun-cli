@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -518,9 +519,9 @@ func TestDryRunPreservesLongBodyAndRedaction(t *testing.T) {
 		{
 			"xml",
 			"<Name>" + text + "</Name><Password>" + secret + "</Password>",
-			"<Name>" + text + "</Name><Password>" + secret + "</Password>",
+			"",
 		},
-		{"raw", "name: " + text + "\npassword: " + secret, "name: " + text + "\npassword: " + secret},
+		{"raw", "name: " + text + "\npassword: " + secret, ""},
 		{
 			"json",
 			`{"content":"` + text + `","password":"` + secret + `"}`,
@@ -528,6 +529,9 @@ func TestDryRunPreservesLongBodyAndRedaction(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.want == "" {
+				tc.want = fmt.Sprintf("<opaque body omitted: %d bytes>", len(tc.body))
+			}
 			for _, body := range []any{tc.body, []byte(tc.body)} {
 				value, _, err := dryRunBody(body, tc.name)
 				if err != nil || value != tc.want {
@@ -555,6 +559,51 @@ func TestDryRunPreservesLongBodyAndRedaction(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestDryRunOmitsOpaqueBody(t *testing.T) {
+	const secret = "FAKE_SECRET_20261103"
+	for i, body := range []string{
+		"password=" + secret + "&name=%zz",
+		"<Password>" + secret + "</Password>",
+		"\ufeff<Password>" + secret + "==</Password>",
+		"\u200b<Password>" + secret + "==</Password>",
+		`{"payload":"\ufeff{\"password\":\"` + secret + `\"}"}`,
+		"payload=%EF%BB%BF%7B%22password%22%3A%22" + secret + "%22%7D",
+		`{"password":"` + secret,
+		"password: " + secret,
+		strings.Repeat("x", 1600) + secret,
+		"\x00\xff" + secret,
+		`{"config":"{\"password\":\"` + secret + `"}`,
+		`{"password":"` + secret + `","password":""}`,
+	} {
+		for _, input := range []any{body, []byte(body)} {
+			for _, jsonOutput := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%d/%T/%t", i, input, jsonOutput), func(t *testing.T) {
+					req := &runtime.AssembledRequest{Body: input, ReqBodyType: "raw"}
+					var out bytes.Buffer
+					if err := renderDryRun(&out, "demo", req, jsonOutput, false); err != nil {
+						t.Fatal(err)
+					}
+					want := fmt.Sprintf("<opaque body omitted: %d bytes>", len(body))
+					if jsonOutput {
+						var decoded cliDryRunOutput
+						if err := json.Unmarshal(out.Bytes(), &decoded); err != nil || decoded.Body != want || decoded.BodyFormat != "raw" {
+							t.Fatalf("body=%q format=%q error=%v", decoded.Body, decoded.BodyFormat, err)
+						}
+					} else if !strings.Contains(out.String(), want) {
+						t.Fatalf("omission marker missing: %s", &out)
+					}
+					if strings.Contains(out.String(), secret) || !reflect.DeepEqual(input, req.Body) {
+						t.Fatal("secret leaked or request body changed")
+					}
+					if data, ok := req.Body.([]byte); ok && string(data) != body {
+						t.Fatal("request bytes changed")
+					}
+				})
+			}
+		}
 	}
 }
 
@@ -735,15 +784,16 @@ func TestBuilderErrorAndRenderBranches(t *testing.T) {
 
 func TestDryRunExplicitBodyFormats(t *testing.T) {
 	const body = `<Request><Name>visible</Name><Password>FAKE_SECRET_123</Password></Request>`
+	want := fmt.Sprintf("<opaque body omitted: %d bytes>", len(body))
 	for _, tc := range []struct {
 		name string
 		req  runtime.AssembledRequest
 		want string
 	}{
-		{"XML", runtime.AssembledRequest{Headers: map[string]string{"Content-Type": "application/xml"}}, body},
-		{"binary", runtime.AssembledRequest{ReqBodyType: "binary"}, body},
-		{"declared binary", runtime.AssembledRequest{ReqBodyType: "json", DeclaredReqBodyType: "byte"}, body},
-		{"header", runtime.AssembledRequest{Headers: map[string]string{"cOnTeNt-TyPe": "application/octet-stream"}}, body},
+		{"XML", runtime.AssembledRequest{Headers: map[string]string{"Content-Type": "application/xml"}}, want},
+		{"binary", runtime.AssembledRequest{ReqBodyType: "binary"}, want},
+		{"declared binary", runtime.AssembledRequest{ReqBodyType: "json", DeclaredReqBodyType: "byte"}, want},
+		{"header", runtime.AssembledRequest{Headers: map[string]string{"cOnTeNt-TyPe": "application/octet-stream"}}, want},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.req.Body = []byte(body)

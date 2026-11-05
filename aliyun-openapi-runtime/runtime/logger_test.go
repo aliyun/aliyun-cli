@@ -16,6 +16,8 @@ package runtime
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -207,6 +209,158 @@ func TestLogArgsMasksAndHandlesMarshalFailure(t *testing.T) {
 	}
 }
 
+func TestLogArgsRedactsNestedValuesWithoutMutation(t *testing.T) {
+	t.Cleanup(ResetLoggerForTest)
+	ResetLoggerForTest()
+	InitLogger("DEBUG", false)
+	var out bytes.Buffer
+	SetLoggerOutputForTest(&out)
+	const secret = "FAKE_QA_ARGUMENT_PASSWORD_20261104"
+	quoted, _ := json.Marshal(`{"password":"` + secret + `","name":"visible"}`)
+	for _, value := range []any{
+		"<Password>" + secret + "</Password>",
+		`"note" {"password":"` + secret + `"}`,
+		string(quoted) + " trailing",
+		`{"password":"` + secret + `","name":"visible"}`,
+		`{"password":"` + secret + `",`,
+		"\ufeff{\"password\":\"" + secret + "\"}",
+		map[string]any{"password": secret, "name": "visible"},
+		[]any{map[string]any{"password": secret}},
+		json.RawMessage(`{"password":"` + secret + `","password":""}`),
+	} {
+		out.Reset()
+		args := map[string]any{"name": value, "region": "cn-hangzhou"}
+		before, _ := json.Marshal(args)
+		LogArgs(args)
+		after, _ := json.Marshal(args)
+		if strings.Contains(out.String(), secret) || !bytes.Equal(before, after) {
+			t.Fatalf("unsafe argument log: %s", &out)
+		}
+		if !strings.Contains(out.String(), "Arguments:") {
+			t.Fatal("argument log missing")
+		}
+	}
+	for _, value := range []string{"[Important] ordinary text", "[INFO] status: ready", "[docs](https://example.invalid/guide)", "<10", "<=10", "<1e309", "<= -1e309", "<1e9999"} {
+		out.Reset()
+		LogArgs(map[string]any{"name": value, "password": secret})
+		encoded, _ := json.Marshal(value)
+		if !strings.Contains(out.String(), string(encoded)) || !strings.Contains(out.String(), "FAKE***") || strings.Contains(out.String(), secret) {
+			t.Fatalf("argument preview regressed: %s", &out)
+		}
+	}
+}
+
+func TestLogRequestPreservesNumericComparisons(t *testing.T) {
+	t.Cleanup(ResetLoggerForTest)
+	ResetLoggerForTest()
+	InitLogger("DEBUG", false)
+	var out bytes.Buffer
+	SetLoggerOutputForTest(&out)
+	for _, value := range []string{"<10", "<=10", "<1e309", "<= -1e309", "<1e9999"} {
+		for _, body := range []any{
+			map[string]any{"message": value, "name": "visible"},
+			`{"message":"` + value + `","name":"visible"}`,
+		} {
+			out.Reset()
+			before, _ := json.Marshal(body)
+			req := &AssembledRequest{Body: body}
+			LogRequest(req)
+			after, _ := json.Marshal(req.Body)
+			if strings.Contains(out.String(), "opaque body omitted") || !strings.Contains(out.String(), "visible") || !bytes.Equal(before, after) {
+				t.Fatalf("ordinary body log regressed: %s", &out)
+			}
+		}
+	}
+}
+
+func TestLogRequestOmitsOpaqueBody(t *testing.T) {
+	t.Cleanup(ResetLoggerForTest)
+	ResetLoggerForTest()
+	InitLogger("DEBUG", false)
+	var out bytes.Buffer
+	SetLoggerOutputForTest(&out)
+	const secret = "FAKE_SECRET_20261103"
+	quoted, _ := json.Marshal(`{"password":"` + secret + `","name":"visible"}`)
+	trailingBody, _ := json.Marshal(map[string]string{"payload": string(quoted) + " trailing", "name": "visible"})
+	for _, body := range []any{
+		map[string]any{"payload": "<Password>" + secret + "</Password>", "name": "visible"},
+		map[string]any{"payload": `"note" {"password":"` + secret + `"}`, "name": "visible"},
+		string(trailingBody),
+		trailingBody,
+		map[string]any{"payload": string(quoted) + " trailing", "name": "visible"},
+		"password=" + secret + "&name=%zz",
+		"<Password>" + secret + "</Password>",
+		"\ufeff<Password>" + secret + "==</Password>",
+		[]byte("\ufeff<Password>" + secret + "==</Password>"),
+		"\u200b<Password>" + secret + "==</Password>",
+		[]byte("\u200b<Password>" + secret + "==</Password>"),
+		`{"payload":"\ufeff{\"password\":\"` + secret + `\"}"}`,
+		"payload=%EF%BB%BF%7B%22password%22%3A%22" + secret + "%22%7D",
+		map[string]any{"payload": "\ufeff{\"password\":\"" + secret + "\"}"},
+		`{"password":"` + secret,
+		"password: " + secret,
+		[]byte(strings.Repeat("x", 1600) + secret),
+		[]byte("\x00\xff" + secret),
+		json.RawMessage(`{"password":"` + secret + `","password":""}`),
+		map[string]any{"config": `{"password":"` + secret},
+		map[string]any{"config": []any{`{"password":"` + secret}},
+		map[string]any{"config": "\"" + secret},
+	} {
+		out.Reset()
+		var data []byte
+		switch value := body.(type) {
+		case string:
+			data = []byte(value)
+		case []byte:
+			data = append([]byte(nil), value...)
+		default:
+			data, _ = json.Marshal(value)
+		}
+		req := &AssembledRequest{Body: body}
+		LogRequest(req)
+		want := fmt.Sprintf("<opaque body omitted: %d bytes>", len(data))
+		if !strings.Contains(out.String(), want) || strings.Contains(out.String(), secret) {
+			t.Fatalf("unsafe request log for %T: %s", body, &out)
+		}
+		var after []byte
+		switch value := req.Body.(type) {
+		case string:
+			after = []byte(value)
+		case []byte:
+			after = value
+		default:
+			after, _ = json.Marshal(value)
+		}
+		if !bytes.Equal(data, after) {
+			t.Fatal("logging changed the request body")
+		}
+	}
+}
+
+func TestLogRequestPreservesSensitiveValuePreview(t *testing.T) {
+	t.Cleanup(ResetLoggerForTest)
+	ResetLoggerForTest()
+	InitLogger("DEBUG", false)
+	var out bytes.Buffer
+	SetLoggerOutputForTest(&out)
+	const secret = "FAKE_SECRET_20261103"
+	for _, body := range []any{
+		`{"password":"[` + secret + `","name":"visible"}`,
+		[]byte(`{"password":"[` + secret + `","name":"visible"}`),
+		"password=%5B" + secret + "&name=visible",
+		map[string]any{"password": "[" + secret, "name": "visible"},
+	} {
+		out.Reset()
+		before, _ := json.Marshal(body)
+		req := &AssembledRequest{Body: body}
+		LogRequest(req)
+		after, _ := json.Marshal(req.Body)
+		if strings.Contains(out.String(), secret) || !strings.Contains(out.String(), "visible") || !strings.Contains(out.String(), "[FAK***") || !bytes.Equal(before, after) {
+			t.Fatalf("unsafe or regressed log for %T: %s", body, &out)
+		}
+	}
+}
+
 func TestLogJSONRequestAndResponseBranches(t *testing.T) {
 	t.Cleanup(ResetLoggerForTest)
 	ResetLoggerForTest()
@@ -233,7 +387,7 @@ func TestLogJSONRequestAndResponseBranches(t *testing.T) {
 	logStringMap("Empty", nil)
 
 	out := buf.String()
-	for _, want := range []string{"Object:", "failed to marshal", "Body (bytes)", "Body:", "Response Body: (empty)", "fallback"} {
+	for _, want := range []string{"Object:", "failed to marshal", "Body (bytes)", "Body:", "Response Body: (empty)", "<opaque body omitted: 8 bytes>"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q:\n%s", want, out)
 		}

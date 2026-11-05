@@ -3,6 +3,7 @@ package openapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -210,9 +211,9 @@ func TestCliDryRunPreservesLongBodyAndRedaction(t *testing.T) {
 		{
 			"xml",
 			"<Name>" + text + "</Name><Password>" + secret + "</Password>",
-			"<Name>" + text + "</Name><Password>" + secret + "</Password>",
+			"",
 		},
-		{"raw", "name: " + text + "\npassword: " + secret, "name: " + text + "\npassword: " + secret},
+		{"raw", "name: " + text + "\npassword: " + secret, ""},
 		{
 			"json",
 			`{"content":"` + text + `","password":"` + secret + `"}`,
@@ -220,6 +221,9 @@ func TestCliDryRunPreservesLongBodyAndRedaction(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.want == "" {
+				tc.want = fmt.Sprintf("<opaque body omitted: %d bytes>", len(tc.body))
+			}
 			req := requests.NewCommonRequest()
 			req.SetContent([]byte(tc.body))
 			contentType := map[string]string{"form": "application/x-www-form-urlencoded", "json": "application/json", "xml": "application/xml"}[tc.name]
@@ -726,8 +730,8 @@ func TestProcessCliDryRunJson(t *testing.T) {
 
 func TestProcessCliDryRunRedactsFormBodyInStdoutAndStderr(t *testing.T) {
 	const secret = "FAKE_SECRET_123"
-	body := strings.Repeat("x", 1100) + "&password=" + secret
-	want := strings.Repeat("x", 1100) + "&password=FAKE***"
+	body := "name=" + strings.Repeat("x", 1100) + "&password=" + secret
+	want := "name=" + strings.Repeat("x", 1100) + "&password=FAKE***"
 
 	for _, jsonOutput := range []bool{false, true} {
 		name := "human"
@@ -767,6 +771,70 @@ func TestProcessCliDryRunRedactsFormBodyInStdoutAndStderr(t *testing.T) {
 			assert.Empty(t, stderr.String())
 			assert.Equal(t, body, string(req.Content), "dry-run must not mutate the request")
 		})
+	}
+}
+
+func TestProcessCliDryRunOmitsOpaqueBody(t *testing.T) {
+	const secret = "FAKE_SECRET_20261103"
+	for i, body := range []string{
+		"password=" + secret + "&name=%zz",
+		"<Password>" + secret + "</Password>",
+		"\ufeff<Password>" + secret + "==</Password>",
+		"\u200b<Password>" + secret + "==</Password>",
+		`{"payload":"\ufeff{\"password\":\"` + secret + `\"}"}`,
+		"payload=%EF%BB%BF%7B%22password%22%3A%22" + secret + "%22%7D",
+		`{"password":"` + secret,
+		"password: " + secret,
+		strings.Repeat("x", 1600) + secret,
+		"\x00\xff" + secret,
+		`{"config":"{\"password\":\"` + secret + `"}`,
+		`{"password":"` + secret + `","password":""}`,
+	} {
+		for _, jsonOutput := range []bool{false, true} {
+			for _, path := range []string{"invoker", "openapi string", "openapi bytes"} {
+				t.Run(fmt.Sprintf("%d/%t/%s", i, jsonOutput, path), func(t *testing.T) {
+					stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+					ctx := cli.NewCommandContext(stdout, stderr)
+					req := requests.NewCommonRequest()
+					req.SetContent([]byte(body))
+					stream := []byte(body)
+					var err error
+					if path == "invoker" {
+						invoker := &RestfulInvoker{BasicInvoker: &BasicInvoker{request: req}}
+						if jsonOutput {
+							err = processCliDryRunJson(ctx, invoker)
+						} else {
+							err = processCliDryRun(ctx, invoker)
+						}
+					} else {
+						var input any = body
+						if path == "openapi bytes" {
+							input = stream
+						}
+						oc := &OpenapiContext{HttpContext: &HttpContext{openapiRequest: &openapiutil.OpenApiRequest{Body: input}}}
+						if jsonOutput {
+							err = processCliDryRunOpenapiJson(ctx, oc)
+						} else {
+							err = processCliDryRunOpenapi(ctx, oc)
+						}
+					}
+					assert.NoError(t, err)
+					want := fmt.Sprintf("<opaque body omitted: %d bytes>", len(body))
+					if jsonOutput {
+						var decoded CliDryRunOutput
+						assert.NoError(t, json.Unmarshal(stdout.Bytes(), &decoded))
+						assert.Equal(t, want, decoded.Body)
+						assert.NotEmpty(t, decoded.BodyFormat)
+					} else {
+						assert.Contains(t, stdout.String(), want)
+					}
+					assert.NotContains(t, stdout.String(), secret)
+					assert.Empty(t, stderr.String())
+					assert.Equal(t, body, string(req.Content))
+					assert.Equal(t, body, string(stream))
+				})
+			}
+		}
 	}
 }
 
@@ -1405,10 +1473,11 @@ func newOpenapiParams(method, pathname, action, version string) *openapiClient.P
 
 func TestCliDryRunExplicitContentTypes(t *testing.T) {
 	const body = `<Name>visible</Name><Password>FAKE_SECRET_123</Password>`
+	want := fmt.Sprintf("<opaque body omitted: %d bytes>", len(body))
 	for _, tc := range []struct{ contentType, want string }{
-		{"application/xml", body},
-		{"application/octet-stream", body},
-		{"application/x-custom-format", body},
+		{"application/xml", want},
+		{"application/octet-stream", want},
+		{"application/x-custom-format", want},
 	} {
 		t.Run(tc.contentType, func(t *testing.T) {
 			req := requests.NewCommonRequest()
@@ -1421,12 +1490,14 @@ func TestCliDryRunExplicitContentTypes(t *testing.T) {
 			}
 			for _, out := range []*CliDryRunOutput{classic, buildCliDryRunFromOpenapi(oc)} {
 				assert.Equal(t, tc.want, out.Body)
-				assert.Contains(t, formatCliDryRunHuman(out), body)
+				assert.Contains(t, formatCliDryRunHuman(out), tc.want)
+				assert.NotContains(t, formatCliDryRunHuman(out), "FAKE_SECRET_123")
 				encoded, err := marshalCliDryRunOutput(out)
 				assert.NoError(t, err)
+				assert.NotContains(t, encoded, "FAKE_SECRET_123")
 				var decoded CliDryRunOutput
 				assert.NoError(t, json.Unmarshal([]byte(encoded), &decoded))
-				assert.Equal(t, body, decoded.Body)
+				assert.Equal(t, tc.want, decoded.Body)
 			}
 			assert.Equal(t, body, string(req.Content))
 			assert.Equal(t, body, string(oc.openapiRequest.Body.([]byte)))
@@ -1435,22 +1506,28 @@ func TestCliDryRunExplicitContentTypes(t *testing.T) {
 }
 
 func TestCliDryRunDetectsFormRegardlessOfContentType(t *testing.T) {
-	const body = `password=example-secret&note=hello%20world&ext_params={key=example-string}`
-	const want = `password=exam***&note=hello%20world&ext_params={key=example-string}`
-	for _, contentType := range []string{"", "application/json", "application/x-www-form-urlencoded", "application/octet-stream"} {
-		t.Run(contentType, func(t *testing.T) {
-			req := requests.NewCommonRequest()
-			req.Content = []byte(body)
-			req.Headers["Content-Type"] = contentType
-			classic := buildCliDryRunFromInvoker(&RestfulInvoker{BasicInvoker: &BasicInvoker{request: req}})
-			oc := &OpenapiContext{HttpContext: &HttpContext{
-				openapiRequest: &openapiutil.OpenApiRequest{Body: body, Headers: map[string]*string{"Content-Type": tea.String(contentType)}},
-				openapiParams:  &openapiClient.Params{ReqBodyType: tea.String("raw")},
-			}}
-			assert.Equal(t, want, classic.Body)
-			assert.Equal(t, want, buildCliDryRunFromOpenapi(oc).Body)
-			assert.Equal(t, body, string(req.Content))
-			assert.Equal(t, body, oc.openapiRequest.Body)
-		})
+	for _, tc := range []struct{ name, body, want string }{
+		{"valid", "password=example-secret&note=hello%20world&ext_params=visible", "password=exam***&note=hello%20world&ext_params=visible"},
+		{"malformed JSON value", "password=example-secret&note=hello%20world&ext_params={key=example-string}", ""},
+	} {
+		if tc.want == "" {
+			tc.want = fmt.Sprintf("<opaque body omitted: %d bytes>", len(tc.body))
+		}
+		for _, contentType := range []string{"", "application/json", "application/x-www-form-urlencoded", "application/octet-stream"} {
+			t.Run(tc.name+"/"+contentType, func(t *testing.T) {
+				req := requests.NewCommonRequest()
+				req.Content = []byte(tc.body)
+				req.Headers["Content-Type"] = contentType
+				classic := buildCliDryRunFromInvoker(&RestfulInvoker{BasicInvoker: &BasicInvoker{request: req}})
+				oc := &OpenapiContext{HttpContext: &HttpContext{
+					openapiRequest: &openapiutil.OpenApiRequest{Body: tc.body, Headers: map[string]*string{"Content-Type": tea.String(contentType)}},
+					openapiParams:  &openapiClient.Params{ReqBodyType: tea.String("raw")},
+				}}
+				assert.Equal(t, tc.want, classic.Body)
+				assert.Equal(t, tc.want, buildCliDryRunFromOpenapi(oc).Body)
+				assert.Equal(t, tc.body, string(req.Content))
+				assert.Equal(t, tc.body, oc.openapiRequest.Body)
+			})
+		}
 	}
 }
