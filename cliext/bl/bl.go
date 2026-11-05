@@ -21,6 +21,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli/assetmanifest"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 const (
@@ -456,7 +457,7 @@ func (c *Context) authorizeAsset(asset releaseAsset, platform string) (assetmani
 	return c.manifest.Authorize(assetmanifest.Request{
 		Product: "bl", Purpose: assetmanifest.Purpose, Version: asset.Version,
 		Platform: platform, Asset: asset.File,
-		URL:            c.releaseURL + "/v" + asset.Version + "/" + asset.File,
+		URL:            cloudendpoint.WithSuffix(c.releaseURL + "/v" + asset.Version + "/" + asset.File),
 		CurrentVersion: c.versionLocal,
 	}, filepath.Join(c.prefixPath, ".asset-manifest-state.json"))
 }
@@ -473,7 +474,7 @@ func readBounded(r io.Reader, limit int64) ([]byte, error) {
 }
 
 func (c *Context) fetch(path string, limit int64) ([]byte, error) {
-	resp, err := c.httpClient.Get(c.releaseURL + path)
+	resp, err := cloudendpoint.Get(c.httpClient, c.releaseURL+path)
 	if err != nil {
 		return nil, err
 	}

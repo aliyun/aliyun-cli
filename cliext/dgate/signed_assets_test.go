@@ -20,6 +20,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/assetmanifest"
 	"github.com/aliyun/aliyun-cli/v3/cli/publishsig"
+	"github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 type signedDgateFixture struct {
@@ -147,6 +148,70 @@ func TestMissingChecksumIsRejected(t *testing.T) {
 	}
 	if err := verifySHA256(s.URL+"/dgate.sha256", file); err == nil {
 		t.Fatal("missing checksum must reject newly downloaded content")
+	}
+}
+
+func TestSignedDgateEndpointSuffixAssetIdentity(t *testing.T) {
+	for _, rewritten := range []bool{true, false} {
+		t.Run(fmt.Sprintf("rewritten=%t", rewritten), func(t *testing.T) {
+			t.Setenv(endpoint.EnvSuffix, "aliyuncs.alibaba")
+			t.Setenv(downloadBaseEnv, "https://assets.oss.aliyuncs.com")
+			c, _ := signedDgateContext(t)
+			c.versionRemote, c.versionLocal, c.installed = "1.2.3", "1.2.2", true
+			if err := os.WriteFile(c.execFilePath, []byte("old executable"), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(c.versionFilePath, []byte(c.versionLocal), 0600); err != nil {
+				t.Fatal(err)
+			}
+			payload := []byte("new executable")
+			f := signedDgateManifest(t, c, c.versionRemote, payload)
+			if rewritten {
+				f.manifest.Assets[0].URL = strings.Replace(f.manifest.Assets[0].URL, ".aliyuncs.com", ".aliyuncs.alibaba", 1)
+				f.sign(t)
+			}
+			previousClient, previousDo := httpClient, httpDoFunc
+			t.Cleanup(func() { httpClient, httpDoFunc = previousClient, previousDo })
+			calls := 0
+			httpClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				calls++
+				if r.URL.Host != "assets.oss.aliyuncs.alibaba" {
+					t.Fatalf("unexpected asset request: %s", r.URL)
+				}
+				body := payload
+				switch r.URL.Path {
+				case "/1.2.3/" + c.artifactName():
+				case "/1.2.3/" + c.artifactName() + ".sha256":
+					body = []byte(fmt.Sprintf("%x", sha256.Sum256(payload)))
+				default:
+					t.Fatalf("unexpected asset path: %s", r.URL.Path)
+				}
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(body))}, nil
+			})}
+			httpDoFunc = httpClient.Do
+			err := c.install()
+			want := "old executable"
+			if rewritten {
+				if err != nil || calls != 2 {
+					t.Fatalf("signed destination rejected: err=%v calls=%d", err, calls)
+				}
+				want = string(payload)
+			} else if err == nil || !strings.Contains(err.Error(), "not authorized") || calls != 0 {
+				t.Fatalf("unsigned destination reached download: err=%v calls=%d", err, calls)
+			}
+			data, err := os.ReadFile(c.execFilePath)
+			if err != nil || string(data) != want {
+				t.Fatalf("installed=%q want=%q err=%v", data, want, err)
+			}
+			wantVersion := "1.2.2"
+			if rewritten {
+				wantVersion = "1.2.3"
+			}
+			version, err := os.ReadFile(c.versionFilePath)
+			if err != nil || string(version) != wantVersion {
+				t.Fatalf("version=%q want=%q err=%v", version, wantVersion, err)
+			}
+		})
 	}
 }
 

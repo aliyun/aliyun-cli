@@ -19,6 +19,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli/assetmanifest"
 	"github.com/aliyun/aliyun-cli/v3/cli/publishsig"
+	"github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 func TestSignedBLExpiryDuringDownloadPreservesOldExecutable(t *testing.T) {
@@ -98,6 +99,46 @@ func signedManifestServer(t *testing.T, c *Context, a releaseAsset, payload []by
 	c.assets = &assetmanifest.Client{SourceURL: s.URL + "/" + assetmanifest.FileName,
 		HTTPClient: s.Client(), Keys: []ed25519.PublicKey{pub}, Now: func() time.Time { return now }}
 	return f
+}
+
+func TestSignedBLEndpointSuffixAssetIdentity(t *testing.T) {
+	for _, rewritten := range []bool{true, false} {
+		t.Run(fmt.Sprintf("rewritten=%t", rewritten), func(t *testing.T) {
+			t.Setenv(endpoint.EnvSuffix, "aliyuncs.alibaba")
+			c, _ := binaryContext(t)
+			installOld(t, c, "1.2.2")
+			c.versionLocal = "1.2.2"
+			c.releaseURL = "https://assets.oss.aliyuncs.com"
+			a, payload := assetFixture(t, "1.2.3", binaryPlatform(t, c))
+			f := signedManifestServer(t, c, a, payload)
+			if rewritten {
+				f.manifest.Assets[0].URL = strings.Replace(f.manifest.Assets[0].URL, ".aliyuncs.com", ".aliyuncs.alibaba", 1)
+				f.sign(t)
+			}
+			calls := 0
+			c.httpClient.Transport = binaryRoundTripper(func(r *http.Request) (*http.Response, error) {
+				calls++
+				if r.URL.Host != "assets.oss.aliyuncs.alibaba" || r.URL.Path != "/v1.2.3/"+a.File {
+					t.Fatalf("unexpected asset request: %s", r.URL)
+				}
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(payload))}, nil
+			})
+			err := c.installAsset(a)
+			want := "old executable"
+			if rewritten {
+				if err != nil || calls != 1 {
+					t.Fatalf("signed destination rejected: err=%v calls=%d", err, calls)
+				}
+				want = "standalone-" + a.Version
+			} else if err == nil || !strings.Contains(err.Error(), "not authorized") || calls != 0 {
+				t.Fatalf("unsigned destination reached download: err=%v calls=%d", err, calls)
+			}
+			data, err := os.ReadFile(c.execFilePath)
+			if err != nil || string(data) != want {
+				t.Fatalf("installed=%q want=%q err=%v", data, want, err)
+			}
+		})
+	}
 }
 
 func TestSignedBLDefaultClientUsesEmbeddedKeys(t *testing.T) {

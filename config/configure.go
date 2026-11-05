@@ -35,6 +35,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cloudsso"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -451,7 +452,7 @@ func exchangeFromOAuth(w io.Writer, cp *Profile) error {
 	}
 
 	// 构造请求
-	req, err := http.NewRequest("POST", exchangeUrl, nil)
+	req, err := cloudendpoint.NewRequest("POST", exchangeUrl, nil)
 	if err != nil {
 		return err
 	}
@@ -592,7 +593,7 @@ func tryRefreshOauthToken(w io.Writer, cp *Profile) error {
 	data.Set("grant_type", "refresh_token")
 	data.Set("refresh_token", refreshToken)
 	data.Set("client_id", oauthClientId)
-	req, err := http.NewRequest("POST", tokenUrl, strings.NewReader(data.Encode()))
+	req, err := cloudendpoint.NewRequest("POST", tokenUrl, strings.NewReader(data.Encode()))
 	if err != nil {
 		return err
 	}
@@ -758,7 +759,7 @@ func exchangeOAuthCode(ctx context.Context, cp *Profile, code, codeVerifier, red
 	data.Set("client_id", oauthClientId)
 	data.Set("redirect_uri", redirectUri)
 	data.Set("code_verifier", codeVerifier)
-	req, err := http.NewRequestWithContext(ctx, "POST", tokenUrl, strings.NewReader(data.Encode()))
+	req, err := cloudendpoint.NewRequestWithContext(ctx, "POST", tokenUrl, strings.NewReader(data.Encode()))
 	if err != nil {
 		return err
 	}
