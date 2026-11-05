@@ -240,7 +240,7 @@ func TestLogArgsRedactsNestedValuesWithoutMutation(t *testing.T) {
 			t.Fatal("argument log missing")
 		}
 	}
-	for _, value := range []string{"[Important] ordinary text", "[INFO] status: ready", "[docs](https://example.invalid/guide)", "<10", "<=10"} {
+	for _, value := range []string{"[Important] ordinary text", "[INFO] status: ready", "[docs](https://example.invalid/guide)", "<10", "<=10", "<1e309", "<= -1e309", "<1e9999"} {
 		out.Reset()
 		LogArgs(map[string]any{"name": value, "password": secret})
 		encoded, _ := json.Marshal(value)
@@ -256,7 +256,7 @@ func TestLogRequestPreservesNumericComparisons(t *testing.T) {
 	InitLogger("DEBUG", false)
 	var out bytes.Buffer
 	SetLoggerOutputForTest(&out)
-	for _, value := range []string{"<10", "<=10"} {
+	for _, value := range []string{"<10", "<=10", "<1e309", "<= -1e309", "<1e9999"} {
 		for _, body := range []any{
 			map[string]any{"message": value, "name": "visible"},
 			`{"message":"` + value + `","name":"visible"}`,

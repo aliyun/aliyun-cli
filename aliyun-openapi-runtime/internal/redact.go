@@ -17,6 +17,7 @@ package internal
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -204,7 +205,7 @@ func isNumericComparison(value string) bool {
 		return false
 	}
 	_, err := strconv.ParseFloat(operand, 64)
-	return err == nil
+	return err == nil || errors.Is(err, strconv.ErrRange)
 }
 
 func looksLikeJSONDocument(value string) bool {

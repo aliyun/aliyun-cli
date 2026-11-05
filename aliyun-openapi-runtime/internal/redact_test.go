@@ -337,7 +337,7 @@ func TestMaskBodyPreservesOrdinaryScalarText(t *testing.T) {
 }
 
 func TestMaskBodyNumericComparisons(t *testing.T) {
-	for _, value := range []string{"<10", "<=10", "<100", "< -2.5", "<= +3e-2", "<.5", "<= 10", "\u200b<10", "\ufeff<=10"} {
+	for _, value := range []string{"<10", "<=10", "<100", "< -2.5", "<= +3e-2", "<.5", "<= 10", "\u200b<10", "\ufeff<=10", "<1e309", "<= -1e309", "<1e9999", "<+1e309", "<0x1p1024", "<1e9999999999999999999999", "<1e-9999", "\u200b<1e309", "\ufeff<= -1e309"} {
 		for depth := 0; depth < 3; depth++ {
 			t.Run(fmt.Sprintf("%d/%q", depth, value), func(t *testing.T) {
 				if !canRedactJSON(value) || MaskKV("message", value) != value {
@@ -403,7 +403,12 @@ func TestMaskBodyQuotedDocumentTrailingText(t *testing.T) {
 func TestMaskBodyNestedOpaqueFormats(t *testing.T) {
 	const secret = "FAKE_NESTED_FORMAT_SECRET"
 	for _, value := range []string{
-		"<", "<=", "<NaN", "<Inf", "<1e9999",
+		"<", "<=", "<NaN", "<Inf",
+		"<1e309><Password>" + secret + "</Password>",
+		"<= -1e309 <Password>" + secret + "</Password>",
+		"<1e9999 {\"password\":\"" + secret + "\"}",
+		"\u200b<1e309 {\"password\":\"" + secret + "\"}",
+		"\ufeff<= -1e309 <Password>" + secret + "</Password>",
 		"<Password>" + secret + "</Password>",
 		"<Password" + secret,
 		"<NaN password=" + secret,
