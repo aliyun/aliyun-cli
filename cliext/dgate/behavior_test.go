@@ -193,7 +193,8 @@ func TestFreshInstallFailureAndInvalidVersion(t *testing.T) {
 	prevPath := getConfigurePathFunc
 	prevVer := getRemoteVersionFunc
 	getConfigurePathFunc = func() string { return dir }
-	getRemoteVersionFunc = func(string) (string, error) { return "", os.ErrClosed }
+	versionCalls := 0
+	getRemoteVersionFunc = func(string) (string, error) { versionCalls++; return "", os.ErrClosed }
 	t.Cleanup(func() {
 		getConfigurePathFunc = prevPath
 		getRemoteVersionFunc = prevVer
@@ -202,8 +203,12 @@ func TestFreshInstallFailureAndInvalidVersion(t *testing.T) {
 	if err := c.initialize(); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.ensureInstalled(); err == nil || !strings.Contains(err.Error(), "auto-download failed") {
+	signedDgateManifest(t, c, "1.2.3", []byte("package"))
+	if err := c.ensureInstalled(); err == nil || !strings.Contains(err.Error(), "auto-download failed") || !strings.Contains(err.Error(), os.ErrClosed.Error()) {
 		t.Fatalf("err %v", err)
+	}
+	if versionCalls != 1 {
+		t.Fatalf("remote-version failure not reached: %d", versionCalls)
 	}
 
 	getRemoteVersionFunc = func(string) (string, error) { return "../bad", nil }
@@ -252,6 +257,7 @@ func TestVersionCheckSkipsAndUpdates(t *testing.T) {
 	}
 
 	timeNowFunc = func() time.Time { return now.Add(VersionCheckTTL + time.Second) }
+	signedDgateManifest(t, c, "0.6.23", []byte("same package"))
 	if err := os.WriteFile(filepath.Join(dir, ".dgate_version"), []byte("0.6.23"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -267,13 +273,18 @@ func TestVersionCheckSkipsAndUpdates(t *testing.T) {
 	timeNowFunc = func() time.Time { return now.Add(2*VersionCheckTTL + 2*time.Second) }
 	getRemoteVersionFunc = func(string) (string, error) { return "9.9.9", nil }
 	prevDL := downloadBinaryFunc
-	downloadBinaryFunc = func(string, string) error { return os.ErrPermission }
+	downloadCalls := 0
+	downloadBinaryFunc = func(string, string) error { downloadCalls++; return os.ErrPermission }
+	signedDgateManifest(t, c, "9.9.9", []byte("new"))
 	t.Cleanup(func() { downloadBinaryFunc = prevDL })
 	if err := c.ensureInstalled(); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(stderr.String(), "failed to update") {
 		t.Fatalf("stderr %q", stderr.String())
+	}
+	if downloadCalls != 1 {
+		t.Fatalf("original download failure branch not reached: %d", downloadCalls)
 	}
 }
 
@@ -324,6 +335,7 @@ func TestWindowsReplaceAndChecksumPaths(t *testing.T) {
 	if !strings.HasSuffix(c.execFilePath, "dgate.exe") {
 		t.Fatalf("exec %s", c.execFilePath)
 	}
+	signedDgateManifest(t, c, "0.6.23", payload)
 	if err := c.ensureInstalled(); err != nil {
 		t.Fatal(err)
 	}
@@ -354,8 +366,11 @@ func TestWindowsReplaceAndChecksumPaths(t *testing.T) {
 		}
 		_, _ = w.Write(payload)
 	})
-	if err := c.ensureInstalled(); err != nil {
-		t.Fatal(err)
+	if err := c.ensureInstalled(); err == nil || !strings.Contains(err.Error(), "404") {
+		t.Fatalf("missing checksum accepted: %v", err)
+	}
+	if _, err := os.Stat(c.execFilePath); !os.IsNotExist(err) {
+		t.Fatalf("unverified binary installed: %v", err)
 	}
 }
 
@@ -433,8 +448,8 @@ func TestChecksumAndVersionFileEdges(t *testing.T) {
 	if err := verifySHA256(srv.URL+"?k=ok", file); err != nil {
 		t.Fatal(err)
 	}
-	if err := verifySHA256(srv.URL+"?k=missing", file); err != nil {
-		t.Fatal(err)
+	if err := verifySHA256(srv.URL+"?k=missing", file); err == nil || !strings.Contains(err.Error(), "404") {
+		t.Fatalf("missing checksum accepted: %v", err)
 	}
 	if err := verifySHA256(srv.URL+"?k=empty", file); err == nil {
 		t.Fatal("expected empty checksum")
@@ -486,7 +501,7 @@ func TestInstallRenameFallback(t *testing.T) {
 	runtimeGOOSFunc = func() string { return "darwin" }
 	runtimeGOARCHFunc = func() string { return "arm64" }
 	blocked := filepath.Join(dir, "dgate")
-	if err := os.Mkdir(blocked, 0755); err != nil {
+	if err := os.WriteFile(blocked, []byte("old"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv(execPathEnv, "")
@@ -507,8 +522,18 @@ func TestInstallRenameFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.versionRemote = "1.2.3"
+	signedDgateManifest(t, c, c.versionRemote, []byte("new"))
+	dgateChecksumFixture(t, []byte("new"))
+	renameCalls := 0
+	c.rename = func(string, string) error { renameCalls++; return os.ErrPermission }
 	if err := c.install(); err == nil || !strings.Contains(err.Error(), "failed to install") {
 		t.Fatalf("err %v", err)
+	}
+	if renameCalls != 1 {
+		t.Fatalf("rename failure branch not reached: %d", renameCalls)
+	}
+	if got, err := os.ReadFile(blocked); err != nil || string(got) != "old" {
+		t.Fatalf("failed rename damaged old binary: %q %v", got, err)
 	}
 }
 
@@ -552,16 +577,36 @@ func TestInstallPermissionAndDirectoryErrors(t *testing.T) {
 		httpDoFunc = prevHTTP
 	})
 	runtimeGOOSFunc = func() string { return "linux" }
-	downloadBinaryFunc = func(string, string) error { return nil }
+	payload := []byte("new executable")
+	var downloaded string
+	downloadBinaryFunc = func(_ string, dest string) error {
+		downloaded = dest
+		return os.WriteFile(dest, payload, 0600)
+	}
+	sum := sha256.Sum256(payload)
+	checksumCalls := 0
 	httpDoFunc = func(*http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader(""))}, nil
+		checksumCalls++
+		// Remove the real file only after checksum validation has finished,
+		// when the response closes, to reach the original chmod branch.
+		return &http.Response{StatusCode: http.StatusOK, Body: dgateCloseHook{
+			Reader: strings.NewReader(hex.EncodeToString(sum[:]) + "\n"),
+			close:  func() error { return os.Remove(downloaded) },
+		}}, nil
 	}
 
 	c := NewContext(nil)
+	c.configPath = t.TempDir()
+	c.osType, c.osArch = "linux", "amd64"
 	c.versionRemote = "1.2.3"
-	c.execFilePath = filepath.Join(t.TempDir(), "dgate")
+	c.execFilePath = filepath.Join(c.configPath, "dgate")
+	c.versionFilePath = filepath.Join(c.configPath, ".dgate_version")
+	signedDgateManifest(t, c, c.versionRemote, payload)
 	if err := c.install(); err == nil || !strings.Contains(err.Error(), "exec permission") {
-		t.Fatalf("chmod err %v", err)
+		t.Fatalf("chmod failure not reached: %v", err)
+	}
+	if checksumCalls != 1 {
+		t.Fatalf("checksum/chmod branch not reached: %d", checksumCalls)
 	}
 
 	runtimeGOOSFunc = func() string { return "windows" }
@@ -570,6 +615,8 @@ func TestInstallPermissionAndDirectoryErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.execFilePath = filepath.Join(parent, "dgate.exe")
+	c.osType = "windows"
+	signedDgateManifest(t, c, c.versionRemote, payload)
 	if err := c.install(); err == nil {
 		t.Fatal("expected mkdir failure")
 	}

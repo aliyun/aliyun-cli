@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/assetmanifest"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
-	"github.com/aliyun/aliyun-cli/v3/util"
 	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	"golang.org/x/mod/semver"
 )
@@ -70,6 +70,9 @@ type Context struct {
 	osArch                    string
 	osSupport                 bool
 	envMap                    map[string]string
+	assets                    *assetmanifest.Client
+	manifest                  *assetmanifest.VerifiedManifest
+	rename                    func(string, string) error
 }
 
 var (
@@ -88,7 +91,7 @@ var (
 )
 
 func NewContext(origin *cli.Context) *Context {
-	return &Context{originCtx: origin}
+	return &Context{originCtx: origin, assets: assetmanifest.NewClient(), rename: os.Rename}
 }
 
 func (c *Context) Run(args []string) error {
@@ -152,6 +155,18 @@ func (c *Context) ensureInstalled() error {
 		}
 		return nil
 	}
+	if !c.installed || c.needCheckVersion() {
+		verified, err := c.assets.Fetch()
+		if err != nil {
+			if !c.installed {
+				return fmt.Errorf("dgate is not installed and auto-download failed: %w", err)
+			}
+			c.warn("failed to update dgate: %v; continuing with installed binary", err)
+			_ = c.writeCheckTime()
+			return nil
+		}
+		c.manifest = verified
+	}
 	if !c.installed {
 		version, err := getRemoteVersionFunc(c.baseURL() + "/latest.txt")
 		if err != nil {
@@ -190,38 +205,193 @@ func (c *Context) install() error {
 	if !validReleaseVersion(c.versionRemote) {
 		return fmt.Errorf("refusing to download dgate: invalid version %q", c.versionRemote)
 	}
-	url := c.baseURL() + "/" + c.versionRemote + "/" + c.artifactName()
+	if err := c.checkInstallPaths(); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(c.configPath, 0755); err != nil {
+		return err
+	}
+	lock := filepath.Join(c.configPath, ".dgate-install-lock")
+	if err := os.Mkdir(lock, 0700); err != nil {
+		return fmt.Errorf("dgate installation lock: %w", err)
+	}
+	defer os.Remove(lock)
+	if err := c.checkInstallPaths(); err != nil {
+		return err
+	}
+	verified, err := c.assets.Fetch()
+	if err != nil {
+		return err
+	}
+	c.manifest = verified
+	url := cloudendpoint.WithSuffix(c.baseURL() + "/" + c.versionRemote + "/" + c.artifactName())
+	request := assetmanifest.Request{
+		Product: "dgate", Purpose: assetmanifest.Purpose, Version: c.versionRemote,
+		Platform: c.osType + "-" + c.osArch, Asset: c.artifactName(), URL: url,
+		CurrentVersion: c.versionLocal,
+	}
+	statePath := filepath.Join(c.configPath, ".dgate-asset-manifest-state.json")
+	entry, err := c.manifest.Authorize(request, statePath)
+	if err != nil {
+		return err
+	}
+	if entry.Size > maxDownloadSize {
+		return fmt.Errorf("signed dgate asset exceeds download limit")
+	}
 	c.warn("Installing dgate %s from %s ...", c.versionRemote, url)
-	tmpFile := c.execFilePath + ".tmp"
+	temp, err := os.CreateTemp(filepath.Dir(c.execFilePath), ".dgate-install-*")
+	if err != nil {
+		return err
+	}
+	tmpFile := temp.Name()
+	defer os.Remove(tmpFile)
+	if err := temp.Close(); err != nil {
+		return err
+	}
 	if err := downloadBinaryFunc(url, tmpFile); err != nil {
-		_ = os.Remove(tmpFile)
 		return fmt.Errorf("failed to download dgate from %s: %v", url, err)
 	}
+	file, err := os.Open(tmpFile)
+	if err != nil {
+		return err
+	}
+	verifyErr := assetmanifest.VerifyContent(entry, file)
+	closeErr := file.Close()
+	if verifyErr != nil {
+		return verifyErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
 	if err := verifySHA256(url+".sha256", tmpFile); err != nil {
-		_ = os.Remove(tmpFile)
 		return err
 	}
 	if runtimeGOOSFunc() != "windows" {
 		if err := os.Chmod(tmpFile, 0755); err != nil {
-			_ = os.Remove(tmpFile)
 			return fmt.Errorf("failed to set exec permission: %v", err)
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(c.execFilePath), 0755); err != nil {
-		_ = os.Remove(tmpFile)
+	if _, err := c.manifest.Authorize(request, statePath); err != nil {
 		return err
 	}
-	if runtimeGOOSFunc() == "windows" && fileExists(c.execFilePath) {
-		_ = os.Remove(c.execFilePath)
-	}
-	if err := os.Rename(tmpFile, c.execFilePath); err != nil {
-		if copyErr := util.CopyFileAndRemoveSource(tmpFile, c.execFilePath); copyErr != nil {
-			return fmt.Errorf("failed to install dgate binary: %v", copyErr)
-		}
+	if err := c.installVersionAndExecutable(tmpFile); err != nil {
+		return fmt.Errorf("failed to install dgate binary: %w", err)
 	}
 	c.versionLocal = c.versionRemote
 	c.installed = true
-	return os.WriteFile(c.versionFilePath, []byte(c.versionLocal), 0644)
+	return nil
+}
+
+func (c *Context) installVersionAndExecutable(temp string) error {
+	oldVersion, err := os.ReadFile(c.versionFilePath)
+	previousExists := err == nil
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	backupPath := ""
+	if previousExists {
+		backupPath, err = c.stageVersion(oldVersion)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if backupPath != "" {
+				_ = os.Remove(backupPath)
+			}
+		}()
+	}
+	versionTemp, err := c.stageVersion([]byte(c.versionRemote))
+	if err != nil {
+		return err
+	}
+	defer os.Remove(versionTemp)
+	// Commit metadata first so no fallible metadata write follows executable replacement.
+	if err := os.Rename(versionTemp, c.versionFilePath); err != nil {
+		return err
+	}
+	if err := c.replaceExecutable(temp); err != nil {
+		var rollbackErr error
+		if previousExists {
+			rollbackErr = os.Rename(backupPath, c.versionFilePath)
+		} else {
+			rollbackErr = os.Remove(c.versionFilePath)
+		}
+		if rollbackErr != nil {
+			retained := backupPath
+			backupPath = ""
+			return fmt.Errorf("%w; version rollback failed: %v; previous version record retained at %s", err, rollbackErr, retained)
+		}
+		return err
+	}
+	return nil
+}
+
+func (c *Context) stageVersion(data []byte) (string, error) {
+	file, err := os.CreateTemp(c.configPath, ".dgate-version-*")
+	if err != nil {
+		return "", err
+	}
+	name := file.Name()
+	_, writeErr := file.Write(data)
+	closeErr := file.Close()
+	if writeErr != nil || closeErr != nil {
+		_ = os.Remove(name)
+		if writeErr != nil {
+			return "", writeErr
+		}
+		return "", closeErr
+	}
+	return name, nil
+}
+
+func (c *Context) checkInstallPaths() error {
+	for _, path := range []string{c.configPath, c.execFilePath, c.versionFilePath, filepath.Join(c.configPath, ".dgate-asset-manifest-state.json")} {
+		info, err := os.Lstat(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 || path == c.configPath && !info.IsDir() || path != c.configPath && !info.Mode().IsRegular() {
+			return fmt.Errorf("invalid managed dgate path %s", path)
+		}
+	}
+	return nil
+}
+
+func (c *Context) replaceExecutable(temp string) error {
+	err := c.rename(temp, c.execFilePath)
+	if err == nil || runtimeGOOSFunc() != "windows" {
+		return err
+	}
+	info, statErr := os.Lstat(c.execFilePath)
+	if statErr != nil || !info.Mode().IsRegular() {
+		return err
+	}
+	backup, err := os.CreateTemp(filepath.Dir(c.execFilePath), ".dgate-backup-*")
+	if err != nil {
+		return err
+	}
+	backupPath := backup.Name()
+	if err := backup.Close(); err != nil {
+		_ = os.Remove(backupPath)
+		return err
+	}
+	if err := os.Remove(backupPath); err != nil {
+		return err
+	}
+	if err := c.rename(c.execFilePath, backupPath); err != nil {
+		return err
+	}
+	if err := c.rename(temp, c.execFilePath); err != nil {
+		if rollbackErr := c.rename(backupPath, c.execFilePath); rollbackErr != nil {
+			return fmt.Errorf("dgate replacement failed: %v; rollback failed: %v; previous binary retained at %s", err, rollbackErr, backupPath)
+		}
+		return err
+	}
+	_ = os.Remove(backupPath)
+	return nil
 }
 
 func (c *Context) prepareEnv() {
@@ -376,9 +546,6 @@ func verifySHA256(checksumURL, filePath string) error {
 		return fmt.Errorf("failed to fetch checksum %s: %v", checksumURL, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound {
-		return nil
-	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("checksum HTTP %d from %s", resp.StatusCode, checksumURL)
 	}

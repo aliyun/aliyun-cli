@@ -101,6 +101,7 @@ func TestDownloadAndChecksum(t *testing.T) {
 	if err := c.initialize(); err != nil {
 		t.Fatal(err)
 	}
+	signedDgateManifest(t, c, "0.6.22", payload)
 	if err := c.ensureInstalled(); err != nil {
 		t.Fatal(err)
 	}
@@ -171,6 +172,7 @@ func TestUpdateFailureDoesNotBlock(t *testing.T) {
 	if err := c.initialize(); err != nil {
 		t.Fatal(err)
 	}
+	signedDgateManifest(t, c, "1.2.3", []byte("package"))
 	if err := c.ensureInstalled(); err != nil {
 		t.Fatal(err)
 	}
