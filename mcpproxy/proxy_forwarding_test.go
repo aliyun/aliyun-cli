@@ -2,11 +2,14 @@ package mcpproxy
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"testing/iotest"
@@ -231,4 +234,86 @@ func TestProxyCustomDefaultTransport(t *testing.T) {
 	w := httptest.NewRecorder()
 	proxy.ServeMCPProxyRequest(w, httptest.NewRequest("GET", "/mcp/test", nil))
 	require.Equal(t, 502, w.Code)
+}
+
+func TestProxyUpstreamFailuresDoNotExposeSecrets(t *testing.T) {
+	const sensitiveURL = "https://FAKE_USER_20261103:FAKE_PASSWORD_20261103@localhost/mcp/test?access_token=FAKE_TOKEN_20261103#FAKE_FRAGMENT_20261103"
+	for _, retry := range []bool{false, true} {
+		stage := "initial"
+		if retry {
+			stage = "retry_after_refresh"
+		}
+		for _, tc := range []struct {
+			name, requestURL, errorURL, category, buildURL string
+			cause                                          error
+		}{
+			{name: "wrapped URL", requestURL: sensitiveURL, errorURL: sensitiveURL, category: "transport", cause: errors.New("inner FAKE_ERROR_20261103")},
+			{name: "encoded URL", requestURL: strings.ReplaceAll(sensitiveURL, "FAKE_", "%46AKE_"), errorURL: strings.ReplaceAll(sensitiveURL, "FAKE_", "%46AKE_"), category: "transport", cause: errors.New("inner FAKE_ERROR_20261103")},
+			{name: "wrapped timeout", requestURL: sensitiveURL, errorURL: sensitiveURL, category: "timeout", cause: fmt.Errorf("inner FAKE_ERROR_20261103: %w", context.DeadlineExceeded)},
+			{name: "opaque error URL", requestURL: sensitiveURL, errorURL: "https:FAKE_TOKEN_20261103?access_token=FAKE_ERROR_20261103", category: "transport", cause: errors.New("inner FAKE_ERROR_20261103")},
+			{name: "build URL", requestURL: sensitiveURL, category: "build_request", buildURL: "https://bad%host?access_token=FAKE_TOKEN_20261103#FAKE_FRAGMENT_20261103"},
+		} {
+			t.Run(stage+"/"+tc.name, func(t *testing.T) {
+				proxy := testProxy(t)
+				oauthServer(t, func(w http.ResponseWriter, _ *http.Request) {
+					_, _ = io.WriteString(w, `{"access_token":"new-access","refresh_token":"new-refresh","expires_in":3600}`)
+				})
+				var logs bytes.Buffer
+				previous := log.Writer()
+				log.SetOutput(&logs)
+				t.Cleanup(func() { log.SetOutput(previous) })
+				if !retry && tc.buildURL != "" {
+					proxy.UpstreamBaseURL = tc.buildURL
+				}
+				attempts := 0
+				proxy.upstreamClient = &http.Client{Transport: proxyRoundTripper(func(req *http.Request) (*http.Response, error) {
+					attempts++
+					if retry && attempts == 1 {
+						require.Equal(t, "Bearer access", req.Header.Get("Authorization"))
+						if tc.buildURL != "" {
+							proxy.UpstreamBaseURL = tc.buildURL
+						}
+						return &http.Response{StatusCode: 401, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("unauthorized"))}, nil
+					}
+					if retry {
+						require.Equal(t, "Bearer new-access", req.Header.Get("Authorization"))
+					}
+					inner := &url.Error{Op: "Get", URL: tc.errorURL, Err: tc.cause}
+					return nil, fmt.Errorf("outer FAKE_ERROR_20261103: %w", fmt.Errorf("middle FAKE_ERROR_20261103: %w", inner))
+				})}
+				w := httptest.NewRecorder()
+				proxy.ServeMCPProxyRequest(w, httptest.NewRequest("GET", tc.requestURL, nil))
+				require.Equal(t, http.StatusBadGateway, w.Code)
+				for name, output := range map[string]string{"body": w.Body.String(), "logs": logs.String()} {
+					for _, secret := range []string{"FAKE_", "%46AKE_", "access_token=", sensitiveURL, "failed to send request:", "failed to build upstream request:"} {
+						if strings.Contains(output, secret) {
+							t.Errorf("%s exposes sensitive error data: %q", name, output)
+							break
+						}
+					}
+				}
+				require.Equal(t, "Upstream request failed ("+tc.category+")\n", w.Body.String())
+				require.Contains(t, logs.String(), "stage="+stage)
+				require.Contains(t, logs.String(), "category="+tc.category)
+				wantAttempts := 1
+				if retry {
+					wantAttempts++
+					require.Equal(t, int64(1), proxy.stats.TokenRefreshes)
+				} else {
+					require.Zero(t, proxy.stats.TokenRefreshes)
+				}
+				if tc.buildURL != "" {
+					wantAttempts--
+					require.Contains(t, logs.String(), "url=<unknown>")
+				} else {
+					require.Contains(t, logs.String(), "method=GET url=https://"+EndpointMap[RegionCN].MCP+"/mcp/test")
+				}
+				require.Equal(t, wantAttempts, attempts)
+				require.Equal(t, int64(1), proxy.stats.TotalRequests)
+				require.Equal(t, int64(1), proxy.stats.ErrorRequests)
+				require.Zero(t, proxy.stats.SuccessRequests)
+				require.Zero(t, proxy.stats.ActiveRequests)
+			})
+		}
+	}
 }

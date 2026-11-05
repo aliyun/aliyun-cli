@@ -497,10 +497,10 @@ func (p *MCPProxy) ServeMCPProxyRequest(w http.ResponseWriter, r *http.Request) 
 		log.Println("MCP Proxy received request body_bytes=0")
 	}
 
-	sendRequest := func(token string) (*http.Response, error) {
+	sendRequest := func(token string) (*http.Response, *http.Request, error) {
 		upstreamReq, err := p.buildUpstreamRequest(r, token)
 		if err != nil {
-			return nil, fmt.Errorf("failed to build upstream request: %w", err)
+			return nil, nil, fmt.Errorf("failed to build upstream request: %w", err)
 		}
 
 		log.Printf("MCP Proxy built upstream request method=%s url=%s", upstreamReq.Method, safeURLForLog(upstreamReq.URL))
@@ -517,17 +517,16 @@ func (p *MCPProxy) ServeMCPProxyRequest(w http.ResponseWriter, r *http.Request) 
 		}
 		resp, err := client.Do(upstreamReq)
 		if err != nil {
-			return nil, fmt.Errorf("failed to send request: %w", err)
+			return nil, upstreamReq, fmt.Errorf("failed to send request: %w", err)
 		}
-		return resp, nil
+		return resp, upstreamReq, nil
 	}
 
 	// 第一次发送请求
-	resp, err := sendRequest(accessToken)
+	resp, upstreamReq, err := sendRequest(accessToken)
 	if err != nil {
-		log.Println("MCP Proxy sends upstream request error", err.Error())
 		atomic.AddInt64(&p.stats.ErrorRequests, 1)
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		writeUpstreamFailure(w, "initial", upstreamReq, err)
 		return
 	}
 	defer resp.Body.Close()
@@ -589,11 +588,10 @@ func (p *MCPProxy) ServeMCPProxyRequest(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 
-		resp, err = sendRequest(newAccessToken)
+		resp, upstreamReq, err = sendRequest(newAccessToken)
 		if err != nil {
-			log.Printf("MCP Proxy retry request after token refresh error: %v", err)
 			atomic.AddInt64(&p.stats.ErrorRequests, 1)
-			http.Error(w, err.Error(), http.StatusBadGateway)
+			writeUpstreamFailure(w, "retry_after_refresh", upstreamReq, err)
 			return
 		}
 		defer resp.Body.Close()
@@ -908,6 +906,25 @@ func (p *MCPProxy) handleHTTP(w http.ResponseWriter, resp *http.Response) {
 
 	w.WriteHeader(resp.StatusCode)
 	w.Write(bodyBytes)
+}
+
+func writeUpstreamFailure(w http.ResponseWriter, stage string, req *http.Request, err error) {
+	category := "build_request"
+	method := "<unknown>"
+	var requestURL *url.URL
+	if req != nil {
+		category = "transport"
+		method = req.Method
+		requestURL = req.URL
+		for cause := err; cause != nil; cause = errors.Unwrap(cause) {
+			if timeout, ok := cause.(interface{ Timeout() bool }); ok && timeout.Timeout() {
+				category = "timeout"
+				break
+			}
+		}
+	}
+	log.Printf("MCP Proxy upstream request failed stage=%s category=%s method=%s url=%s", stage, category, method, safeURLForLog(requestURL))
+	http.Error(w, "Upstream request failed ("+category+")", http.StatusBadGateway)
 }
 
 // safeURLForLog keeps the request destination useful for diagnostics without
