@@ -14,10 +14,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCSDryRunJSONRedactsFormWithoutContentType(t *testing.T) {
@@ -139,8 +141,17 @@ func TestCSArgumentsLogDoesNotLeakNestedPassword(t *testing.T) {
 			t.Run(tc.name+"/AI="+ai, func(t *testing.T) {
 				var mu sync.Mutex
 				var captured [][]byte
-				var unrelated int
+				var unrelated, uploads int
 				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.Method == http.MethodPost && r.URL.Path == "/telemetry" {
+						_, _ = io.Copy(io.Discard, r.Body)
+						mu.Lock()
+						uploads++
+						mu.Unlock()
+						w.Header().Set("Content-Type", "application/json")
+						_, _ = w.Write([]byte(`{"ok":true}`))
+						return
+					}
 					if r.Method != http.MethodPost || r.Host != "capture.invalid" || r.URL.Path != "/clusters" {
 						mu.Lock()
 						unrelated++
@@ -195,22 +206,42 @@ func TestCSArgumentsLogDoesNotLeakNestedPassword(t *testing.T) {
 					}
 				}
 				home := t.TempDir()
-				cmd.Env = append(cmd.Env, "HOME="+home, "USERPROFILE="+home)
+				cmd.Env = append(cmd.Env, "HOME="+home, "USERPROFILE="+home,
+					"ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE=0",
+					"ALIBABA_CLOUD_CLI_TELEMETRY_LOG_DISABLE=0",
+					"ALIBABA_CLOUD_CLI_TELEMETRY_ENDPOINT="+server.URL+"/telemetry")
 				for name, value := range caches {
 					cmd.Env = append(cmd.Env, name+"="+value)
 				}
 				if err := cmd.Run(); err != nil {
 					t.Fatalf("CLI failed: %v; stderr=%s", err, &stderr)
 				}
+				// Upload removes its cache before its final write, so wait for the terminal diagnostic before cleaning HOME.
+				require.Eventually(t, func() bool {
+					data, err := os.ReadFile(filepath.Join(home, ".aliyun", "logs", "telemetry.log"))
+					if err != nil {
+						return false
+					}
+					for _, line := range bytes.Split(data, []byte("\n")) {
+						var record struct{ Stage, Status string }
+						if json.Unmarshal(line, &record) == nil && record.Stage == "upload" && record.Status == "succeeded" {
+							return true
+						}
+					}
+					return false
+				}, 10*time.Second, 10*time.Millisecond, "background telemetry upload did not complete")
 				want, _ := json.Marshal(map[string]string{"name": tc.value, "region_id": "cn-hangzhou"})
 				mu.Lock()
 				bodies := append([][]byte(nil), captured...)
-				rejected := unrelated
+				rejected, completedUploads := unrelated, uploads
 				mu.Unlock()
+				if completedUploads != 1 {
+					t.Fatalf("captured %d telemetry uploads, want exactly one", completedUploads)
+				}
 				if rejected < 3 {
 					t.Fatalf("rejected %d unrelated requests, want at least three", rejected)
 				}
-				t.Logf("captured %d API requests; rejected %d unrelated requests", len(bodies), rejected)
+				t.Logf("captured %d API requests; rejected %d unrelated requests; completed %d telemetry uploads", len(bodies), rejected, completedUploads)
 				if len(bodies) != 1 {
 					t.Fatalf("captured %d API requests, want exactly one", len(bodies))
 				}
