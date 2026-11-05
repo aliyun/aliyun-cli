@@ -17,6 +17,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 type Context struct {
@@ -57,7 +58,7 @@ var (
 	getLatestCms2VersionFunc = GetLatestCms2Version
 	downloadFileFunc         = downloadFile
 	execCommandFunc          = exec.Command
-	httpGetFunc              = http.Get
+	httpGetFunc              = cloudendpoint.HTTPGet
 	httpDoFunc               = func(req *http.Request) (*http.Response, error) {
 		client := &http.Client{Timeout: 30 * time.Second}
 		return client.Do(req)
@@ -263,6 +264,9 @@ func (c *Context) Install() error {
 }
 
 func (c *Context) PrepareEnv(args []string) error {
+	if err := cloudendpoint.Validate(); err != nil {
+		return err
+	}
 	profile, err := config.LoadProfileWithContext(c.originCtx)
 	if err != nil {
 		return fmt.Errorf("config failed: %s", err.Error())
@@ -314,7 +318,7 @@ func (c *Context) PrepareEnv(args []string) error {
 	}
 
 	if endpoint := flagStringValue(c.originCtx, "endpoint"); endpoint != "" {
-		c.envMap["ALIBABA_CLOUD_CMS_ENDPOINT"] = endpoint
+		c.envMap["ALIBABA_CLOUD_CMS_ENDPOINT"] = cloudendpoint.WithSuffix(endpoint)
 	}
 
 	c.envMap["ALIBABA_CLOUD_CMS_USER_AGENT"] = util.GetAliyunCliUserAgent()
@@ -458,7 +462,7 @@ func (c *Context) Execute(childArgs []string) error {
 	// "connect: bad file descriptor" errors.
 	http.DefaultClient.CloseIdleConnections()
 
-	cmd := execCommandFunc(c.execFilePath, childArgs...)
+	cmd := execCommandFunc(c.execFilePath, cloudendpoint.WithSuffixArgs(childArgs)...)
 
 	envs := filterEnv(os.Environ(), c.envMap)
 	for k, v := range c.envMap {
@@ -481,7 +485,7 @@ func (c *Context) Execute(childArgs []string) error {
 func GetLatestCms2Version() (string, error) {
 	url := downloadBaseURL + "latest/version.txt"
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := cloudendpoint.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request for %s: %v", url, err)
 	}
@@ -510,7 +514,7 @@ func GetLatestCms2Version() (string, error) {
 }
 
 func downloadFile(url string, destFile string) error {
-	resp, err := httpGetFunc(url)
+	resp, err := httpGetFunc(cloudendpoint.WithSuffix(url))
 	if err != nil {
 		return fmt.Errorf("failed to download %s: %v", url, err)
 	}

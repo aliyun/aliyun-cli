@@ -41,6 +41,7 @@ import (
 	"github.com/alibabacloud-go/tea/tea"
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 
+	"github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 )
 
@@ -350,6 +351,9 @@ func assembleArgs(req *AssembledRequest, api *meta.API, args map[string]any) err
 }
 
 func applyReservedOptions(req *AssembledRequest, ec *ExecContext) error {
+	if err := endpoint.Validate(); err != nil {
+		return err
+	}
 	if v := ec.Version; v != "" {
 		req.Version = v
 	}
@@ -358,6 +362,7 @@ func applyReservedOptions(req *AssembledRequest, ec *ExecContext) error {
 	if req.Endpoint == "" {
 		req.Endpoint = ec.API.Endpoints.Resolve(ec.Region, ec.UseVPC)
 	}
+	req.Endpoint = endpoint.WithSuffix(req.Endpoint)
 	for k, v := range ec.ExtraQuery {
 		req.Query[k] = v
 	}

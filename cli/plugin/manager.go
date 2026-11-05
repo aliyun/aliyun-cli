@@ -25,6 +25,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli/trust"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	runtimesource "github.com/aliyun/aliyun-openapi-runtime/source"
 	"golang.org/x/mod/semver"
 )
@@ -235,7 +236,7 @@ func (m *Manager) httpGet(rawURL string, timeout time.Duration) (*http.Response,
 		Transport:     m.httpTransport,
 		CheckRedirect: m.checkPluginRedirect,
 	}
-	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	req, err := cloudendpoint.NewRequest(http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
 	}

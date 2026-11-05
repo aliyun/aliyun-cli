@@ -30,6 +30,7 @@ import (
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
 	"github.com/alibabacloud-go/tea/dara"
 	"github.com/alibabacloud-go/tea/tea"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	credentials "github.com/aliyun/credentials-go/credentials"
 )
 
@@ -67,6 +68,9 @@ func NewPricingClient(options PricingClientOptions) (*PricingClient, error) {
 }
 
 func newPricingClient(options PricingClientOptions, createClient func(*openapi.Config) (*openapi.Client, error)) (*PricingClient, error) {
+	if err := cloudendpoint.Validate(); err != nil {
+		return nil, err
+	}
 	if options.Credential == nil {
 		return nil, fmt.Errorf("price mode requires resolved credentials; run `aliyun configure` to configure credentials")
 	}
@@ -136,9 +140,9 @@ func (c *pricingHostClient) Call(request *http.Request, transport *http.Transpor
 // PricingEndpoint deliberately ignores the endpoint of the API being quoted.
 func PricingEndpoint() string {
 	if endpoint := os.Getenv(pricingEndpointEnv); endpoint != "" {
-		return endpoint
+		return cloudendpoint.WithSuffix(endpoint)
 	}
-	return defaultPricingEndpoint
+	return cloudendpoint.WithSuffix(defaultPricingEndpoint)
 }
 
 func (c *PricingClient) Quote(request PricingRequest) (string, error) {
