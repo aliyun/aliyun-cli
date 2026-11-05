@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode"
@@ -180,11 +181,11 @@ func MaskBodyFull(body string) string {
 func canRedactJSON(value string) bool {
 	trimmed := strings.TrimSpace(value)
 	if strings.HasPrefix(trimmed, "<") {
-		return false
+		return isNumericComparison(trimmed)
 	}
 	if first, _ := utf8.DecodeRuneInString(trimmed); unicode.Is(unicode.Cf, first) {
 		content := strings.TrimLeftFunc(trimmed, func(r rune) bool { return unicode.Is(unicode.Cf, r) || unicode.IsSpace(r) })
-		return !looksLikeJSONDocument(content) && !strings.HasPrefix(content, "<")
+		return !looksLikeJSONDocument(content) && (!strings.HasPrefix(content, "<") || isNumericComparison(content))
 	}
 	if !looksLikeJSONDocument(trimmed) {
 		return true
@@ -195,6 +196,15 @@ func canRedactJSON(value string) bool {
 	decoder := json.NewDecoder(strings.NewReader(value))
 	decoder.UseNumber()
 	return canRedactJSONValue(decoder, false)
+}
+
+func isNumericComparison(value string) bool {
+	operand := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(value[1:]), "="))
+	if operand == "" || !strings.ContainsRune("+-.0123456789", rune(operand[0])) {
+		return false
+	}
+	_, err := strconv.ParseFloat(operand, 64)
+	return err == nil
 }
 
 func looksLikeJSONDocument(value string) bool {

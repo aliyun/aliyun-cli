@@ -336,6 +336,27 @@ func TestMaskBodyPreservesOrdinaryScalarText(t *testing.T) {
 	}
 }
 
+func TestMaskBodyNumericComparisons(t *testing.T) {
+	for _, value := range []string{"<10", "<=10", "<100", "< -2.5", "<= +3e-2", "<.5", "<= 10", "\u200b<10", "\ufeff<=10"} {
+		for depth := 0; depth < 3; depth++ {
+			t.Run(fmt.Sprintf("%d/%q", depth, value), func(t *testing.T) {
+				if !canRedactJSON(value) || MaskKV("message", value) != value {
+					t.Fatalf("ordinary comparison was hidden: %q", value)
+				}
+				object, _ := json.Marshal(map[string]string{"message": value, "name": "visible"})
+				array, _ := json.Marshal([]string{value})
+				for _, body := range []string{string(object), string(array), "message=" + url.QueryEscape(value) + "&name=visible"} {
+					if got := MaskBodyFull(body); got != body {
+						t.Fatalf("ordinary body changed: got %q, want %q", got, body)
+					}
+				}
+			})
+			quoted, _ := json.Marshal(value)
+			value = string(quoted)
+		}
+	}
+}
+
 func TestMaskBodyQuotedDocumentTrailingText(t *testing.T) {
 	const secret = "FAKE_QA_TRAILING_PASSWORD_20261104"
 	for _, nested := range []string{
@@ -382,7 +403,14 @@ func TestMaskBodyQuotedDocumentTrailingText(t *testing.T) {
 func TestMaskBodyNestedOpaqueFormats(t *testing.T) {
 	const secret = "FAKE_NESTED_FORMAT_SECRET"
 	for _, value := range []string{
+		"<", "<=", "<NaN", "<Inf", "<1e9999",
 		"<Password>" + secret + "</Password>",
+		"<Password" + secret,
+		"<NaN password=" + secret,
+		"<10><Password>" + secret + "</Password>",
+		"<10 <Password>" + secret + "</Password>",
+		"<=10 {\"password\":\"" + secret + "\"}",
+		"\u200b<=10 <Password>" + secret + "</Password>",
 		"<!--password=" + secret + "-->",
 		`"note" {"password":"` + secret + `"}`,
 		`"note"{"password":"` + secret + `"}`,

@@ -240,11 +240,35 @@ func TestLogArgsRedactsNestedValuesWithoutMutation(t *testing.T) {
 			t.Fatal("argument log missing")
 		}
 	}
-	for _, value := range []string{"[Important] ordinary text", "[INFO] status: ready", "[docs](https://example.invalid/guide)"} {
+	for _, value := range []string{"[Important] ordinary text", "[INFO] status: ready", "[docs](https://example.invalid/guide)", "<10", "<=10"} {
 		out.Reset()
 		LogArgs(map[string]any{"name": value, "password": secret})
-		if !strings.Contains(out.String(), value) || !strings.Contains(out.String(), "FAKE***") || strings.Contains(out.String(), secret) {
+		encoded, _ := json.Marshal(value)
+		if !strings.Contains(out.String(), string(encoded)) || !strings.Contains(out.String(), "FAKE***") || strings.Contains(out.String(), secret) {
 			t.Fatalf("argument preview regressed: %s", &out)
+		}
+	}
+}
+
+func TestLogRequestPreservesNumericComparisons(t *testing.T) {
+	t.Cleanup(ResetLoggerForTest)
+	ResetLoggerForTest()
+	InitLogger("DEBUG", false)
+	var out bytes.Buffer
+	SetLoggerOutputForTest(&out)
+	for _, value := range []string{"<10", "<=10"} {
+		for _, body := range []any{
+			map[string]any{"message": value, "name": "visible"},
+			`{"message":"` + value + `","name":"visible"}`,
+		} {
+			out.Reset()
+			before, _ := json.Marshal(body)
+			req := &AssembledRequest{Body: body}
+			LogRequest(req)
+			after, _ := json.Marshal(req.Body)
+			if strings.Contains(out.String(), "opaque body omitted") || !strings.Contains(out.String(), "visible") || !bytes.Equal(before, after) {
+				t.Fatalf("ordinary body log regressed: %s", &out)
+			}
 		}
 	}
 }
