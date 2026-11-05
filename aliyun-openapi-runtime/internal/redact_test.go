@@ -335,6 +335,49 @@ func TestMaskBodyPreservesOrdinaryScalarText(t *testing.T) {
 	}
 }
 
+func TestMaskBodyQuotedDocumentTrailingText(t *testing.T) {
+	const secret = "FAKE_QA_TRAILING_PASSWORD_20261104"
+	for _, nested := range []string{
+		`{"password":"` + secret + `","name":"visible"}`,
+		`[{"password":"` + secret + `"}]`,
+		`{"password":"` + secret + `",`,
+		"\ufeff{\"password\":\"" + secret + "\"}",
+		"\u200b{\"password\":\"" + secret + "\"}",
+	} {
+		for depth := 1; depth <= 3; depth++ {
+			quoted, _ := json.Marshal(nested)
+			nested = string(quoted)
+			for _, suffix := range []string{" trailing", "junk", "\n{}", "\x00"} {
+				value := nested + suffix
+				t.Run(fmt.Sprintf("%d/%q", depth, value), func(t *testing.T) {
+					if !looksLikeJSONDocument(value) || canRedactJSON(value) {
+						t.Fatal("incomplete serialized document was treated as ordinary text")
+					}
+					want := fmt.Sprintf("<opaque body omitted: %d bytes>", len(value))
+					if got := MaskKV("payload", value); got != want {
+						t.Fatalf("unsafe nested preview: got %q, want %q", got, want)
+					}
+					body, _ := json.Marshal(map[string]string{"payload": value, "name": "visible"})
+					array, _ := json.Marshal([]string{value})
+					for _, input := range []string{string(body), string(array), "payload=" + url.QueryEscape(value) + "&name=visible"} {
+						for _, mask := range []func(string) string{MaskBodyFull, MaskBody} {
+							want := fmt.Sprintf("<opaque body omitted: %d bytes>", len(input))
+							if got := mask(input); got != want || strings.Contains(got, secret) {
+								t.Fatalf("unsafe body preview: got %q, want %q", got, want)
+							}
+						}
+					}
+				})
+			}
+		}
+	}
+	quoted, _ := json.Marshal(`{"password":"` + secret + `","name":"visible"}`)
+	body, _ := json.Marshal(map[string]string{"payload": string(quoted), "name": "visible"})
+	if got := MaskBodyFull(string(body)); strings.Contains(got, secret) || !strings.Contains(got, "FAKE***") || !strings.Contains(got, "visible") || strings.Contains(got, "opaque body omitted") {
+		t.Fatalf("complete nested document preview regressed: %q", got)
+	}
+}
+
 func TestLooksLikeJSONDocument(t *testing.T) {
 	for _, value := range []string{"", "visible", "[Important] text", "[2026 report]", "{YourContent}", `"quoted" ordinary text`} {
 		if looksLikeJSONDocument(value) {

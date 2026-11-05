@@ -226,7 +226,7 @@ func looksLikeJSONDocument(value string) bool {
 		}
 		var text string
 		if json.NewDecoder(strings.NewReader(value)).Decode(&text) == nil {
-			return false
+			return looksLikeJSONDocument(strings.TrimSpace(text)) || !canRedactJSON(text)
 		}
 		return !strings.ContainsAny(value, " \t\r\n“”‘’") || strings.ContainsAny(value, "{[=")
 	default:

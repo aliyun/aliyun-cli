@@ -216,7 +216,9 @@ func TestLogArgsRedactsNestedValuesWithoutMutation(t *testing.T) {
 	var out bytes.Buffer
 	SetLoggerOutputForTest(&out)
 	const secret = "FAKE_QA_ARGUMENT_PASSWORD_20261104"
+	quoted, _ := json.Marshal(`{"password":"` + secret + `","name":"visible"}`)
 	for _, value := range []any{
+		string(quoted) + " trailing",
 		`{"password":"` + secret + `","name":"visible"}`,
 		`{"password":"` + secret + `",`,
 		"\ufeff{\"password\":\"" + secret + "\"}",
@@ -250,7 +252,12 @@ func TestLogRequestOmitsOpaqueBody(t *testing.T) {
 	var out bytes.Buffer
 	SetLoggerOutputForTest(&out)
 	const secret = "FAKE_SECRET_20261103"
+	quoted, _ := json.Marshal(`{"password":"` + secret + `","name":"visible"}`)
+	trailingBody, _ := json.Marshal(map[string]string{"payload": string(quoted) + " trailing", "name": "visible"})
 	for _, body := range []any{
+		string(trailingBody),
+		trailingBody,
+		map[string]any{"payload": string(quoted) + " trailing", "name": "visible"},
 		"password=" + secret + "&name=%zz",
 		"<Password>" + secret + "</Password>",
 		"\ufeff<Password>" + secret + "==</Password>",

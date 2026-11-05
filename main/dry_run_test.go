@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -105,7 +106,7 @@ func TestCSArgumentsLogDoesNotLeakNestedPassword(t *testing.T) {
 	t.Setenv("ALIBABA_CLOUD_CLI_PLUGINS_DIR", t.TempDir())
 	t.Setenv("ALIBABA_CLOUD_CLI_PLUGIN_AUTO_INSTALL", "false")
 	const secret = "FAKE_QA_ARGUMENT_PASSWORD_20261104"
-	value := `{"password":"` + secret + `",`
+	quoted, _ := json.Marshal(`{"password":"` + secret + `","name":"visible"}`)
 	captured := make(chan []byte, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -122,30 +123,44 @@ func TestCSArgumentsLogDoesNotLeakNestedPassword(t *testing.T) {
 	if err := os.WriteFile(configPath, []byte(`{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":"fake-id","access_key_secret":"fake-key-secret","region_id":"cn-hangzhou","language":"en"}]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	var stdout, stderr bytes.Buffer
-	args := []string{"cs", "create-cluster", "--api-version", "2015-12-15", "--biz-region-id", "cn-hangzhou", "--name", value, "--config-path", configPath, "--profile", "default", "--region", "cn-hangzhou", "--endpoint", "capture.invalid", "--insecure", "--log-level", "DEBUG"}
-	cmd := exec.Command("go", append([]string{"run", "."}, args...)...)
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	for _, entry := range os.Environ() {
-		if !strings.HasPrefix(entry, "GOROOT=") {
-			cmd.Env = append(cmd.Env, entry)
+	for _, tc := range []struct {
+		name, value, marker string
+	}{
+		{"broken JSON", `{"password":"` + secret + `",`, "opaque body omitted"},
+		{"quoted trailing JSON", string(quoted) + " trailing", "opaque body omitted"},
+		{"complete quoted JSON", string(quoted), "FAKE***"},
+		{"ordinary quoted text", `"quoted" ordinary text`, "ordinary text"},
+	} {
+		for _, ai := range []string{"0", "1"} {
+			t.Run(tc.name+"/AI="+ai, func(t *testing.T) {
+				t.Setenv("ALIBABA_CLOUD_CLI_AI_MODE", ai)
+				var stdout, stderr bytes.Buffer
+				args := []string{"cs", "create-cluster", "--api-version", "2015-12-15", "--biz-region-id", "cn-hangzhou", "--name", tc.value, "--config-path", configPath, "--profile", "default", "--region", "cn-hangzhou", "--endpoint", "capture.invalid", "--insecure", "--log-level", "DEBUG"}
+				cmd := exec.Command("go", append([]string{"run", "."}, args...)...)
+				cmd.Stdout = &stdout
+				cmd.Stderr = &stderr
+				for _, entry := range os.Environ() {
+					if !strings.HasPrefix(entry, "GOROOT=") {
+						cmd.Env = append(cmd.Env, entry)
+					}
+				}
+				if err := cmd.Run(); err != nil {
+					t.Fatalf("CLI failed: %v; stderr=%s", err, &stderr)
+				}
+				want, _ := json.Marshal(map[string]string{"name": tc.value, "region_id": "cn-hangzhou"})
+				select {
+				case body := <-captured:
+					if !bytes.Equal(body, want) {
+						t.Fatalf("wire body changed: got %q, want %q", body, want)
+					}
+				default:
+					t.Fatal("local request was not captured")
+				}
+				if strings.Contains(stdout.String()+stderr.String(), secret) || !strings.Contains(stderr.String(), "Arguments:") || !strings.Contains(stderr.String(), tc.marker) {
+					t.Fatalf("unsafe argument output: stdout=%s stderr=%s", &stdout, &stderr)
+				}
+			})
 		}
-	}
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("CLI failed: %v; stderr=%s", err, &stderr)
-	}
-	if strings.Contains(stdout.String()+stderr.String(), secret) || !strings.Contains(stderr.String(), "Arguments:") || !strings.Contains(stderr.String(), "opaque body omitted") {
-		t.Fatalf("unsafe argument output: stdout=%s stderr=%s", &stdout, &stderr)
-	}
-	want, _ := json.Marshal(map[string]string{"name": value, "region_id": "cn-hangzhou"})
-	select {
-	case body := <-captured:
-		if !bytes.Equal(body, want) {
-			t.Fatalf("wire body changed: got %q, want %q", body, want)
-		}
-	default:
-		t.Fatal("local request was not captured")
 	}
 }
 
@@ -154,7 +169,13 @@ func TestCSDryRunOmitsBOMXMLBodyFile(t *testing.T) {
 	t.Setenv("ALIBABA_CLOUD_CLI_PLUGINS_DIR", t.TempDir())
 	t.Setenv("ALIBABA_CLOUD_CLI_PLUGIN_AUTO_INSTALL", "false")
 	const secret = "FAKE_SECRET_20261103"
+	quoted, _ := json.Marshal(`{"password":"` + secret + `","name":"visible"}`)
+	trailing := string(quoted) + " trailing"
+	trailingBody, _ := json.Marshal(map[string]string{"payload": trailing, "name": "visible"})
 	for _, tc := range []struct{ name, body, want string }{
+		{"quoted trailing JSON", string(trailingBody), ""},
+		{"quoted trailing form", "payload=" + url.QueryEscape(trailing) + "&name=visible", ""},
+		{"ordinary quoted text", `{"message":"\"quoted\" ordinary text","name":"visible"}`, `{"message":"\"quoted\" ordinary text","name":"visible"}`},
 		{"BOM XML", "\ufeff<Password>" + secret + "==</Password>", ""},
 		{"zero-width XML", "\u200b<Password>" + secret + "==</Password>", ""},
 		{"nested BOM JSON", `{"payload":"\ufeff{\"password\":\"` + secret + `\"}"}`, ""},
