@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -107,17 +108,20 @@ func TestCSArgumentsLogDoesNotLeakNestedPassword(t *testing.T) {
 	t.Setenv("ALIBABA_CLOUD_CLI_PLUGIN_AUTO_INSTALL", "false")
 	const secret = "FAKE_QA_ARGUMENT_PASSWORD_20261104"
 	quoted, _ := json.Marshal(`{"password":"` + secret + `","name":"visible"}`)
-	captured := make(chan []byte, 1)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		captured <- body
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	defer server.Close()
-	t.Setenv("HTTP_PROXY", server.URL)
-	t.Setenv("HTTPS_PROXY", server.URL)
-	t.Setenv("NO_PROXY", "")
+	cacheCommand := exec.Command("go", "env", "-json", "GOCACHE", "GOMODCACHE", "GOPATH")
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, "GOROOT=") {
+			cacheCommand.Env = append(cacheCommand.Env, entry)
+		}
+	}
+	cacheOutput, err := cacheCommand.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var caches map[string]string
+	if err := json.Unmarshal(cacheOutput, &caches); err != nil {
+		t.Fatal(err)
+	}
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.json")
 	if err := os.WriteFile(configPath, []byte(`{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":"fake-id","access_key_secret":"fake-key-secret","region_id":"cn-hangzhou","language":"en"}]}`), 0o600); err != nil {
@@ -133,7 +137,53 @@ func TestCSArgumentsLogDoesNotLeakNestedPassword(t *testing.T) {
 	} {
 		for _, ai := range []string{"0", "1"} {
 			t.Run(tc.name+"/AI="+ai, func(t *testing.T) {
+				var mu sync.Mutex
+				var captured [][]byte
+				var unrelated int
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.Method != http.MethodPost || r.Host != "capture.invalid" || r.URL.Path != "/clusters" {
+						mu.Lock()
+						unrelated++
+						mu.Unlock()
+						w.WriteHeader(http.StatusServiceUnavailable)
+						return
+					}
+					body, err := io.ReadAll(r.Body)
+					if err != nil {
+						http.Error(w, "request body read failed", http.StatusBadRequest)
+						return
+					}
+					mu.Lock()
+					captured = append(captured, body)
+					mu.Unlock()
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(`{"ok":true}`))
+				}))
+				t.Cleanup(server.Close)
+				t.Setenv("HTTP_PROXY", server.URL)
+				t.Setenv("HTTPS_PROXY", server.URL)
+				t.Setenv("NO_PROXY", "")
 				t.Setenv("ALIBABA_CLOUD_CLI_AI_MODE", ai)
+				for _, extra := range []struct{ method, host, path string }{
+					{http.MethodPost, "unrelated.invalid", "/clusters"},
+					{http.MethodPost, "capture.invalid", "/unrelated"},
+					{http.MethodGet, "capture.invalid", "/clusters"},
+				} {
+					req, err := http.NewRequest(extra.method, server.URL+extra.path, strings.NewReader("unrelated"))
+					if err != nil {
+						t.Fatal(err)
+					}
+					req.Host = extra.host
+					response, err := server.Client().Do(req)
+					if err != nil {
+						t.Fatal(err)
+					}
+					_, _ = io.Copy(io.Discard, response.Body)
+					response.Body.Close()
+					if response.StatusCode != http.StatusServiceUnavailable {
+						t.Fatalf("unrelated request status = %d", response.StatusCode)
+					}
+				}
 				var stdout, stderr bytes.Buffer
 				args := []string{"cs", "create-cluster", "--api-version", "2015-12-15", "--biz-region-id", "cn-hangzhou", "--name", tc.value, "--config-path", configPath, "--profile", "default", "--region", "cn-hangzhou", "--endpoint", "capture.invalid", "--insecure", "--log-level", "DEBUG"}
 				cmd := exec.Command("go", append([]string{"run", "."}, args...)...)
@@ -144,17 +194,28 @@ func TestCSArgumentsLogDoesNotLeakNestedPassword(t *testing.T) {
 						cmd.Env = append(cmd.Env, entry)
 					}
 				}
+				home := t.TempDir()
+				cmd.Env = append(cmd.Env, "HOME="+home, "USERPROFILE="+home)
+				for name, value := range caches {
+					cmd.Env = append(cmd.Env, name+"="+value)
+				}
 				if err := cmd.Run(); err != nil {
 					t.Fatalf("CLI failed: %v; stderr=%s", err, &stderr)
 				}
 				want, _ := json.Marshal(map[string]string{"name": tc.value, "region_id": "cn-hangzhou"})
-				select {
-				case body := <-captured:
-					if !bytes.Equal(body, want) {
-						t.Fatalf("wire body changed: got %q, want %q", body, want)
-					}
-				default:
-					t.Fatal("local request was not captured")
+				mu.Lock()
+				bodies := append([][]byte(nil), captured...)
+				rejected := unrelated
+				mu.Unlock()
+				if rejected < 3 {
+					t.Fatalf("rejected %d unrelated requests, want at least three", rejected)
+				}
+				t.Logf("captured %d API requests; rejected %d unrelated requests", len(bodies), rejected)
+				if len(bodies) != 1 {
+					t.Fatalf("captured %d API requests, want exactly one", len(bodies))
+				}
+				if !bytes.Equal(bodies[0], want) {
+					t.Fatalf("wire body changed: got %q, want %q", bodies[0], want)
 				}
 				if strings.Contains(stdout.String()+stderr.String(), secret) || !strings.Contains(stderr.String(), "Arguments:") || !strings.Contains(stderr.String(), tc.marker) {
 					t.Fatalf("unsafe argument output: stdout=%s stderr=%s", &stdout, &stderr)
