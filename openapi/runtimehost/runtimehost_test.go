@@ -162,7 +162,7 @@ func TestBuildUserAgentSuffixIncludesDetectedAgentSegment(t *testing.T) {
 func TestQoderUserAgentWithAIModeDisabled(t *testing.T) {
 	for _, test := range []struct{ env, agent string }{
 		{"QODER_CLI", "qoder-cli"},
-		{"QODERCN_CLI", "qwenwork"},
+		{"QODERCN_CLI", "qoder_cn_cli"},
 	} {
 		t.Run(test.env, func(t *testing.T) {
 			isolateAgentDetectionEnvs(t)
