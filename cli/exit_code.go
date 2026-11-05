@@ -17,7 +17,14 @@ import "os"
 
 var (
 	withExitCode = true
+	beforeExit   func(int)
 )
+
+// SetBeforeExit registers an observer invoked immediately before Exit terminates
+// the process. Passing nil clears the observer. Disabled exits do not invoke it.
+func SetBeforeExit(fn func(int)) {
+	beforeExit = fn
+}
 
 func EnableExitCode() {
 	withExitCode = true
@@ -29,6 +36,9 @@ func DisableExitCode() {
 
 func Exit(code int) {
 	if withExitCode {
+		if beforeExit != nil {
+			beforeExit(code)
+		}
 		os.Exit(code)
 	}
 }

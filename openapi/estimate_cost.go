@@ -24,6 +24,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 	pricingruntime "github.com/aliyun/aliyun-openapi-runtime/runtime"
 )
 
@@ -379,6 +380,7 @@ func invokeEstimateCost(ctx *cli.Context, profile *config.Profile, popCode strin
 	if language == "" {
 		language = i18n.GetLanguage()
 	}
+	telemetry.SetOpenAPIRuntimeVersion(pricingruntime.Version)
 	return client.Quote(pricingruntime.PricingRequest{
 		Language: language, PopCode: popCode, PopVersion: popVersion,
 		ApiName: apiName, Parameters: parameters,
