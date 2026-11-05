@@ -33,12 +33,12 @@ var knownAgentEnv = []struct {
 	{"CLINE_ACTIVE", "cline"},
 	{"CODEX_SHELL", "codex"},
 	{"CODEX_SANDBOX", "codex"},
+	{"QWENWORK_BASE_URL", "qwenwork"},
+	{"QODERWORK_EXECUTION_ENV", "qwenwork"},
+	// Qoder CLI's China distribution uses a different shell identification variable.
+	{"QODERCN_CLI", "qoder_cn_cli"},
 	{"QODER_AGENT", "qoder"},
 	{"QODER_CLI", "qoder-cli"},
-	// Qoder CLI's China distribution uses a different shell identification variable.
-	{"QODERCN_CLI", "qwenwork"},
-	{"QODER_WORK_INTEGRATION_PRODUCT", "qwenwork"},
-	{"QODERWORK_EXECUTION_ENV", "qwenwork"},
 	{"QWENPAW_LOG_LEVEL", "qwenpaw"},
 	{"WORKBUDDY_APP_NAME", "workbuddy"},
 	{"TRAE_BRAND_NAME", "trae"},
