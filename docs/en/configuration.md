@@ -391,6 +391,46 @@ Any non-200 response or malformed/missing credential field is treated as a crede
 
 Set `ALIBABA_CLOUD_DISABLE_EXTERNAL_PROCESS=true` to block both external process execution and CredentialsURI fetching in a restricted environment.
 
+## Request configuration
+
+### Signature version (kebab-case commands)
+
+Only kebab-case commands are supported (for example `aliyun ecs describe-instances`). `--cli-sign-version` / profile `signature_version` / `ALIBABA_CLOUD_SIGNATURE_VERSION` currently accept:
+
+| Value | Behavior |
+| --- | --- |
+| `v4` | Use signature V4 |
+| empty | Clear a configured value and restore the default signing path |
+
+Any other value is rejected. Precedence: command flag > profile > environment variable > default. Passing `--cli-sign-version ''` clears the value and restores the default; it is not backfilled by an environment `v4`.
+
+Enable it for one command:
+
+```sh
+aliyun ecs describe-instances --cli-sign-version v4
+```
+
+Save it as the profile default (same flag):
+
+```sh
+aliyun configure set --profile default --cli-sign-version v4
+```
+
+Clear the profile value and restore the default:
+
+```sh
+aliyun configure set --profile default --cli-sign-version ''
+```
+
+Or set / clear the environment variable for the current process:
+
+```sh
+export ALIBABA_CLOUD_SIGNATURE_VERSION=v4
+export ALIBABA_CLOUD_SIGNATURE_VERSION=
+```
+
+When none are set, signing behavior stays unchanged.
+
 ## Environment variables
 
 Environment variables can select a profile or fill fields not supplied by flags/profile configuration. Important variables include:
@@ -406,6 +446,7 @@ Environment variables can select a profile or fill fields not supplied by flags/
 | `ALIBABA_CLOUD_REGION_ID` | Default region |
 | `ALIBABA_CLOUD_STS_ENDPOINT` | Override the STS endpoint |
 | `ALIBABA_CLOUD_ENDPOINT` | Override the product endpoint |
+| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI signature version: only `v4`; used only when the flag is unset and the profile value is empty; set empty to clear and use default |
 | `ALIBABA_CLOUD_CREDENTIALS_URI` | CredentialsURI source |
 | `ALIBABA_CLOUD_OIDC_PROVIDER_ARN` | OIDC provider ARN |
 | `ALIBABA_CLOUD_OIDC_TOKEN_FILE` | OIDC token file |

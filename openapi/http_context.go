@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	popgateway "github.com/alibabacloud-go/alibabacloud-gateway-pop/client"
 	slsgateway "github.com/alibabacloud-go/alibabacloud-gateway-sls/client"
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
@@ -69,11 +70,23 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	if err != nil {
 		return
 	}
+	if err = cp.ValidateSignatureVersion(); err != nil {
+		return nil, err
+	}
 	conf := openapiClient.Config{
 		Credential: credential,
 		RegionId:   tea.String(cp.RegionId),
 		// AccessKeyId:     tea.String(cp.AccessKeyId),
 		// AccessKeySecret: tea.String(cp.AccessKeySecret),
+	}
+	// Product legacy SignatureAlgorithm=v2 (e.g. FNF) outranks configured V4.
+	useV4 := false
+	legacy := strings.EqualFold(product.Code, "fnf") || strings.EqualFold(product.GetLowerCode(), "fnf")
+	if legacy {
+		conf.SignatureAlgorithm = tea.String("v2")
+	} else if cp.SignatureVersion == config.SignatureVersionV4 {
+		conf.SignatureVersion = tea.String(config.SignatureVersionV4)
+		useV4 = true
 	}
 	if cp.Endpoint != "" {
 		conf.Endpoint = tea.String(cp.Endpoint)
@@ -116,8 +129,27 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 		return
 	}
 	client.DisableSDKError = tea.Bool(true)
-	if strings.ToLower(product.Code) == "sls" {
-		client.Spi = &slsgateway.Client{} // host management for sls endpoint
+	isSls := strings.EqualFold(product.Code, "sls")
+	if isSls {
+		// SLS gateway handles host management and implements ACS4 when
+		// SignatureVersion=v4 (see alibabacloud-gateway-sls); do not swap in POP.
+		client.Spi = &slsgateway.Client{}
+		return client, nil
+	}
+	if useV4 {
+		// Generic OpenAPI products sign ACS4 through the POP gateway SPI.
+		productId := strings.TrimSpace(product.Code)
+		if productId == "" {
+			productId = product.GetLowerCode()
+		}
+		client.ProductId = tea.String(productId)
+		gateway, gerr := popgateway.NewClient()
+		if gerr != nil {
+			return nil, fmt.Errorf("init signature v4 gateway failed, %s", gerr)
+		}
+		if err = client.SetGatewayClient(gateway); err != nil {
+			return nil, fmt.Errorf("set signature v4 gateway failed, %s", err)
+		}
 	}
 	return client, err
 }

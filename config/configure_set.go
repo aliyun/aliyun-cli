@@ -153,6 +153,15 @@ func doConfigureSet(ctx *cli.Context) error {
 	profile.EndpointType = EndpointTypeFlag(flags).GetStringOrDefault(profile.EndpointType)
 	profile.Endpoint = EndpointFlag(flags).GetStringOrDefault(profile.Endpoint)
 	profile.ExternalAccountType = ExternalAccountTypeFlag(flags).GetStringOrDefault(profile.ExternalAccountType)
+	// Reuse the same --cli-sign-version flag as invoke; persist into profile.signature_version.
+	if f := CliSignVersionFlag(flags); f != nil && f.IsAssigned() {
+		profile.SignatureVersion = f.GetStringOrDefault(profile.SignatureVersion)
+	}
+	if normalized, err := NormalizeSignatureVersion(profile.SignatureVersion); err != nil {
+		return fmt.Errorf("fail to set configuration: %w", err)
+	} else {
+		profile.SignatureVersion = normalized
+	}
 
 	if autoPluginInstallFlag := AutoPluginInstallFlag(flags); autoPluginInstallFlag != nil && autoPluginInstallFlag.IsAssigned() {
 		if val, ok := autoPluginInstallFlag.GetValue(); ok {
