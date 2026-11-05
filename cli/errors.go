@@ -49,6 +49,9 @@ func (e *InvalidOptionCombinationError) Unwrap() error {
 }
 
 func (*InvalidOptionCombinationError) AIRecoveryEligible() {}
+func (*InvalidOptionCombinationError) LocalErrorCode() string {
+	return "INVALID_OPTION_COMBINATION"
+}
 
 // If command.Execute return Noticeable error, print i18n Notice under error information
 type ErrorWithTip interface {
@@ -99,7 +102,8 @@ func (e *InvalidCommandError) Error() string {
 	return fmt.Sprintf("%q is not a valid command", e.Name)
 }
 
-func (*InvalidCommandError) AIRecoveryEligible() {}
+func (*InvalidCommandError) AIRecoveryEligible()    {}
+func (*InvalidCommandError) LocalErrorCode() string { return "INVALID_COMMAND" }
 
 func (e *InvalidCommandError) GetSuggestions() []string {
 	if e == nil || e.ctx == nil || e.ctx.command == nil {
@@ -172,7 +176,8 @@ func (e *InvalidFlagError) AgentHelpCommand() string {
 	return "aliyun help " + path
 }
 
-func (*InvalidFlagError) AIRecoveryEligible() {}
+func (*InvalidFlagError) AIRecoveryEligible()    {}
+func (*InvalidFlagError) LocalErrorCode() string { return "INVALID_FLAG" }
 
 // AgentSuggestions returns the same close flag matches used by Error without
 // exposing Context internals to the OpenAPI recovery adapter.

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 // IsPluginInstalled checks if a plugin is installed locally.
@@ -233,12 +234,19 @@ func resolvePluginBinaryPath(plugin *LocalPlugin) (string, error) {
 	return binPath, nil
 }
 
+// SetBeforePluginExit registers a hook invoked immediately before os.Exit from a plugin subprocess failure.
+var beforePluginExit func(exitCode int)
+
+func SetBeforePluginExit(fn func(exitCode int)) {
+	beforePluginExit = fn
+}
+
 func runPluginCommand(binPath string, args []string, stdout io.Writer, stderr io.Writer, envs []string) error {
 	if binPath == "" {
 		return fmt.Errorf("binary path is empty")
 	}
 
-	cmd := exec.Command(binPath, args...)
+	cmd := exec.Command(binPath, cloudendpoint.WithSuffixArgs(args)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
@@ -246,7 +254,11 @@ func runPluginCommand(binPath string, args []string, stdout io.Writer, stderr io
 
 	if err := cmd.Run(); err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
-			os.Exit(exitError.ExitCode())
+			code := exitError.ExitCode()
+			if beforePluginExit != nil {
+				beforePluginExit(code)
+			}
+			os.Exit(code)
 		}
 		return fmt.Errorf("plugin execution failed: %w", err)
 	}

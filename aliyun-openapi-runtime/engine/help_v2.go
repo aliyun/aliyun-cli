@@ -55,13 +55,18 @@ func (e *Engine) BuildAPIHelp(req Request, options HelpOptions) (HelpDocument, e
 	}
 	options = requestHelpOptions(req, options)
 	service := runtimehelp.Service{Data: ldr, Responses: runtimeResponseSource{loader: ldr}}
+	var document HelpDocument
 	if options.Section == runtimehelp.SectionResponse {
-		return service.BuildResponse(product, ref.Version, ref.Name, options)
+		document, err = service.BuildResponse(product, ref.Version, ref.Name, options)
+	} else if options.ExplicitSection {
+		document, err = service.BuildRequest(product, ref.Version, ref.Name, options)
+	} else {
+		document, err = service.BuildAction(product, ref.Version, ref.Name, options)
 	}
-	if options.ExplicitSection {
-		return service.BuildRequest(product, ref.Version, ref.Name, options)
+	if err == nil {
+		req.notifyCommandResolved()
 	}
-	return service.BuildAction(product, ref.Version, ref.Name, options)
+	return document, err
 }
 
 // BuildParameterHelp builds kebab Help for one top-level API parameter.
@@ -80,9 +85,13 @@ func (e *Engine) BuildParameterHelp(req Request, parameter string, options HelpO
 		return nil, err
 	}
 	options = requestHelpOptions(req, options)
-	return (runtimehelp.Service{Data: ldr}).BuildParameter(
+	document, err := (runtimehelp.Service{Data: ldr}).BuildParameter(
 		product, ref.Version, ref.Name, parameter, options,
 	)
+	if err == nil {
+		req.notifyCommandResolved()
+	}
+	return document, err
 }
 
 // RenderHelp renders a structured Runtime Help v1 document.
@@ -166,12 +175,13 @@ func validateReservedHelp(reserved argparser.Reserved, productLevel bool) error 
 }
 
 func (e *Engine) tryParameterHelp(req Request, apiParameters []meta.Parameter, tail []string) (bool, error) {
-	parameter, cleaned, found, err := detectParameterHelp(apiParameters, tail)
+	parameter, cleaned, targetIndex, found, err := detectParameterHelp(apiParameters, tail)
 	if err != nil || !found {
 		return found, err
 	}
 	parsed, err := argparser.ParseWithOptions(apiParameters, cleaned, argparser.ParseOptions{
-		ExternalFlags: e.externalFlags,
+		ExternalFlags:    e.externalFlags,
+		OnParameterNames: parameterHelpNameObserver(req.OnParameterNames, tail, targetIndex),
 	})
 	if err != nil {
 		return true, &UsageError{Code: "INVALID_ARGUMENT", Err: err}
@@ -193,7 +203,41 @@ func (e *Engine) tryParameterHelp(req Request, apiParameters []meta.Parameter, t
 	return true, RenderHelp(req.Out, document, options)
 }
 
-func detectParameterHelp(parameters []meta.Parameter, args []string) (string, []string, bool, error) {
+// parameterHelpNameObserver restores the schema-confirmed Help target removed
+// before parsing. Its following Help operation remains in the parser input, so
+// the confirmed operation occurrence determines the target's original position.
+func parameterHelpNameObserver(observer func([]string), args []string, targetIndex int) func([]string) {
+	if observer == nil {
+		return nil
+	}
+	target, operation := args[targetIndex], args[targetIndex+1]
+	precedingOperations := 0
+	for _, token := range args[:targetIndex] {
+		name, _, _ := strings.Cut(token, "=")
+		if name == operation {
+			precedingOperations++
+		}
+	}
+	return func(names []string) {
+		position, seen := len(names), 0
+		for i, name := range names {
+			if name == operation {
+				if seen == precedingOperations {
+					position = i
+					break
+				}
+				seen++
+			}
+		}
+		withTarget := make([]string, 0, len(names)+1)
+		withTarget = append(withTarget, names[:position]...)
+		withTarget = append(withTarget, target)
+		withTarget = append(withTarget, names[position:]...)
+		observer(withTarget)
+	}
+}
+
+func detectParameterHelp(parameters []meta.Parameter, args []string) (string, []string, int, bool, error) {
 	known := make(map[string]string)
 	for i := range parameters {
 		parameter := &parameters[i]
@@ -224,17 +268,17 @@ func detectParameterHelp(parameters []meta.Parameter, args []string) (string, []
 		name := strings.TrimPrefix(token, "--")
 		if canonical, ok := known[name]; ok {
 			if targetIndex >= 0 {
-				return "", nil, true, errors.New("parameter Help target is ambiguous")
+				return "", nil, -1, true, errors.New("parameter Help target is ambiguous")
 			}
 			targetIndex, target = i, canonical
 		}
 	}
 	if targetIndex < 0 {
-		return "", args, false, nil
+		return "", args, -1, false, nil
 	}
 	cleaned := append([]string(nil), args[:targetIndex]...)
 	cleaned = append(cleaned, args[targetIndex+1:]...)
-	return target, cleaned, true, nil
+	return target, cleaned, targetIndex, true, nil
 }
 
 func isParameterHelpOperation(token string) bool {

@@ -33,6 +33,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/publishsig"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	"golang.org/x/mod/semver"
 )
 
@@ -277,7 +278,7 @@ func resolveExecPath() (string, error) {
 }
 
 func fetchVersionFromOSS() (string, error) {
-	resp, err := httpClient.Get(ossVersionURL)
+	resp, err := cloudendpoint.Get(httpClient, ossVersionURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to reach OSS: %s", err)
 	}
@@ -310,7 +311,7 @@ type publishedVersion struct {
 // fetchVersionList reads the stable history published beside /version.
 // A missing object is not an error: the caller follows /version once.
 func fetchVersionList() ([]publishedVersion, bool, error) {
-	resp, err := httpClient.Get(ossBaseURL + "/versions")
+	resp, err := cloudendpoint.Get(httpClient, ossBaseURL+"/versions")
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to reach OSS: %s", err)
 	}
@@ -439,7 +440,7 @@ func buildAssetName(version string) (string, error) {
 }
 
 func downloadFile(w io.Writer, url, destPath string) error {
-	resp, err := httpClient.Get(url)
+	resp, err := cloudendpoint.Get(httpClient, url)
 	if err != nil {
 		return err
 	}

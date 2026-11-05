@@ -15,6 +15,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig"
+	"github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 func GetFromEnv(args ...string) string {
@@ -55,6 +56,10 @@ func RandStringBytesMaskImprSrc(length int) interface{} {
 }
 
 func OpenBrowser(url string) error {
+	if err := endpoint.Validate(); err != nil {
+		return err
+	}
+	url = endpoint.WithSuffix(url)
 	var err error
 
 	switch runtime.GOOS {
