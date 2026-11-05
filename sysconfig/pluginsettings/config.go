@@ -27,17 +27,25 @@ import (
 
 const ConfigFileName = "plugin-settings.json"
 
-const EnvSourceBase = "ALIBABA_CLOUD_CLI_PLUGIN_SOURCE_BASE"
+const (
+	EnvSourceBase = "ALIBABA_CLOUD_CLI_PLUGIN_SOURCE_BASE"
+	EnvSite       = "ALIBABA_CLOUD_CLI_PLUGIN_SITE"
+	SiteCN        = "cn"
+	SiteIntl      = "intl"
+)
 
 type PluginSettings struct {
 	// SourceBase is the URL prefix for the plugins tree, e.g. https://example.com/plugins
 	// Index: {SourceBase}/plugin_pkg_index.json, {SourceBase}/plugin_search_index.json
 	// Packages: {SourceBase}/pkgs/{name}/{version}/{filename}
 	SourceBase string `json:"source_base,omitempty"`
+	// Site selects the trust Discovery portal. SourceBase selects which
+	// allowlisted repository-specific signed metadata the portal returns.
+	Site string `json:"site"`
 }
 
 func Default() *PluginSettings {
-	return &PluginSettings{}
+	return &PluginSettings{Site: SiteCN}
 }
 
 func GetConfigFilePath(configDir string) string {
@@ -58,6 +66,7 @@ func Load(configDir string) (*PluginSettings, error) {
 		return Default(), nil
 	}
 	c.SourceBase = strings.TrimSpace(c.SourceBase)
+	c.Site = NormalizeSite(c.Site)
 	return &c, nil
 }
 
@@ -65,6 +74,7 @@ func Save(configDir string, c *PluginSettings) error {
 	if c == nil {
 		c = Default()
 	}
+	c.Site = NormalizeSite(c.Site)
 	path := GetConfigFilePath(configDir)
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return err
@@ -84,4 +94,27 @@ func EffectiveSourceBase(c *PluginSettings) string {
 		return ""
 	}
 	return strings.TrimRight(strings.TrimSpace(c.SourceBase), "/")
+}
+
+func NormalizeSite(site string) string {
+	site = strings.ToLower(strings.TrimSpace(site))
+	if site == SiteIntl {
+		return SiteIntl
+	}
+	return SiteCN
+}
+
+func IsValidSite(site string) bool {
+	site = strings.ToLower(strings.TrimSpace(site))
+	return site == SiteCN || site == SiteIntl
+}
+
+func EffectiveSite(c *PluginSettings) string {
+	if v := strings.TrimSpace(util.GetFromEnv(EnvSite)); v != "" {
+		return NormalizeSite(v)
+	}
+	if c == nil {
+		return SiteCN
+	}
+	return NormalizeSite(c.Site)
 }
