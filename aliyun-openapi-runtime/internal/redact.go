@@ -179,6 +179,9 @@ func MaskBodyFull(body string) string {
 
 func canRedactJSON(value string) bool {
 	trimmed := strings.TrimSpace(value)
+	if strings.HasPrefix(trimmed, "<") {
+		return false
+	}
 	if first, _ := utf8.DecodeRuneInString(trimmed); unicode.Is(unicode.Cf, first) {
 		content := strings.TrimLeftFunc(trimmed, func(r rune) bool { return unicode.Is(unicode.Cf, r) || unicode.IsSpace(r) })
 		return !looksLikeJSONDocument(content) && !strings.HasPrefix(content, "<")
@@ -210,7 +213,11 @@ func looksLikeJSONDocument(value string) bool {
 		if value[0] == '{' {
 			return rest[0] == '"' || rest[0] == '}' || strings.ContainsAny(rest, ":=")
 		}
-		if rest[0] == '"' || rest[0] == '{' || rest[0] == '[' || rest[0] == ']' || strings.ContainsAny(rest, ":=") {
+		item, suffix, closed := strings.Cut(rest, "]")
+		if closed && (looksLikeJSONDocument(strings.TrimSpace(suffix)) || !canRedactJSON(suffix)) {
+			return true
+		}
+		if rest[0] == '"' || rest[0] == '{' || rest[0] == '[' || rest[0] == ']' || strings.ContainsAny(item, ":=") {
 			return true
 		}
 		decoder := json.NewDecoder(strings.NewReader(rest))
@@ -225,8 +232,10 @@ func looksLikeJSONDocument(value string) bool {
 			return true
 		}
 		var text string
-		if json.NewDecoder(strings.NewReader(value)).Decode(&text) == nil {
-			return looksLikeJSONDocument(strings.TrimSpace(text)) || !canRedactJSON(text)
+		decoder := json.NewDecoder(strings.NewReader(value))
+		if decoder.Decode(&text) == nil {
+			tail := strings.TrimSpace(value[decoder.InputOffset():])
+			return looksLikeJSONDocument(strings.TrimSpace(text)) || !canRedactJSON(text) || looksLikeJSONDocument(tail) || !canRedactJSON(tail)
 		}
 		return !strings.ContainsAny(value, " \t\r\n“”‘’") || strings.ContainsAny(value, "{[=")
 	default:

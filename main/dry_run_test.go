@@ -135,6 +135,10 @@ func TestCSArgumentsLogDoesNotLeakNestedPassword(t *testing.T) {
 		name, value, marker string
 	}{
 		{"broken JSON", `{"password":"` + secret + `",`, "opaque body omitted"},
+		{"nested XML", "<Password>" + secret + "</Password>", "opaque body omitted"},
+		{"ordinary first quoted JSON tail", `"note" {"password":"` + secret + `"}`, "opaque body omitted"},
+		{"ordinary bracket status", "[INFO] status: ready", "[INFO] status: ready"},
+		{"ordinary Markdown link", "[docs](https://example.invalid/guide)", "[docs](https://example.invalid/guide)"},
 		{"quoted trailing JSON", string(quoted) + " trailing", "opaque body omitted"},
 		{"complete quoted JSON", string(quoted), "FAKE***"},
 		{"ordinary quoted text", `"quoted" ordinary text`, "ordinary text"},
@@ -233,7 +237,13 @@ func TestCSArgumentsLogDoesNotLeakNestedPassword(t *testing.T) {
 					}
 					return false
 				}, 10*time.Second, 10*time.Millisecond, "background telemetry upload did not complete")
-				want, _ := json.Marshal(map[string]string{"name": tc.value, "region_id": "cn-hangzhou"})
+				var expected bytes.Buffer
+				encoder := json.NewEncoder(&expected)
+				encoder.SetEscapeHTML(false)
+				if err := encoder.Encode(map[string]string{"name": tc.value, "region_id": "cn-hangzhou"}); err != nil {
+					t.Fatal(err)
+				}
+				want := bytes.TrimSuffix(expected.Bytes(), []byte("\n"))
 				mu.Lock()
 				bodies := append([][]byte(nil), captured...)
 				rejected, completedUploads := unrelated, uploads
@@ -270,6 +280,14 @@ func TestCSDryRunOmitsBOMXMLBodyFile(t *testing.T) {
 	for _, tc := range []struct{ name, body, want string }{
 		{"quoted trailing JSON", string(trailingBody), ""},
 		{"quoted trailing form", "payload=" + url.QueryEscape(trailing) + "&name=visible", ""},
+		{"nested XML JSON", `{"payload":"<Password>` + secret + `</Password>","name":"visible"}`, ""},
+		{"nested XML form", "payload=" + url.QueryEscape("<Password>"+secret+"</Password>") + "&name=visible", ""},
+		{"ordinary first quoted JSON tail", `{"payload":"\"note\" {\"password\":\"` + secret + `\"}","name":"visible"}`, ""},
+		{"ordinary first quoted form tail", "payload=" + url.QueryEscape(`"note" {"password":"`+secret+`"}`) + "&name=visible", ""},
+		{"ordinary bracket JSON", `{"message":"[INFO] status: ready","name":"visible"}`, `{"message":"[INFO] status: ready","name":"visible"}`},
+		{"ordinary bracket form", "message=%5BINFO%5D+status%3A+ready&name=visible", "message=%5BINFO%5D+status%3A+ready&name=visible"},
+		{"ordinary link JSON", `{"message":"[docs](https://example.invalid/guide)","name":"visible"}`, `{"message":"[docs](https://example.invalid/guide)","name":"visible"}`},
+		{"ordinary link form", "message=%5Bdocs%5D%28https%3A%2F%2Fexample.invalid%2Fguide%29&name=visible", "message=%5Bdocs%5D%28https%3A%2F%2Fexample.invalid%2Fguide%29&name=visible"},
 		{"ordinary quoted text", `{"message":"\"quoted\" ordinary text","name":"visible"}`, `{"message":"\"quoted\" ordinary text","name":"visible"}`},
 		{"BOM XML", "\ufeff<Password>" + secret + "==</Password>", ""},
 		{"zero-width XML", "\u200b<Password>" + secret + "==</Password>", ""},

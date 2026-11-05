@@ -218,6 +218,8 @@ func TestLogArgsRedactsNestedValuesWithoutMutation(t *testing.T) {
 	const secret = "FAKE_QA_ARGUMENT_PASSWORD_20261104"
 	quoted, _ := json.Marshal(`{"password":"` + secret + `","name":"visible"}`)
 	for _, value := range []any{
+		"<Password>" + secret + "</Password>",
+		`"note" {"password":"` + secret + `"}`,
 		string(quoted) + " trailing",
 		`{"password":"` + secret + `","name":"visible"}`,
 		`{"password":"` + secret + `",`,
@@ -238,10 +240,12 @@ func TestLogArgsRedactsNestedValuesWithoutMutation(t *testing.T) {
 			t.Fatal("argument log missing")
 		}
 	}
-	out.Reset()
-	LogArgs(map[string]any{"name": "[Important] ordinary text", "password": secret})
-	if !strings.Contains(out.String(), "[Important] ordinary text") || !strings.Contains(out.String(), "FAKE***") || strings.Contains(out.String(), secret) {
-		t.Fatalf("argument preview regressed: %s", &out)
+	for _, value := range []string{"[Important] ordinary text", "[INFO] status: ready", "[docs](https://example.invalid/guide)"} {
+		out.Reset()
+		LogArgs(map[string]any{"name": value, "password": secret})
+		if !strings.Contains(out.String(), value) || !strings.Contains(out.String(), "FAKE***") || strings.Contains(out.String(), secret) {
+			t.Fatalf("argument preview regressed: %s", &out)
+		}
 	}
 }
 
@@ -255,6 +259,8 @@ func TestLogRequestOmitsOpaqueBody(t *testing.T) {
 	quoted, _ := json.Marshal(`{"password":"` + secret + `","name":"visible"}`)
 	trailingBody, _ := json.Marshal(map[string]string{"payload": string(quoted) + " trailing", "name": "visible"})
 	for _, body := range []any{
+		map[string]any{"payload": "<Password>" + secret + "</Password>", "name": "visible"},
+		map[string]any{"payload": `"note" {"password":"` + secret + `"}`, "name": "visible"},
 		string(trailingBody),
 		trailingBody,
 		map[string]any{"payload": string(quoted) + " trailing", "name": "visible"},

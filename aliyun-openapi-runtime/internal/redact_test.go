@@ -319,6 +319,7 @@ func TestMaskBodyTopLevelArrayPreservesNumbers(t *testing.T) {
 func TestMaskBodyPreservesOrdinaryScalarText(t *testing.T) {
 	for _, text := range []string{
 		"[Important] ordinary text", "[输入文档内容]", "{placeholder}", "${user}",
+		"[INFO] status: ready", "[docs](https://example.invalid/guide)", "[name] key=value",
 		`"quoted" ordinary text`, "[2026 report]", "[name]", "{YourContent}",
 		"[base64 encode content]", "{base64}", "{resourceId}", "{regionId}", "{appName}",
 		`""，"hive"等`, `"标题示例“`, `"消息内容示例“`, "\u200b00000001\n\n",
@@ -375,6 +376,45 @@ func TestMaskBodyQuotedDocumentTrailingText(t *testing.T) {
 	body, _ := json.Marshal(map[string]string{"payload": string(quoted), "name": "visible"})
 	if got := MaskBodyFull(string(body)); strings.Contains(got, secret) || !strings.Contains(got, "FAKE***") || !strings.Contains(got, "visible") || strings.Contains(got, "opaque body omitted") {
 		t.Fatalf("complete nested document preview regressed: %q", got)
+	}
+}
+
+func TestMaskBodyNestedOpaqueFormats(t *testing.T) {
+	const secret = "FAKE_NESTED_FORMAT_SECRET"
+	for _, value := range []string{
+		"<Password>" + secret + "</Password>",
+		"<!--password=" + secret + "-->",
+		`"note" {"password":"` + secret + `"}`,
+		`"note"{"password":"` + secret + `"}`,
+		`"note" [{"password":"` + secret + `"}]`,
+		`"note" <Password>` + secret + `</Password>`,
+		`[INFO] {"password":"` + secret + `"}`,
+		`[INFO] <Password>` + secret + `</Password>`,
+		`[password=` + secret + `]`,
+	} {
+		for depth := 0; depth < 3; depth++ {
+			t.Run(fmt.Sprintf("%d/%q", depth, value), func(t *testing.T) {
+				if canRedactJSON(value) {
+					t.Fatal("opaque nested format was accepted")
+				}
+				want := fmt.Sprintf("<opaque body omitted: %d bytes>", len(value))
+				if got := MaskKV("payload", value); got != want || strings.Contains(got, secret) {
+					t.Fatalf("unsafe scalar: got %q, want %q", got, want)
+				}
+				object, _ := json.Marshal(map[string]string{"payload": value, "name": "visible"})
+				array, _ := json.Marshal([]string{value})
+				for _, body := range []string{string(object), string(array), "payload=" + url.QueryEscape(value) + "&name=visible"} {
+					want := fmt.Sprintf("<opaque body omitted: %d bytes>", len(body))
+					for _, mask := range []func(string) string{MaskBodyFull, MaskBody} {
+						if got := mask(body); got != want || strings.Contains(got, secret) {
+							t.Fatalf("unsafe body: got %q, want %q", got, want)
+						}
+					}
+				}
+			})
+			quoted, _ := json.Marshal(value)
+			value = string(quoted)
+		}
 	}
 }
 
