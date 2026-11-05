@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -124,6 +125,23 @@ func TestCSArgumentsLogDoesNotLeakNestedPassword(t *testing.T) {
 	if err := json.Unmarshal(cacheOutput, &caches); err != nil {
 		t.Fatal(err)
 	}
+	// Keep the executable alive until the detached telemetry upload child exits, including on Windows.
+	binary := filepath.Join(t.TempDir(), "aliyun")
+	if runtime.GOOS == "windows" {
+		binary += ".exe"
+	}
+	buildCommand := exec.Command("go", "build", "-o", binary, ".")
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, "GOROOT=") {
+			buildCommand.Env = append(buildCommand.Env, entry)
+		}
+	}
+	for name, value := range caches {
+		buildCommand.Env = append(buildCommand.Env, name+"="+value)
+	}
+	if output, err := buildCommand.CombinedOutput(); err != nil {
+		t.Fatalf("build test CLI: %v; output=%s", err, output)
+	}
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.json")
 	if err := os.WriteFile(configPath, []byte(`{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":"fake-id","access_key_secret":"fake-key-secret","region_id":"cn-hangzhou","language":"en"}]}`), 0o600); err != nil {
@@ -197,7 +215,7 @@ func TestCSArgumentsLogDoesNotLeakNestedPassword(t *testing.T) {
 				}
 				var stdout, stderr bytes.Buffer
 				args := []string{"cs", "create-cluster", "--api-version", "2015-12-15", "--biz-region-id", "cn-hangzhou", "--name", tc.value, "--config-path", configPath, "--profile", "default", "--region", "cn-hangzhou", "--endpoint", "capture.invalid", "--insecure", "--log-level", "DEBUG"}
-				cmd := exec.Command("go", append([]string{"run", "."}, args...)...)
+				cmd := exec.Command(binary, args...)
 				cmd.Stdout = &stdout
 				cmd.Stderr = &stderr
 				for _, entry := range os.Environ() {
@@ -210,9 +228,6 @@ func TestCSArgumentsLogDoesNotLeakNestedPassword(t *testing.T) {
 					"ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE=0",
 					"ALIBABA_CLOUD_CLI_TELEMETRY_LOG_DISABLE=0",
 					"ALIBABA_CLOUD_CLI_TELEMETRY_ENDPOINT="+server.URL+"/telemetry")
-				for name, value := range caches {
-					cmd.Env = append(cmd.Env, name+"="+value)
-				}
 				if err := cmd.Run(); err != nil {
 					t.Fatalf("CLI failed: %v; stderr=%s", err, &stderr)
 				}
