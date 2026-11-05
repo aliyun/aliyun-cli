@@ -425,6 +425,7 @@ Saving profile[uri] ...Done.
 | `ALIBABA_CLOUD_ROLE_ARN` | RAM 角色 ARN |
 | `ALIBABA_CLOUD_BEARER_TOKEN` | Bearer Token |
 | `ALIBABA_CLOUD_LANGUAGE` | `en` 或 `zh` 输出语言 |
+| `DEBUG=sdk` | 打印 SDK HTTP 诊断信息；分享前请检查敏感内容 |
 
 例如，切换 OpenAPI（包括插件命令）、SLS、STS 和内置 OSS 的请求域名：
 
@@ -434,7 +435,6 @@ aliyun ecs DescribeRegions --region cn-hangzhou
 ```
 
 此设置覆盖 `aliyun` 主程序处理的请求地址，包括扩展工具（如 ossutil）的下载和版本检查、插件包下载、自升级、登录和凭证请求，以及主程序转交给外部工具的 endpoint 参数和环境变量。仅替换主机名末尾的 `.aliyuncs.com`，保留协议、端口、路径和查询参数；其他域名和 IP 地址保持原样。dry-run 显示切换后的地址。未设置、空值或 `aliyuncs.com` 使用原域名；值会去除首尾空白，其他值会报错。使用 `unset ALIBABA_CLOUD_ENDPOINT_SUFFIX` 恢复默认行为。外部工具自行生成的请求地址仍需该工具自身支持此变量。Spark 提交工具使用临时配置传递切换后的 endpoint，避免把环境变量的效果写入持久配置。
-| `DEBUG=sdk` | 打印 SDK HTTP 诊断信息；分享前请检查敏感内容 |
 
 命令行参数对当前调用具有更高优先级。不要在共享机器上全局导出敏感凭证。
 
