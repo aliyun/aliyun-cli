@@ -39,6 +39,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	"github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	runtimemeta "github.com/aliyun/aliyun-openapi-runtime/meta"
 )
 
@@ -110,6 +111,9 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	}
 	if cp.ConnectTimeout > 0 {
 		conf.SetConnectTimeout(cp.ConnectTimeout * 1000)
+	}
+	if conf.Endpoint != nil {
+		conf.Endpoint = tea.String(endpoint.WithSuffix(tea.StringValue(conf.Endpoint)))
 	}
 	client, err = openapiClient.NewClient(&conf)
 	if err != nil {
@@ -231,6 +235,9 @@ func (a *HttpContext) getRequest() *openapiutil.OpenApiRequest {
 }
 
 func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
+	if err := endpoint.Validate(); err != nil {
+		return err
+	}
 	var err error
 	dryRun := clientDryRunAssigned(ctx)
 	if !dryRun {
@@ -258,7 +265,7 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 	}
 
 	if v, ok := config.EndpointFlag(ctx.Flags()).GetValue(); ok {
-		a.openapiRequest.EndpointOverride = tea.String(v)
+		a.openapiRequest.EndpointOverride = tea.String(endpoint.WithSuffix(v))
 	}
 	if ctx.Flags() != nil && HeaderFlag(ctx.Flags()) != nil {
 		for _, s := range HeaderFlag(ctx.Flags()).GetValues() {

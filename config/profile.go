@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
@@ -33,6 +32,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	"github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 )
 
@@ -493,9 +493,9 @@ func normalizeSTSEndpointHost(endpoint string) string {
 
 func resolveSTSEndpoint(cp *Profile) string {
 	if cp.StsEndpoint != "" {
-		return normalizeSTSEndpointHost(cp.StsEndpoint)
+		return endpoint.WithSuffix(normalizeSTSEndpointHost(cp.StsEndpoint))
 	}
-	return getSTSEndpoint(cp.StsRegion)
+	return endpoint.WithSuffix(getSTSEndpoint(cp.StsRegion))
 }
 
 // mergeProfileAfterCredentialRefresh persists STS / OAuth token fields from the in-memory profile onto the on-disk profile.
@@ -516,6 +516,9 @@ func mergeProfileAfterCredentialRefresh(disk Profile, cp *Profile) Profile {
 }
 
 func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred credentialsv2.Credential, err error) {
+	if err = endpoint.Validate(); err != nil {
+		return nil, err
+	}
 	config := new(credentialsv2.Config)
 	// The AK, StsToken are direct credential
 	// Others are indirect credential
@@ -682,7 +685,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			return nil, fmt.Errorf("invalid credentials uri")
 		}
 
-		res, err := http.Get(uri)
+		res, err := endpoint.HTTPGet(uri)
 		if err != nil {
 			return nil, err
 		}
@@ -858,6 +861,9 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 var saveConfigurationFunc = SaveConfigurationWithContext
 
 func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
+	if err := endpoint.Validate(); err != nil {
+		return nil, err
+	}
 	envs := map[string]string{
 		"ALIBABA_CLOUD_REGION_ID": cp.RegionId,
 	}
@@ -900,10 +906,10 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 		envs["ALIBABA_CLOUD_ENDPOINT_TYPE"] = cp.EndpointType
 	}
 	if cp.Endpoint != "" {
-		envs["ALIBABA_CLOUD_ENDPOINT"] = cp.Endpoint
+		envs["ALIBABA_CLOUD_ENDPOINT"] = endpoint.WithSuffix(cp.Endpoint)
 	}
 	if cp.StsEndpoint != "" {
-		envs["ALIBABA_CLOUD_STS_ENDPOINT"] = cp.StsEndpoint
+		envs["ALIBABA_CLOUD_STS_ENDPOINT"] = endpoint.WithSuffix(cp.StsEndpoint)
 	}
 	if cp.ExternalAccountType != "" {
 		envs["ALIBABA_CLOUD_EXTERNAL_ACCOUNT_TYPE"] = cp.ExternalAccountType
@@ -935,10 +941,10 @@ func BuildBaselineEnv(ctx *cli.Context) map[string]string {
 	} else if v := util.GetFromEnv("ALIBABA_CLOUD_REGION_ID"); v != "" {
 		envs["ALIBABA_CLOUD_REGION_ID"] = v
 	}
-	if endpoint, ok := EndpointFlag(ctx.Flags()).GetValue(); ok && endpoint != "" {
-		envs["ALIBABA_CLOUD_ENDPOINT"] = endpoint
+	if value, ok := EndpointFlag(ctx.Flags()).GetValue(); ok && value != "" {
+		envs["ALIBABA_CLOUD_ENDPOINT"] = endpoint.WithSuffix(value)
 	} else if v := util.GetFromEnv("ALIBABA_CLOUD_ENDPOINT"); v != "" {
-		envs["ALIBABA_CLOUD_ENDPOINT"] = v
+		envs["ALIBABA_CLOUD_ENDPOINT"] = endpoint.WithSuffix(v)
 	}
 	if lang, ok := LanguageFlag(ctx.Flags()).GetValue(); ok && lang != "" {
 		envs["ALIBABA_CLOUD_LANGUAGE"] = lang
