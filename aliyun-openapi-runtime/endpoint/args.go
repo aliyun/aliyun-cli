@@ -23,10 +23,6 @@ func WithSuffixArgs(args []string) []string {
 				i++
 				out[i] = WithSuffix(out[i])
 			}
-		default:
-			if strings.HasPrefix(out[i], "-e") && !strings.HasPrefix(out[i], "--") && len(out[i]) > 2 {
-				out[i] = "-e" + WithSuffix(out[i][2:])
-			}
 		}
 	}
 	return out

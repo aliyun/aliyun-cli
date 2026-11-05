@@ -81,7 +81,11 @@ func TestForwardedEndpointArgumentBoundaries(t *testing.T) {
 		name       string
 		args, want []string
 	}{
-		{"attached short flag", []string{"-eoss.aliyuncs.com"}, []string{"-eoss.aliyuncs.alibaba"}},
+		{
+			"description beginning with -e",
+			[]string{"--description", "-email=ops@ecs.aliyuncs.com", "-e=oss.aliyuncs.com"},
+			[]string{"--description", "-email=ops@ecs.aliyuncs.com", "-e=oss.aliyuncs.alibaba"},
+		},
 		{"missing endpoint", []string{"--endpoint"}, []string{"--endpoint"}},
 		{"missing opaque value", []string{"--body"}, []string{"--body"}},
 		{"opaque endpoint-like values", []string{"--header", "-eheader.aliyuncs.com", "--cli-query", "--endpoint=query.aliyuncs.com", "--body-file", "-efile.aliyuncs.com", "--body=value.aliyuncs.com", "-e", "real.aliyuncs.com"}, []string{"--header", "-eheader.aliyuncs.com", "--cli-query", "--endpoint=query.aliyuncs.com", "--body-file", "-efile.aliyuncs.com", "--body=value.aliyuncs.com", "-e", "real.aliyuncs.alibaba"}},
