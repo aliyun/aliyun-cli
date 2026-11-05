@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	pricingruntime "github.com/aliyun/aliyun-openapi-runtime/runtime"
 	"github.com/stretchr/testify/assert"
@@ -59,7 +59,7 @@ func TestEstimateCostEntryPointsUseQuoteResponseAndPropagateOutputErrors(t *test
 				c.library.builtinRepo = repo
 				switch route {
 				case "legacy":
-					request := requests.NewCommonRequest()
+					request := legacyapi.NewRequest()
 					request.Product, request.Version, request.ApiName, request.RegionId = "Oss", ossDefaultPopVersion, "CreateBucket", profile.RegionId
 					err = c.processEstimateCost(ctx, &RpcInvoker{BasicInvoker: &BasicInvoker{request: request}})
 				case "oss bridge":

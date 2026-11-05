@@ -18,12 +18,12 @@ import (
 	"bytes"
 	"errors"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
@@ -62,7 +62,7 @@ type Commando struct {
 	rootFlagHelpSpecs       []RootFlagSpec
 }
 
-var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
+var hookdo = func(fn func() (*legacyapi.Response, error)) func() (*legacyapi.Response, error) {
 	return fn
 }
 
@@ -1020,8 +1020,9 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	}
 	// process --dryrun
 	if DryRunFlag(ctx.Flags()).IsAssigned() {
-		invoker.getRequest().TransToAcsRequest()
-		invoker.getClient().BuildRequestWithSigner(invoker.getRequest(), nil)
+		if err := invoker.getClient().Preview(invoker.getRequest()); err != nil {
+			return err
+		}
 		cli.Printf(ctx.Stdout(), "Skip invoke in dry-run mode, request is:\n------------------------------------\n%s\n",
 			invoker.getRequest().String())
 		return nil
@@ -1038,8 +1039,9 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	} else {
 		resp, err := hookdo(invoker.Call)()
 		if err != nil {
-			// if unmarshal failed,
-			if !strings.Contains(strings.ToLower(err.Error()), "unmarshal") {
+			// Preserve the legacy raw-response fallback, including its exit
+			// semantics. A missing response must never be dereferenced.
+			if resp == nil || !strings.Contains(strings.ToLower(err.Error()), "unmarshal") {
 				return err
 			}
 		}
@@ -1154,7 +1156,7 @@ func dryRunOpenapiEndpoint(ctx *cli.Context, o *OpenapiContext) (resolved string
 		if h.profile != nil {
 			endpointType = h.profile.EndpointType
 		}
-		if endpoint, err := h.product.GetEndpointWithType(region, nil, endpointType); err == nil {
+		if endpoint, err := h.product.GetEndpointWithType(region, endpointType); err == nil {
 			return endpoint
 		}
 	}

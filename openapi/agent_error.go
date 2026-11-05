@@ -25,10 +25,10 @@ import (
 	"unicode"
 
 	"github.com/alibabacloud-go/tea/tea"
-	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/mcpproxy"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
@@ -389,7 +389,7 @@ func normalizeServerAgentError(err error, context recoveryContext) error {
 		}
 		return serverAgentError(err, facts, context)
 	}
-	var serverErr *sdkerrors.ServerError
+	var serverErr *legacyapi.ServerError
 	if errors.As(err, &serverErr) {
 		facts := serverErrorFacts{
 			code:       serverErr.ErrorCode(),
@@ -607,7 +607,7 @@ func sanitizeNetworkTransportError(err error) error {
 	}
 	// With --retry-count the old SDK wraps the transport error in a ClientError
 	// that has no Unwrap; recover the inner url.Error via OriginError.
-	var clientErr *sdkerrors.ClientError
+	var clientErr *legacyapi.ClientError
 	if errors.As(err, &clientErr) {
 		if inner, ok := clientErr.OriginError().(*url.Error); ok {
 			return newTransportError(inner)

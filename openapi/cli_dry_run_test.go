@@ -9,10 +9,10 @@ import (
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
 	"github.com/alibabacloud-go/tea/tea"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/stretchr/testify/assert"
 )
@@ -113,7 +113,7 @@ func TestMergeInto(t *testing.T) {
 }
 
 func TestBuildCliDryRunFromInvoker_RPC(t *testing.T) {
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.Domain = "ecs.cn-hangzhou.aliyuncs.com"
 	req.Method = "POST"
 	req.ApiName = "DescribeInstances"
@@ -149,7 +149,7 @@ func TestBuildCliDryRunFromInvoker_RPC(t *testing.T) {
 }
 
 func TestBuildCliDryRunFromInvoker_ROA(t *testing.T) {
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.Domain = "cs.cn-hangzhou.aliyuncs.com"
 	req.Method = "GET"
 	req.PathPattern = "/clusters/[ClusterId]/nodepools"
@@ -180,7 +180,7 @@ func TestBuildCliDryRunFromInvoker_ROA(t *testing.T) {
 }
 
 func TestBuildCliDryRunFromInvoker_MasksPathSecret(t *testing.T) {
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.Domain = "example.cn-hangzhou.aliyuncs.com"
 	req.Method = "GET"
 	req.PathPattern = "/sessions/[Token]"
@@ -220,7 +220,7 @@ func TestCliDryRunPreservesLongBodyAndRedaction(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			req := requests.NewCommonRequest()
+			req := legacyapi.NewRequest()
 			req.SetContent([]byte(tc.body))
 			contentType := map[string]string{"form": "application/x-www-form-urlencoded", "json": "application/json", "xml": "application/xml"}[tc.name]
 			req.Headers["Content-Type"] = contentType
@@ -255,7 +255,7 @@ func TestCliDryRunPreservesLongBodyAndRedaction(t *testing.T) {
 }
 
 func TestBuildCliDryRunFromInvoker_WithBody(t *testing.T) {
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.Domain = "ecs.cn-hangzhou.aliyuncs.com"
 	req.Method = "POST"
 	req.ApiName = "RunInstances"
@@ -276,7 +276,7 @@ func TestBuildCliDryRunFromInvoker_WithBody(t *testing.T) {
 }
 
 func TestBuildCliDryRunFromInvoker_WithFormParams(t *testing.T) {
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.Domain = "ecs.cn-hangzhou.aliyuncs.com"
 	req.Method = "POST"
 	req.ApiName = "CreateInstance"
@@ -311,7 +311,7 @@ func TestCliDryRunNestedForm(t *testing.T) {
 		"user.name":       "alice",
 		"config":          `{"name":"alice","password":"FAKE_SECRET_123"}`,
 	}
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.FormParams = fields
 	classic := buildCliDryRunFromInvoker(&RestfulInvoker{BasicInvoker: &BasicInvoker{request: req}})
 	oc := &OpenapiContext{HttpContext: &HttpContext{
@@ -665,7 +665,7 @@ func TestProcessCliDryRun(t *testing.T) {
 	AddFlags(cmd.Flags())
 	ctx.EnterCommand(cmd)
 
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.Domain = "ecs.cn-hangzhou.aliyuncs.com"
 	req.Method = "POST"
 	req.ApiName = "DescribeInstances"
@@ -697,7 +697,7 @@ func TestProcessCliDryRunJson(t *testing.T) {
 	AddFlags(cmd.Flags())
 	ctx.EnterCommand(cmd)
 
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.Domain = "ecs.cn-hangzhou.aliyuncs.com"
 	req.Method = "POST"
 	req.ApiName = "DescribeInstances"
@@ -742,7 +742,7 @@ func TestProcessCliDryRunRedactsFormBodyInStdoutAndStderr(t *testing.T) {
 			AddFlags(cmd.Flags())
 			ctx.EnterCommand(cmd)
 
-			req := requests.NewCommonRequest()
+			req := legacyapi.NewRequest()
 			req.Method = "POST"
 			req.SetContent([]byte(body))
 			req.Headers["Content-Type"] = "application/x-www-form-urlencoded"
@@ -1353,7 +1353,7 @@ func TestQuietFlag_ExcludesCliDryRun(t *testing.T) {
 }
 
 func TestBuildCliDryRunFromInvoker_NoQuery(t *testing.T) {
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.Domain = "ecs.cn-hangzhou.aliyuncs.com"
 	req.Method = "GET"
 	req.ApiName = "DescribeRegions"
@@ -1411,7 +1411,7 @@ func TestCliDryRunExplicitContentTypes(t *testing.T) {
 		{"application/x-custom-format", body},
 	} {
 		t.Run(tc.contentType, func(t *testing.T) {
-			req := requests.NewCommonRequest()
+			req := legacyapi.NewRequest()
 			req.Content = []byte(body)
 			req.Headers["cOnTeNt-TyPe"] = tc.contentType
 			classic := buildCliDryRunFromInvoker(&RestfulInvoker{BasicInvoker: &BasicInvoker{request: req}})
@@ -1439,7 +1439,7 @@ func TestCliDryRunDetectsFormRegardlessOfContentType(t *testing.T) {
 	const want = `password=exam***&note=hello%20world&ext_params={key=example-string}`
 	for _, contentType := range []string{"", "application/json", "application/x-www-form-urlencoded", "application/octet-stream"} {
 		t.Run(contentType, func(t *testing.T) {
-			req := requests.NewCommonRequest()
+			req := legacyapi.NewRequest()
 			req.Content = []byte(body)
 			req.Headers["Content-Type"] = contentType
 			classic := buildCliDryRunFromInvoker(&RestfulInvoker{BasicInvoker: &BasicInvoker{request: req}})
