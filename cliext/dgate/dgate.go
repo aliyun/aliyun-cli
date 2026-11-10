@@ -17,6 +17,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	"golang.org/x/mod/semver"
 )
 
@@ -232,7 +233,7 @@ func (c *Context) prepareEnv() {
 
 func (c *Context) execute(args []string) error {
 	http.DefaultClient.CloseIdleConnections()
-	cmd := execCommandFunc(c.execFilePath, args...)
+	cmd := execCommandFunc(c.execFilePath, cloudendpoint.WithSuffixArgs(args)...)
 	envs := filterEnv(os.Environ(), c.envMap)
 	for k, v := range c.envMap {
 		envs = append(envs, k+"="+v)
@@ -291,7 +292,7 @@ func (c *Context) warn(format string, args ...interface{}) {
 }
 
 func getRemoteVersion(url string) (string, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := cloudendpoint.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
@@ -334,7 +335,7 @@ func downloadBinary(url, dest string) error {
 	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
 		return err
 	}
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := cloudendpoint.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
@@ -365,7 +366,7 @@ func downloadBinary(url, dest string) error {
 }
 
 func verifySHA256(checksumURL, filePath string) error {
-	req, err := http.NewRequest(http.MethodGet, checksumURL, nil)
+	req, err := cloudendpoint.NewRequest(http.MethodGet, checksumURL, nil)
 	if err != nil {
 		return err
 	}

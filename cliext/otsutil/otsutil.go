@@ -17,6 +17,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 type Context struct {
@@ -42,7 +43,7 @@ var (
 	getLatestOtsUtilVersionFunc = GetLatestOtsUtilVersion
 	downloadAndUnzipFunc        = DownloadAndUnzip
 	execCommandFunc             = exec.Command
-	httpGetFunc                 = http.Get
+	httpGetFunc                 = cloudendpoint.HTTPGet
 	timeNowFunc                 = time.Now
 	runtimeGOOSFunc             = func() string { return runtime.GOOS }
 	runtimeGOARCHFunc           = func() string { return runtime.GOARCH }
@@ -124,7 +125,7 @@ func GetLatestOtsUtilVersion() (string, error) {
 		Timeout: 30 * time.Second,
 	}
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := cloudendpoint.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request for %s: %v", url, err)
 	}
@@ -261,7 +262,7 @@ func (c *Context) Install() error {
 
 func DownloadAndUnzip(url string, destFile string, exeFilePath string, extractCenterDir string) error {
 	// download file
-	resp, err := httpGetFunc(url)
+	resp, err := httpGetFunc(cloudendpoint.WithSuffix(url))
 	if err != nil {
 		return fmt.Errorf("failed to download %s: %v", url, err)
 	}
@@ -610,7 +611,7 @@ func (c *Context) UpdateCheckCacheTime() error {
 }
 
 func (c *Context) ExecuteTablestoreCli(args []string) error {
-	cmd := execCommandFunc(c.execFilePath, args...)
+	cmd := execCommandFunc(c.execFilePath, cloudendpoint.WithSuffixArgs(args)...)
 	envs := os.Environ()
 	cmd.Env = envs
 	cmd.Stdout = c.originCtx.Stdout()

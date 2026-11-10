@@ -20,6 +20,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 const (
@@ -446,7 +447,7 @@ func readBounded(r io.Reader, limit int64) ([]byte, error) {
 }
 
 func (c *Context) fetch(path string, limit int64) ([]byte, error) {
-	resp, err := c.httpClient.Get(c.releaseURL + path)
+	resp, err := cloudendpoint.Get(c.httpClient, c.releaseURL+path)
 	if err != nil {
 		return nil, err
 	}

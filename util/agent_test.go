@@ -55,6 +55,92 @@ func TestDetectAgentName_KnownEnvs(t *testing.T) {
 	}
 }
 
+func TestDetectAgentName_QwenWorkAndQoder(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		envs map[string]string
+		want string
+	}{
+		{
+			name: "QwenWork base URL",
+			envs: map[string]string{"QWENWORK_BASE_URL": "https://example.com"},
+			want: "qwenwork",
+		},
+		{
+			name: "QwenWork execution environment",
+			envs: map[string]string{"QODERWORK_EXECUTION_ENV": "desktop"},
+			want: "qwenwork",
+		},
+		{
+			name: "Qoder China CLI",
+			envs: map[string]string{"QODERCN_CLI": "1"},
+			want: "qoder_cn_cli",
+		},
+		{
+			name: "legacy integration product ignored",
+			envs: map[string]string{"QODER_WORK_INTEGRATION_PRODUCT": "qwenwork"},
+			want: "",
+		},
+		{
+			name: "legacy integration product allows proposal fallback",
+			envs: map[string]string{"QODER_WORK_INTEGRATION_PRODUCT": "qwenwork", "AGENT": "1"},
+			want: "1",
+		},
+		{
+			name: "QwenWork base URL takes priority over Qoder markers",
+			envs: map[string]string{
+				"QWENWORK_BASE_URL": "https://example.com",
+				"QODERCN_CLI":       "1",
+				"QODER_AGENT":       "1",
+				"QODER_CLI":         "1",
+			},
+			want: "qwenwork",
+		},
+		{
+			name: "QwenWork execution environment takes priority over Qoder markers",
+			envs: map[string]string{
+				"QODERWORK_EXECUTION_ENV": "desktop",
+				"QODERCN_CLI":             "1",
+				"QODER_AGENT":             "1",
+				"QODER_CLI":               "1",
+			},
+			want: "qwenwork",
+		},
+		{
+			name: "Qoder China CLI takes priority over generic Qoder markers",
+			envs: map[string]string{
+				"QODERCN_CLI": "1",
+				"QODER_AGENT": "1",
+				"QODER_CLI":   "1",
+			},
+			want: "qoder_cn_cli",
+		},
+		{
+			name: "empty QwenWork markers allow Qoder detection",
+			envs: map[string]string{
+				"QWENWORK_BASE_URL":       "",
+				"QODERWORK_EXECUTION_ENV": "",
+				"QODERCN_CLI":             "",
+				"QODER_CLI":               "1",
+			},
+			want: "qoder-cli",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			snapshotAndUnsetAgentEnvs(t)
+			for env, value := range test.envs {
+				t.Setenv(env, value)
+			}
+			assert.Equal(t, test.want, DetectAgentName())
+			wantSegment := ""
+			if test.want != "" {
+				wantSegment = "Agent/" + test.want
+			}
+			assert.Equal(t, wantSegment, GetAgentUserAgentSegment())
+		})
+	}
+}
+
 func TestDetectAgentName_EmptyValueIgnored(t *testing.T) {
 	snapshotAndUnsetAgentEnvs(t)
 	_ = os.Setenv("CURSOR_AGENT", "")

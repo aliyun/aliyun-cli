@@ -447,6 +447,7 @@ Environment variables can select a profile or fill fields not supplied by flags/
 | `ALIBABA_CLOUD_STS_ENDPOINT` | Override the STS endpoint |
 | `ALIBABA_CLOUD_ENDPOINT` | Override the product endpoint |
 | `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI signature version: only `v4`; used only when the flag is unset and the profile value is empty; set empty to clear and use default |
+| `ALIBABA_CLOUD_ENDPOINT_SUFFIX` | Set to `aliyuncs.alibaba` to replace the `.aliyuncs.com` suffix in request hostnames |
 | `ALIBABA_CLOUD_CREDENTIALS_URI` | CredentialsURI source |
 | `ALIBABA_CLOUD_OIDC_PROVIDER_ARN` | OIDC provider ARN |
 | `ALIBABA_CLOUD_OIDC_TOKEN_FILE` | OIDC token file |
@@ -454,6 +455,15 @@ Environment variables can select a profile or fill fields not supplied by flags/
 | `ALIBABA_CLOUD_BEARER_TOKEN` | Bearer token |
 | `ALIBABA_CLOUD_LANGUAGE` | `en` or `zh` output language |
 | `DEBUG=sdk` | Print SDK HTTP diagnostics; review output before sharing |
+
+To switch OpenAPI (including plugin commands), SLS, STS and built-in OSS requests:
+
+```bash
+export ALIBABA_CLOUD_ENDPOINT_SUFFIX=aliyuncs.alibaba
+aliyun ecs DescribeRegions --region cn-hangzhou
+```
+
+This covers request addresses handled by the `aliyun` host, including extension downloads and version checks (such as ossutil), plugin package downloads, self-upgrades, login and credential requests, and endpoint arguments and environment variables passed to external tools. Only a terminal `.aliyuncs.com` hostname suffix is replaced; schemes, ports, paths, query parameters, other domains and IP addresses are preserved. Dry runs show the rewritten address. Unset, empty or `aliyuncs.com` values keep the original domain. Leading and trailing whitespace is trimmed; other values produce an error. Use `unset ALIBABA_CLOUD_ENDPOINT_SUFFIX` to restore the default. Addresses generated inside external tools still require support in those tools. Spark submission uses a temporary configuration to pass the effective endpoint without persisting the environment override.
 
 Command-line flags take precedence for that invocation. Avoid globally exporting secrets on shared machines.
 
