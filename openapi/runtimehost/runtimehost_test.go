@@ -41,6 +41,7 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
 	"github.com/aliyun/aliyun-openapi-runtime/source"
+	"github.com/stretchr/testify/require"
 )
 
 // captureExecutor records the ExecContext it receives instead of
@@ -160,10 +161,13 @@ func TestBuildUserAgentSuffixIncludesDetectedAgentSegment(t *testing.T) {
 
 // Disabling AI mode must not suppress agent attribution on API requests.
 func TestQoderUserAgentWithAIModeDisabled(t *testing.T) {
-	for _, env := range []string{"QODER_CLI", "QODERCN_CLI"} {
-		t.Run(env, func(t *testing.T) {
+	for _, test := range []struct{ env, agent string }{
+		{"QODER_CLI", "qoder-cli"},
+		{"QODERCN_CLI", "qoder_cn_cli"},
+	} {
+		t.Run(test.env, func(t *testing.T) {
 			isolateAgentDetectionEnvs(t)
-			t.Setenv(env, "1")
+			t.Setenv(test.env, "1")
 			t.Setenv(sysconfig.EnvUserAgent, "")
 			ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 			ctx.Flags().Add(config.NewConfigurePathFlag())
@@ -171,9 +175,9 @@ func TestQoderUserAgentWithAIModeDisabled(t *testing.T) {
 			config.ConfigurePathFlag(ctx.Flags()).SetValue(filepath.Join(t.TempDir(), "config.json"))
 			ctx.Flags().Add(&cli.Flag{Name: "no-cli-ai-mode", AssignedMode: cli.AssignedOnce})
 			ctx.Flags().Get("no-cli-ai-mode").SetAssigned(true)
-			ctx.SetAgentName("qoder-cli")
-			if got := buildUserAgentSuffix(ctx); got != "Agent/qoder-cli" {
-				t.Fatalf("suffix = %q, want Agent/qoder-cli", got)
+			ctx.SetAgentName(test.agent)
+			if got, want := buildUserAgentSuffix(ctx), "Agent/"+test.agent; got != want {
+				t.Fatalf("suffix = %q, want %q", got, want)
 			}
 		})
 	}
@@ -480,6 +484,22 @@ func TestRuntimeHostProfileLoadFailuresAreBestEffort(t *testing.T) {
 	}
 	if _, err := host.Credential(); err == nil {
 		t.Fatal("Credential() must return profile load error")
+	}
+}
+
+func TestRuntimeHostSettingsSignatureVersionFromFlagWhenProfileMissing(t *testing.T) {
+	require.NoError(t, os.Unsetenv(config.EnvSignatureVersion))
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	config.AddFlags(ctx.Flags())
+	config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
+	config.ConfigurePathFlag(ctx.Flags()).SetValue(filepath.Join(t.TempDir(), "missing", "config.json"))
+	f := config.CliSignVersionFlag(ctx.Flags())
+	f.SetAssigned(true)
+	f.SetValue("v4")
+	host := &cliHost{ctx: ctx}
+	settings := host.Settings()
+	if settings.SignatureVersion != config.SignatureVersionV4 {
+		t.Fatalf("SignatureVersion = %q, want %q", settings.SignatureVersion, config.SignatureVersionV4)
 	}
 }
 

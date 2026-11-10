@@ -16,6 +16,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 type Context struct {
@@ -36,7 +37,7 @@ type Context struct {
 var (
 	getConfigurePathFunc = func() string { return config.GetConfigPath() }
 	execCommandFunc      = exec.Command
-	httpGetFunc          = http.Get
+	httpGetFunc          = cloudendpoint.HTTPGet
 	timeNowFunc          = time.Now
 	runtimeGOOSFunc      = func() string { return runtime.GOOS }
 	runtimeGOARCHFunc    = func() string { return runtime.GOARCH }
@@ -228,7 +229,7 @@ func (c *Context) npmInstall(upgrade bool) error {
 		target,
 	}
 	if registry := strings.TrimSpace(os.Getenv("ALIBABA_CLOUD_ESA_CLI_NPM_REGISTRY")); registry != "" {
-		args = append(args, "--registry", registry)
+		args = append(args, "--registry", cloudendpoint.WithSuffix(registry))
 	}
 
 	cmd := execCommandFunc(c.npmPath, args...)
@@ -251,7 +252,7 @@ func (c *Context) npmInstall(upgrade bool) error {
 
 func (c *Context) fetchOSSVersion() (string, error) {
 	base := strings.TrimRight(c.effectiveBaseURL(), "/")
-	resp, err := httpGetFunc(base + "/version.txt")
+	resp, err := httpGetFunc(cloudendpoint.WithSuffix(base + "/version.txt"))
 	if err != nil {
 		return "", err
 	}
@@ -460,7 +461,7 @@ func (c *Context) PrepareEnv() ([]string, error) {
 // `dev` command will land in a follow-up commit (ink/React requires the
 // child to see real TTY fds, not io.Writer adapters).
 func (c *Context) ExecuteEsacli(args []string) error {
-	cmd := execCommandFunc(c.execFilePath, args...)
+	cmd := execCommandFunc(c.execFilePath, cloudendpoint.WithSuffixArgs(args)...)
 	envs, err := c.PrepareEnv()
 	if err != nil {
 		return err

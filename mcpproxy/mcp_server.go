@@ -26,6 +26,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	"github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 type MCPInfoUrls struct {
@@ -787,6 +788,9 @@ func (p *MCPProxy) getMCPAccessToken() (string, error) {
 }
 
 func (p *MCPProxy) buildUpstreamRequest(r *http.Request, accessToken string) (*http.Request, error) {
+	if err := endpoint.Validate(); err != nil {
+		return nil, err
+	}
 	var upstreamBaseURL string
 	if p.UpstreamBaseURL != "" {
 		// 如果用户传入了自定义的上游地址，使用用户传入的
@@ -800,7 +804,7 @@ func (p *MCPProxy) buildUpstreamRequest(r *http.Request, accessToken string) (*h
 		upstreamBaseURL = fmt.Sprintf("https://%s", EndpointMap[p.RegionType].MCP)
 	}
 
-	upstreamURL, err := url.Parse(upstreamBaseURL)
+	upstreamURL, err := url.Parse(endpoint.WithSuffix(upstreamBaseURL))
 	if err != nil {
 		return nil, err
 	}
@@ -815,7 +819,7 @@ func (p *MCPProxy) buildUpstreamRequest(r *http.Request, accessToken string) (*h
 	method := r.Method
 	var body io.ReadCloser = r.Body
 
-	upstreamReq, err := http.NewRequest(method, newURL.String(), body)
+	upstreamReq, err := endpoint.NewRequest(method, newURL.String(), body)
 	if err != nil {
 		return nil, err
 	}

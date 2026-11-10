@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	popgateway "github.com/alibabacloud-go/alibabacloud-gateway-pop/client"
 	slsgateway "github.com/alibabacloud-go/alibabacloud-gateway-sls/client"
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
@@ -39,6 +40,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	"github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	runtimemeta "github.com/aliyun/aliyun-openapi-runtime/meta"
 )
 
@@ -69,11 +71,23 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	if err != nil {
 		return
 	}
+	if err = cp.ValidateSignatureVersion(); err != nil {
+		return nil, err
+	}
 	conf := openapiClient.Config{
 		Credential: credential,
 		RegionId:   tea.String(cp.RegionId),
 		// AccessKeyId:     tea.String(cp.AccessKeyId),
 		// AccessKeySecret: tea.String(cp.AccessKeySecret),
+	}
+	// Product legacy SignatureAlgorithm=v2 (e.g. FNF) outranks configured V4.
+	useV4 := false
+	legacy := strings.EqualFold(product.Code, "fnf") || strings.EqualFold(product.GetLowerCode(), "fnf")
+	if legacy {
+		conf.SignatureAlgorithm = tea.String("v2")
+	} else if cp.SignatureVersion == config.SignatureVersionV4 {
+		conf.SignatureVersion = tea.String(config.SignatureVersionV4)
+		useV4 = true
 	}
 	if cp.Endpoint != "" {
 		conf.Endpoint = tea.String(cp.Endpoint)
@@ -81,7 +95,7 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 		conf.Endpoint = tea.String(cp.RegionId + ".log.aliyuncs.com") // should apply product template
 	} else if product.LocationServiceCode == "" {
 		// Products without a location service resolve their endpoint from the
-		// static regional endpoint table, so a nil sdk client is safe here.
+		// static regional endpoint table.
 		ep, e := product.GetEndpointWithType(cp.RegionId, cp.EndpointType)
 		if e != nil {
 			// An explicit --endpoint is applied as a request-time override, so a
@@ -111,13 +125,35 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	if cp.ConnectTimeout > 0 {
 		conf.SetConnectTimeout(cp.ConnectTimeout * 1000)
 	}
+	if conf.Endpoint != nil {
+		conf.Endpoint = tea.String(endpoint.WithSuffix(tea.StringValue(conf.Endpoint)))
+	}
 	client, err = openapiClient.NewClient(&conf)
 	if err != nil {
 		return
 	}
 	client.DisableSDKError = tea.Bool(true)
-	if strings.ToLower(product.Code) == "sls" {
-		client.Spi = &slsgateway.Client{} // host management for sls endpoint
+	isSls := strings.EqualFold(product.Code, "sls")
+	if isSls {
+		// SLS gateway handles host management and implements ACS4 when
+		// SignatureVersion=v4 (see alibabacloud-gateway-sls); do not swap in POP.
+		client.Spi = &slsgateway.Client{}
+		return client, nil
+	}
+	if useV4 {
+		// Generic OpenAPI products sign ACS4 through the POP gateway SPI.
+		productId := strings.TrimSpace(product.Code)
+		if productId == "" {
+			productId = product.GetLowerCode()
+		}
+		client.ProductId = tea.String(productId)
+		gateway, gerr := popgateway.NewClient()
+		if gerr != nil {
+			return nil, fmt.Errorf("init signature v4 gateway failed, %s", gerr)
+		}
+		if err = client.SetGatewayClient(gateway); err != nil {
+			return nil, fmt.Errorf("set signature v4 gateway failed, %s", err)
+		}
 	}
 	return client, err
 }
@@ -231,6 +267,9 @@ func (a *HttpContext) getRequest() *openapiutil.OpenApiRequest {
 }
 
 func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
+	if err := endpoint.Validate(); err != nil {
+		return err
+	}
 	var err error
 	dryRun := clientDryRunAssigned(ctx)
 	if !dryRun {
@@ -258,7 +297,7 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 	}
 
 	if v, ok := config.EndpointFlag(ctx.Flags()).GetValue(); ok {
-		a.openapiRequest.EndpointOverride = tea.String(v)
+		a.openapiRequest.EndpointOverride = tea.String(endpoint.WithSuffix(v))
 	}
 	if ctx.Flags() != nil && HeaderFlag(ctx.Flags()) != nil {
 		for _, s := range HeaderFlag(ctx.Flags()).GetValues() {

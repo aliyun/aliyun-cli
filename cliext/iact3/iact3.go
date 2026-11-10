@@ -19,6 +19,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 type Context struct {
@@ -74,7 +75,7 @@ type iact3VersionCache struct {
 // 10 minutes is generous enough for a ~16MB tar.gz over a slow link.
 func downloadHTTPGet(url string) (*http.Response, error) {
 	client := &http.Client{Timeout: 10 * time.Minute}
-	return client.Get(url)
+	return cloudendpoint.Get(client, url)
 }
 
 var iact3BaseUrl = "https://ros-public-tools.oss-cn-beijing.aliyuncs.com/github-releases/aliyun/alibabacloud-ros-tool-iact3/"
@@ -120,7 +121,7 @@ func (c *Context) Run(args []string) error {
 		return err
 	}
 
-	cmd := execCommandFunc(c.execFilePath, newArgs...)
+	cmd := execCommandFunc(c.execFilePath, cloudendpoint.WithSuffixArgs(newArgs)...)
 	envs := os.Environ()
 	for k, v := range c.envMap {
 		envs = append(envs, fmt.Sprintf("%s=%s", k, v))
@@ -186,7 +187,7 @@ func (c *Context) Install() error {
 }
 
 func DownloadAndExtract(url string, destFile string, exeFilePath string) error {
-	resp, err := httpGetFunc(url)
+	resp, err := httpGetFunc(cloudendpoint.WithSuffix(url))
 	if err != nil {
 		return fmt.Errorf("failed to download %s: %v", url, err)
 	}
@@ -660,7 +661,7 @@ func GetLatestIact3Version() (string, error) {
 		Timeout: 30 * time.Second,
 	}
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := cloudendpoint.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request for %s: %v", url, err)
 	}

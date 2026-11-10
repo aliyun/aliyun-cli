@@ -246,7 +246,7 @@ func TestExecuteSSERejectsLegacySignature(t *testing.T) {
 		err := NewExecutor().ExecuteSSE(&ExecContext{
 			API: &meta.API{ProductCode: "FnF", IsSSE: isSSE},
 		}, nil)
-		if err == nil || err.Error() != "runtime: SSE does not support signature algorithm v2" {
+		if err == nil || err.Error() != "runtime: SSE API does not support signature version v2 or v4" {
 			t.Fatalf("ExecuteSSE(IsSSE=%t) error = %v", isSSE, err)
 		}
 	}

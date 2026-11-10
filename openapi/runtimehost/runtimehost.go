@@ -32,6 +32,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/headers"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime"
@@ -70,6 +71,12 @@ type cliHost struct {
 func (h *cliHost) load() {
 	h.once.Do(func() {
 		h.profile, h.loadErr = config.LoadProfileWithContext(h.ctx)
+		// LoadProfileWithContext only overlays flags when InConfigureMode is set
+		// (commando path). Runtime host always needs Flag > Profile > Env for
+		// signature version and other request overrides.
+		if h.loadErr == nil && h.ctx != nil {
+			h.profile.OverwriteWithFlags(h.ctx)
+		}
 	})
 }
 
@@ -104,6 +111,20 @@ func (h *cliHost) Settings() runtime.Settings {
 			s.SkipSecureVerify = true
 		}
 		s.UserAgent = buildUserAgentSuffix(h.ctx)
+	}
+	if h.loadErr == nil {
+		// LoadProfileWithContext already ran OverwriteWithFlags
+		// (flag > profile > env); read the resolved field directly.
+		_ = h.profile.ValidateSignatureVersion()
+		s.SignatureVersion = h.profile.SignatureVersion
+	} else if h.ctx != nil {
+		// No usable profile: flag (including empty) > env > default.
+		cliValue, cliAssigned := config.CliSignVersionFromFlags(h.ctx.Flags())
+		if resolved, err := config.ResolveSignatureVersion(cliValue, cliAssigned, ""); err == nil {
+			s.SignatureVersion = resolved
+		} else if cliAssigned {
+			s.SignatureVersion = cliValue
+		}
 	}
 	return s
 }
@@ -312,12 +333,15 @@ func Dispatch(ctx *cli.Context, rawArgs []string) error {
 	}
 	_, aiModeEnabled := aiModeForCommand(ctx)
 
+	telemetry.SetOpenAPIRuntimeVersion(runtime.Version)
 	return engineDispatch(engine.Request{
-		Args:   rawArgs,
-		Out:    ctx.Stdout(),
-		Lang:   lang,
-		Host:   host,
-		AIMode: aiModeEnabled,
+		Args:              rawArgs,
+		Out:               ctx.Stdout(),
+		Lang:              lang,
+		Host:              host,
+		AIMode:            aiModeEnabled,
+		OnCommandResolved: telemetry.SetResolvedMetaCommand,
+		OnParameterNames:  telemetry.SetRuntimeParameterNames,
 	})
 }
 
@@ -416,11 +440,13 @@ func TryHelp(ctx *cli.Context, rawArgs []string) (handled bool, err error) {
 			return false, nil
 		}
 		request := runtimeHelpRequest(ctx, rawArgs, args)
+		telemetry.SetOpenAPIRuntimeVersion(runtime.Version)
 		return true, Engine().ProductHelp(request)
 	}
 	if strings.ToLower(command) != command || !Engine().Resolvable(product, command) {
 		return false, nil
 	}
+	telemetry.SetOpenAPIRuntimeVersion(runtime.Version)
 	return true, Engine().APIHelp(runtimeHelpRequest(ctx, rawArgs, args))
 }
 
@@ -430,10 +456,12 @@ func runtimeHelpRequest(ctx *cli.Context, rawArgs, args []string) engine.Request
 		lang = explicit
 	}
 	return engine.Request{
-		Args:   args,
-		Out:    ctx.Stdout(),
-		Lang:   lang,
-		AIMode: helpAIMode(ctx, rawArgs),
+		Args:              args,
+		Out:               ctx.Stdout(),
+		Lang:              lang,
+		AIMode:            helpAIMode(ctx, rawArgs),
+		OnCommandResolved: telemetry.SetResolvedMetaCommand,
+		OnParameterNames:  telemetry.SetRuntimeParameterNames,
 	}
 }
 

@@ -33,6 +33,7 @@ import (
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newCtx() *cli.Context {
@@ -1945,6 +1946,36 @@ func TestGetRuntimeEnv_OptionalFields(t *testing.T) {
 	assert.Equal(t, "30", envs["ALIBABA_CLOUD_READ_TIMEOUT"])
 	assert.Equal(t, "10", envs["ALIBABA_CLOUD_CONNECT_TIMEOUT"])
 	assert.Equal(t, "3", envs["ALIBABA_CLOUD_RETRY_COUNT"])
+}
+
+func TestGetRuntimeEnv_SignatureVersion(t *testing.T) {
+	require.NoError(t, os.Unsetenv(EnvSignatureVersion))
+	p := newProfile()
+	p.Mode = AK
+	p.AccessKeyId = "ak"
+	p.AccessKeySecret = "sk"
+	p.RegionId = "cn-hangzhou"
+	p.SignatureVersion = SignatureVersionV4
+
+	envs, err := p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	assert.Equal(t, SignatureVersionV4, envs[EnvSignatureVersion])
+
+	// Always forward the already-resolved profile field (including empty),
+	// so an explicit clear overrides a parent-process env in plugins.
+	p.SignatureVersion = ""
+	envs, err = p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	val, has := envs[EnvSignatureVersion]
+	assert.True(t, has)
+	assert.Empty(t, val)
+
+	// GetRuntimeEnv does not re-apply env; profile > env was resolved earlier.
+	p.SignatureVersion = SignatureVersionV4
+	t.Setenv(EnvSignatureVersion, "")
+	envs, err = p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	assert.Equal(t, SignatureVersionV4, envs[EnvSignatureVersion])
 }
 
 func TestGetRuntimeEnv_OptionalFieldsOmitted(t *testing.T) {

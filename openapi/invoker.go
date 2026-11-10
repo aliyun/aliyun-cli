@@ -30,6 +30,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	"github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	runtimemeta "github.com/aliyun/aliyun-openapi-runtime/meta"
 )
 
@@ -166,6 +167,9 @@ func parseCustomUserAgentSegments(s string) [][2]string {
 }
 
 func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
+	if err := endpoint.Validate(); err != nil {
+		return err
+	}
 	var err error
 	dryRun := clientDryRunAssigned(ctx)
 	if !dryRun {
@@ -258,6 +262,7 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 					"List available endpoints with `%s`, use a supported --region, or pass --endpoint <host> explicitly.", endpointDiagnosticsCommand(recoveryContext{product: product.GetLowerCode()}))
 			}
 		}
+		a.request.Domain = endpoint.WithSuffix(a.request.Domain)
 		return nil
 	}
 
@@ -319,6 +324,7 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 		}
 	}
 
+	a.request.Domain = endpoint.WithSuffix(a.request.Domain)
 	otel.InjectHeaders(a.request.Headers)
 
 	return nil

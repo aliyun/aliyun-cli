@@ -43,23 +43,19 @@ func TestPluginSourceOverrideRejectsInvalidScheme(t *testing.T) {
 	require.ErrorContains(t, command.Run(ctx, nil), "plugin URL must use https://")
 }
 
-type failingIndexTransport struct{}
-
-func (failingIndexTransport) RoundTrip(*http.Request) (*http.Response, error) {
-	return nil, errors.New("index unavailable")
-}
-
 func TestHiddenInstallCommandsPropagateIndexErrors(t *testing.T) {
+	old := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = old })
+	http.DefaultTransport = managerBoundaryTransport(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("trust offline")
+	})
 	for _, command := range []*cli.Command{newInstallAllCommand(), newInstallCustomCommand()} {
 		t.Run(command.Name, func(t *testing.T) {
 			t.Setenv(EnvPluginsDir, t.TempDir())
-			previous := http.DefaultTransport
-			http.DefaultTransport = failingIndexTransport{}
-			t.Cleanup(func() { http.DefaultTransport = previous })
 			ctx := newTestContext()
 			ctx.EnterCommand(command)
 			ctx.Flags().Get("enable-pre").SetAssigned(true)
-			require.ErrorContains(t, command.Run(ctx, nil), "index unavailable")
+			require.ErrorContains(t, command.Run(ctx, nil), "failed to verify plugin index")
 		})
 	}
 }

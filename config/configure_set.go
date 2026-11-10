@@ -19,6 +19,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 )
 
 func NewConfigureSetCommand() *cli.Command {
@@ -63,14 +64,16 @@ func doConfigureSet(ctx *cli.Context) error {
 		}
 	}
 
+	authModeSource := telemetry.AuthModeSourceExisting
 	mode, ok := ModeFlag(flags).GetValue()
 	if ok {
 		profile.Mode = NormalizeMode(mode)
-	} else {
-		if profile.Mode == "" {
-			profile.Mode = AK
-		}
+		authModeSource = telemetry.AuthModeSourceExplicit
+	} else if profile.Mode == "" {
+		profile.Mode = AK
+		authModeSource = telemetry.AuthModeSourceDefault
 	}
+	telemetry.SetAuthenticationMode(string(profile.Mode), authModeSource)
 
 	oldTarget := cloudSSOTarget(&profile)
 	switch profile.Mode {
@@ -150,6 +153,15 @@ func doConfigureSet(ctx *cli.Context) error {
 	profile.EndpointType = EndpointTypeFlag(flags).GetStringOrDefault(profile.EndpointType)
 	profile.Endpoint = EndpointFlag(flags).GetStringOrDefault(profile.Endpoint)
 	profile.ExternalAccountType = ExternalAccountTypeFlag(flags).GetStringOrDefault(profile.ExternalAccountType)
+	// Reuse the same --cli-sign-version flag as invoke; persist into profile.signature_version.
+	if f := CliSignVersionFlag(flags); f != nil && f.IsAssigned() {
+		profile.SignatureVersion = f.GetStringOrDefault(profile.SignatureVersion)
+	}
+	if normalized, err := NormalizeSignatureVersion(profile.SignatureVersion); err != nil {
+		return fmt.Errorf("fail to set configuration: %w", err)
+	} else {
+		profile.SignatureVersion = normalized
+	}
 
 	if autoPluginInstallFlag := AutoPluginInstallFlag(flags); autoPluginInstallFlag != nil && autoPluginInstallFlag.IsAssigned() {
 		if val, ok := autoPluginInstallFlag.GetValue(); ok {

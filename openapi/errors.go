@@ -46,6 +46,9 @@ func (e *LegacyMissingRequiredError) Unwrap() error {
 }
 
 func (*LegacyMissingRequiredError) AIRecoveryEligible() {}
+func (*LegacyMissingRequiredError) LocalErrorCode() string {
+	return "MISSING_REQUIRED_PARAMETER"
+}
 
 func newLegacyMissingRequiredError(err error) error {
 	if err == nil {
@@ -72,7 +75,8 @@ func (e *InvalidProductError) AgentMessage() string {
 	return fmt.Sprintf("%q is not a valid command or product.", strings.ToLower(e.Code))
 }
 
-func (*InvalidProductError) AIRecoveryEligible() {}
+func (*InvalidProductError) AIRecoveryEligible()    {}
+func (*InvalidProductError) LocalErrorCode() string { return "INVALID_COMMAND" }
 
 func (e *InvalidProductError) GetSuggestions() []string {
 	return e.AgentSuggestions()
@@ -107,7 +111,8 @@ func (e *InvalidApiError) AgentMessage() string {
 	return fmt.Sprintf("%q is not a valid api.", e.Name)
 }
 
-func (*InvalidApiError) AIRecoveryEligible() {}
+func (*InvalidApiError) AIRecoveryEligible()    {}
+func (*InvalidApiError) LocalErrorCode() string { return "INVALID_COMMAND" }
 
 func (e *InvalidApiError) GetSuggestions() []string {
 	return humanAPISuggestions(e.Name, e.product.ApiNames,
@@ -140,7 +145,8 @@ func (e *InvalidParameterError) AgentMessage() string {
 	return fmt.Sprintf("%q is not a valid parameter or flag.", "--"+strings.TrimLeft(e.Name, "-"))
 }
 
-func (*InvalidParameterError) AIRecoveryEligible() {}
+func (*InvalidParameterError) AIRecoveryEligible()    {}
+func (*InvalidParameterError) LocalErrorCode() string { return "INVALID_FLAG" }
 
 func (e *InvalidParameterError) GetSuggestions() []string {
 	sr := cli.NewSuggester(e.Name, 2)
@@ -222,7 +228,8 @@ func (e *InvalidProductOrPluginError) AgentMessage() string {
 	return fmt.Sprintf("%q is not a valid product.", e.Code)
 }
 
-func (*InvalidProductOrPluginError) AIRecoveryEligible() {}
+func (*InvalidProductOrPluginError) AIRecoveryEligible()    {}
+func (*InvalidProductOrPluginError) LocalErrorCode() string { return "INVALID_COMMAND" }
 
 func (e *InvalidProductOrPluginError) GetSuggestions() []string {
 	return e.AgentSuggestions()
@@ -255,7 +262,8 @@ func (e *InvalidUnifiedApiError) AgentMessage() string {
 	return fmt.Sprintf("%q is not a valid api.", e.Name)
 }
 
-func (*InvalidUnifiedApiError) AIRecoveryEligible() {}
+func (*InvalidUnifiedApiError) AIRecoveryEligible()    {}
+func (*InvalidUnifiedApiError) LocalErrorCode() string { return "INVALID_COMMAND" }
 
 // InvalidBaselineCommandError adapts the runtime router's existing human text
 // into an explicit unknown-API cause without changing that text.
@@ -279,7 +287,8 @@ func (e *InvalidBaselineCommandError) Error() string {
 
 func (e *InvalidBaselineCommandError) Unwrap() error { return e.Err }
 
-func (*InvalidBaselineCommandError) AIRecoveryEligible() {}
+func (*InvalidBaselineCommandError) AIRecoveryEligible()    {}
+func (*InvalidBaselineCommandError) LocalErrorCode() string { return "INVALID_COMMAND" }
 
 func (e *InvalidBaselineCommandError) GetSuggestions() []string {
 	return humanAPISuggestions(e.Command, e.Candidates,
@@ -304,7 +313,8 @@ func (e *InvalidArgumentError) Error() string {
 
 func (e *InvalidArgumentError) Unwrap() error { return e.Err }
 
-func (*InvalidArgumentError) AIRecoveryEligible() {}
+func (*InvalidArgumentError) AIRecoveryEligible()    {}
+func (*InvalidArgumentError) LocalErrorCode() string { return "INVALID_ARGUMENT" }
 
 type InvalidOptionCombinationError struct {
 	Options []string
@@ -318,6 +328,9 @@ func (e *InvalidOptionCombinationError) Error() string {
 func (e *InvalidOptionCombinationError) Unwrap() error { return e.Err }
 
 func (*InvalidOptionCombinationError) AIRecoveryEligible() {}
+func (*InvalidOptionCombinationError) LocalErrorCode() string {
+	return "INVALID_OPTION_COMBINATION"
+}
 
 func (*InvalidOptionCombinationError) GetSuggestions() []string { return nil }
 
@@ -331,7 +344,8 @@ func (e *InvalidHeaderError) Error() string { return explicitLocalErrorText(e.Er
 
 func (e *InvalidHeaderError) Unwrap() error { return e.Err }
 
-func (*InvalidHeaderError) AIRecoveryEligible() {}
+func (*InvalidHeaderError) AIRecoveryEligible()    {}
+func (*InvalidHeaderError) LocalErrorCode() string { return "INVALID_HEADER" }
 
 type InvalidBodyFileError struct {
 	Path string
@@ -344,7 +358,8 @@ func (e *InvalidBodyFileError) Error() string {
 
 func (e *InvalidBodyFileError) Unwrap() error { return e.Err }
 
-func (*InvalidBodyFileError) AIRecoveryEligible() {}
+func (*InvalidBodyFileError) AIRecoveryEligible()    {}
+func (*InvalidBodyFileError) LocalErrorCode() string { return "INVALID_BODY_FILE" }
 
 func explicitLocalErrorText(err error, fallback string) string {
 	if err == nil {

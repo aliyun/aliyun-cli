@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,7 +21,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/openapi"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
-	"github.com/aliyun/aliyun-cli/v3/util"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 type Context struct {
@@ -28,7 +29,8 @@ type Context struct {
 	configPath                string // aliyun config path, all bin and cache file store in the same dir
 	checkVersionCacheFilePath string // cache file path to store last check version time, unix timestamp
 	execFilePath              string // ossutil exec file path
-	installed                 bool   // whether ossutil is installed
+	useExternalBinary         bool
+	installed                 bool // whether ossutil is installed
 	versionLocal              string
 	versionRemote             string
 	isLatest                  bool
@@ -49,7 +51,7 @@ var (
 	getLatestOssUtilVersionFunc = GetLatestOssUtilVersion
 	downloadAndUnzipFunc        = DownloadAndUnzip
 	execCommandFunc             = exec.Command
-	httpGetFunc                 = http.Get
+	httpGetFunc                 = cloudendpoint.HTTPGet
 	timeNowFunc                 = time.Now
 	// runtime hooks for test
 	runtimeGOOSFunc   = func() string { return runtime.GOOS }
@@ -110,10 +112,13 @@ func (c *Context) Run(args []string) error {
 	// init config path and some basic info
 	c.InitBasicInfo()
 	c.CheckOsTypeAndArch()
-	if !c.osSupport {
+	if c.useExternalBinary {
+		if err := c.validateExecPathOverride(); err != nil {
+			return err
+		}
+	} else if !c.osSupport {
 		return fmt.Errorf("your os type %s and arch %s is not supported now", c.osType, c.osArch)
-	}
-	if !c.installed {
+	} else if !c.installed {
 		latestVersionRemote, err := getLatestOssUtilVersionFunc()
 		if err != nil {
 			return err
@@ -166,7 +171,7 @@ func (c *Context) Run(args []string) error {
 		return err
 	}
 	// run ossutil with newArgs
-	cmd := execCommandFunc(c.execFilePath, newArgs...)
+	cmd := execCommandFunc(c.execFilePath, cloudendpoint.WithSuffixArgs(newArgs)...)
 	// set env
 	envs := os.Environ()
 	for k, v := range c.envMap {
@@ -225,6 +230,13 @@ func (c *Context) CheckOsTypeAndArch() {
 }
 
 func (c *Context) InitBasicInfo() {
+	c.useExternalBinary = false
+	if envPath := strings.TrimSpace(os.Getenv("ALIBABA_CLOUD_OSSUTIL_EXEC_PATH")); envPath != "" {
+		c.execFilePath = envPath
+		c.useExternalBinary = true
+		c.installed = fileExists(envPath)
+		return
+	}
 	c.configPath = getConfigurePathFunc()
 	c.checkVersionCacheFilePath = filepath.Join(c.configPath, ".ossutil_version_check")
 	c.execFilePath = filepath.Join(c.configPath, "ossutil")
@@ -236,6 +248,28 @@ func (c *Context) InitBasicInfo() {
 	if fileExists(c.execFilePath) {
 		c.installed = true
 	}
+}
+
+func (c *Context) validateExecPathOverride() error {
+	path, err := filepath.Abs(c.execFilePath)
+	if err != nil {
+		return fmt.Errorf("ALIBABA_CLOUD_OSSUTIL_EXEC_PATH=%q: %w", c.execFilePath, err)
+	}
+	info, err := os.Stat(c.execFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("ALIBABA_CLOUD_OSSUTIL_EXEC_PATH=%q does not point to an existing file", c.execFilePath)
+		}
+		return fmt.Errorf("ALIBABA_CLOUD_OSSUTIL_EXEC_PATH=%q: %w", c.execFilePath, err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("ALIBABA_CLOUD_OSSUTIL_EXEC_PATH=%q is not a regular file", c.execFilePath)
+	}
+	if c.osType != "windows" && info.Mode()&0o111 == 0 {
+		return fmt.Errorf("ALIBABA_CLOUD_OSSUTIL_EXEC_PATH=%q is not executable", c.execFilePath)
+	}
+	c.execFilePath = path
+	return nil
 }
 
 func (c *Context) NeedCheckVersion() bool {
@@ -272,31 +306,40 @@ func (c *Context) NeedCheckVersion() bool {
 }
 
 // Install latest ossutil
-func (c *Context) Install() error {
+func (c *Context) Install() (err error) {
 	// like https://gosspublic.alicdn.com/ossutil/v2/2.1.2/ossutil-2.1.2-linux-386.zip
 	url := fmt.Sprintf("%s%s/ossutil-%s-%s", versionUpdateBaseUrl, c.versionRemote, c.versionRemote, c.downloadPathSuffix)
 	// download then unzip
-	// download to /tmp/ossutil.zip then unzip to c.execFilePath
-	tmpDir := os.TempDir()
-	tmpFile := filepath.Join(tmpDir, "ossutil.zip")
-	if fileExists(tmpFile) {
-		err := os.Remove(tmpFile)
-		if err != nil {
-			return err
-		}
+	tmpDir, err := os.MkdirTemp("", "aliyun-ossutil-*")
+	if err != nil {
+		return fmt.Errorf("failed to create ossutil temp dir: %w", err)
 	}
+	defer func() {
+		if cleanupErr := os.RemoveAll(tmpDir); cleanupErr != nil {
+			err = errors.Join(err, fmt.Errorf("failed to remove temp dir %s: %w", tmpDir, cleanupErr))
+		}
+	}()
+	tmpFile := filepath.Join(tmpDir, "ossutil.zip")
 	// ossutil-2.1.2-mac-arm64
 	extractCenterDir := fmt.Sprintf("ossutil-%s-%s", c.versionRemote, strings.TrimSuffix(c.downloadPathSuffix, ".zip"))
-	err := downloadAndUnzipFunc(url, tmpFile, c.execFilePath, extractCenterDir)
+	err = downloadAndUnzipFunc(url, tmpFile, c.execFilePath, extractCenterDir)
 	if err != nil {
-		return fmt.Errorf("failed to download and unzip ossutil from %s: %v", url, err)
+		return fmt.Errorf("failed to download and unzip ossutil from %s: %w", url, err)
 	}
 	return nil
 }
 
-func DownloadAndUnzip(url string, destFile string, exeFilePath string, extractCenterDir string) error {
+func DownloadAndUnzip(url string, destFile string, exeFilePath string, extractCenterDir string) (err error) {
+	var tempPaths []string
+	defer func() {
+		for _, path := range tempPaths {
+			if cleanupErr := os.RemoveAll(path); cleanupErr != nil {
+				err = errors.Join(err, fmt.Errorf("failed to remove temp path %s: %w", path, cleanupErr))
+			}
+		}
+	}()
 	// download file
-	resp, err := httpGetFunc(url)
+	resp, err := httpGetFunc(cloudendpoint.WithSuffix(url))
 	if err != nil {
 		return fmt.Errorf("failed to download %s: %v", url, err)
 	}
@@ -308,6 +351,7 @@ func DownloadAndUnzip(url string, destFile string, exeFilePath string, extractCe
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %v", destFile, err)
 	}
+	tempPaths = append(tempPaths, destFile)
 	// 不能 defer Close: 后续需要在函数内删除该文件, Windows 下未关闭会导致删除失败
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
@@ -318,17 +362,14 @@ func DownloadAndUnzip(url string, destFile string, exeFilePath string, extractCe
 		return fmt.Errorf("failed to close file %s: %v", destFile, err)
 	}
 	// unzip file
-	destDir := filepath.Dir(destFile)
-	destDirUse := filepath.Join(destDir, "ossutil_unzip")
-	if fileExists(destDirUse) {
-		err := os.RemoveAll(destDirUse)
-		if err != nil {
-			return fmt.Errorf("failed to remove existing dir %s: %v", destDirUse, err)
-		}
+	destDirUse, err := os.MkdirTemp(filepath.Dir(destFile), "ossutil-unzip-*")
+	if err != nil {
+		return fmt.Errorf("failed to create unzip dir: %w", err)
 	}
+	tempPaths = append(tempPaths, destDirUse)
 	err = unzip(destFile, destDirUse)
 	if err != nil {
-		return fmt.Errorf("failed to unzip file %s: %v", destFile, err)
+		return fmt.Errorf("failed to unzip file %s: %w", destFile, err)
 	}
 	// move exe file to exeFilePath
 	// check is windows
@@ -338,55 +379,46 @@ func DownloadAndUnzip(url string, destFile string, exeFilePath string, extractCe
 	}
 	// 这里会多出一个类似ossutil-2.1.2-mac-arm64的层级
 	sourceFile := filepath.Join(destDirUse, extractCenterDir, originExtractFile)
-	if !fileExists(sourceFile) {
-		return fmt.Errorf("extracted file %s not exist", sourceFile)
-	}
-	if fileExists(exeFilePath) {
-		err := os.Remove(exeFilePath)
-		if err != nil {
-			return fmt.Errorf("failed to remove existing file %s: %v", exeFilePath, err)
-		}
-	}
-	err = util.CopyFileAndRemoveSource(sourceFile, exeFilePath)
+	source, err := os.Open(sourceFile)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open extracted file %s: %w", sourceFile, err)
+	}
+	staged, err := os.CreateTemp(filepath.Dir(exeFilePath), ".ossutil-*")
+	if err != nil {
+		_ = source.Close()
+		return fmt.Errorf("failed to create staged ossutil: %w", err)
+	}
+	tempPaths = append(tempPaths, staged.Name())
+	_, copyErr := io.Copy(staged, source)
+	err = errors.Join(copyErr, source.Close(), staged.Close())
+	if err != nil {
+		return fmt.Errorf("failed to stage ossutil: %w", err)
 	}
 	// set exec permission
 	if runtime.GOOS != "windows" {
-		err = os.Chmod(exeFilePath, 0755)
+		err = os.Chmod(staged.Name(), 0755)
 		if err != nil {
 			return fmt.Errorf("failed to set exec permission for file %s: %v", exeFilePath, err)
 		}
 	}
-	// clean up (已关闭文件句柄, Windows 下可删除)
-	err = os.Remove(destFile)
-	if err != nil {
-		return fmt.Errorf("failed to remove temp file %s: %v", destFile, err)
-	}
-	err = os.RemoveAll(destDirUse)
-	if err != nil {
-		return fmt.Errorf("failed to remove temp dir %s: %v", destDirUse, err)
+	// Renaming a complete file avoids exposing a partially copied executable.
+	if err := os.Rename(staged.Name(), exeFilePath); err != nil {
+		return fmt.Errorf("failed to replace ossutil %s: %w", exeFilePath, err)
 	}
 	return nil
 }
 
-func unzip(src, dest string) error {
+func unzip(src, dest string) (err error) {
 	// 打开 zip 文件
 	r, err := zip.OpenReader(src)
 	if err != nil {
 		return err
 	}
-	defer func(r *zip.ReadCloser) {
-		err := r.Close()
-		if err != nil {
-			fmt.Printf("failed to close zip file: %v\n", err)
-		}
-	}(r)
+	defer func() { err = errors.Join(err, r.Close()) }()
 
 	// 遍历 zip 中的每个文件/目录
 	for _, file := range r.File {
-		p, _ := filepath.Abs(file.Name)
-		if strings.Contains(p, "..") {
+		if !filepath.IsLocal(file.Name) {
 			return fmt.Errorf("invalid file path in zip: %s", file.Name)
 		}
 		// 构造目标路径
@@ -414,21 +446,12 @@ func unzip(src, dest string) error {
 		// 创建目标文件
 		outFile, err := os.Create(filePath)
 		if err != nil {
-			err := rc.Close()
-			if err != nil {
-				return err
-			}
+			_ = rc.Close()
 			return err
 		}
 
-		_, err = io.Copy(outFile, rc)
-
-		// 关闭资源
-		err = rc.Close()
-		if err != nil {
-			return err
-		}
-		err = outFile.Close()
+		_, copyErr := io.Copy(outFile, rc)
+		err = errors.Join(copyErr, rc.Close(), outFile.Close())
 		if err != nil {
 			return err
 		}
@@ -471,6 +494,9 @@ func EncodeMapBase64(m map[string]any) (string, error) {
 
 // PrepareEnv 准备用户身份的环境变量
 func (c *Context) PrepareEnv() error {
+	if err := cloudendpoint.Validate(); err != nil {
+		return err
+	}
 	// 获取原始的所有的 env
 	envs := os.Environ()
 	envMap := make(map[string]any)
@@ -540,6 +566,9 @@ func (c *Context) PrepareEnv() error {
 		envMap["mode"] = "StsToken"
 	}
 	// common part
+	if profile.Endpoint != "" {
+		envMap["endpoint"] = cloudendpoint.WithSuffix(profile.Endpoint)
+	}
 	if profile.RegionId != "" {
 		envMap["region_id"] = profile.RegionId
 	}
@@ -680,7 +709,7 @@ func GetLatestOssUtilVersion() (string, error) {
 	}
 
 	// 创建HTTP请求
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := cloudendpoint.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request for %s: %v", url, err)
 	}

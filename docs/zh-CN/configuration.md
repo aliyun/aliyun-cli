@@ -4,6 +4,8 @@
 
 阿里云 CLI 默认将具名 Profile 保存在 `~/.aliyun/config.json`。
 
+遥测设置与采集范围见[遥测数据采集](./telemetry.md)。
+
 ## 创建和管理 Profile
 
 本地交互使用推荐从 OAuth 开始：
@@ -401,6 +403,46 @@ Saving profile[uri] ...Done.
 
 在受限环境中设置 `ALIBABA_CLOUD_DISABLE_EXTERNAL_PROCESS=true`，可以同时禁止外部进程执行和 CredentialsURI 请求。
 
+## 请求配置
+
+### 签名版本（短横线命令）
+
+仅支持短横线命令（例如 `aliyun ecs describe-instances`）。`--cli-sign-version` / Profile `signature_version` / `ALIBABA_CLOUD_SIGNATURE_VERSION` 当前仅支持：
+
+| 值 | 行为 |
+| --- | --- |
+| `v4` | 使用签名 V4 |
+| 空值 | 清空已配置的签名版本，恢复默认签名 |
+
+其他值会报错不支持。优先级：命令行 flag > Profile > 环境变量 > 默认行为。传入 `--cli-sign-version ''` 会清空并恢复默认，且不会再被环境变量中的 `v4` 补回。
+
+单次命令开启：
+
+```sh
+aliyun ecs describe-instances --cli-sign-version v4
+```
+
+在 Profile 中设为默认（复用同一 flag）：
+
+```sh
+aliyun configure set --profile default --cli-sign-version v4
+```
+
+清空 Profile 中的签名版本，恢复默认：
+
+```sh
+aliyun configure set --profile default --cli-sign-version ''
+```
+
+或仅对当前进程设置 / 清空环境变量：
+
+```sh
+export ALIBABA_CLOUD_SIGNATURE_VERSION=v4
+export ALIBABA_CLOUD_SIGNATURE_VERSION=
+```
+
+未设置时，签名行为与现在一致。
+
 ## 环境变量
 
 环境变量可以选择 Profile，或补全命令参数/Profile 中未提供的字段。常用变量包括：
@@ -416,6 +458,8 @@ Saving profile[uri] ...Done.
 | `ALIBABA_CLOUD_REGION_ID` | 默认地域 |
 | `ALIBABA_CLOUD_STS_ENDPOINT` | 覆盖 STS Endpoint |
 | `ALIBABA_CLOUD_ENDPOINT` | 覆盖产品 Endpoint |
+| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI 签名版本：当前仅支持 `v4`；仅在未设置 flag 且 Profile 为空时生效；设为空可清空并恢复默认 |
+| `ALIBABA_CLOUD_ENDPOINT_SUFFIX` | 设置 `aliyuncs.alibaba`，将请求地址的 `.aliyuncs.com` 后缀切换为 `.aliyuncs.alibaba` |
 | `ALIBABA_CLOUD_CREDENTIALS_URI` | CredentialsURI 地址 |
 | `ALIBABA_CLOUD_OIDC_PROVIDER_ARN` | OIDC Provider ARN |
 | `ALIBABA_CLOUD_OIDC_TOKEN_FILE` | OIDC Token 文件 |
@@ -423,6 +467,15 @@ Saving profile[uri] ...Done.
 | `ALIBABA_CLOUD_BEARER_TOKEN` | Bearer Token |
 | `ALIBABA_CLOUD_LANGUAGE` | `en` 或 `zh` 输出语言 |
 | `DEBUG=sdk` | 打印 SDK HTTP 诊断信息；分享前请检查敏感内容 |
+
+例如，切换 OpenAPI（包括插件命令）、SLS、STS 和内置 OSS 的请求域名：
+
+```bash
+export ALIBABA_CLOUD_ENDPOINT_SUFFIX=aliyuncs.alibaba
+aliyun ecs DescribeRegions --region cn-hangzhou
+```
+
+此设置覆盖 `aliyun` 主程序处理的请求地址，包括扩展工具（如 ossutil）的下载和版本检查、插件包下载、自升级、登录和凭证请求，以及主程序转交给外部工具的 endpoint 参数和环境变量。仅替换主机名末尾的 `.aliyuncs.com`，保留协议、端口、路径和查询参数；其他域名和 IP 地址保持原样。dry-run 显示切换后的地址。未设置、空值或 `aliyuncs.com` 使用原域名；值会去除首尾空白，其他值会报错。使用 `unset ALIBABA_CLOUD_ENDPOINT_SUFFIX` 恢复默认行为。外部工具自行生成的请求地址仍需该工具自身支持此变量。Spark 提交工具使用临时配置传递切换后的 endpoint，避免把环境变量的效果写入持久配置。
 
 命令行参数对当前调用具有更高优先级。不要在共享机器上全局导出敏感凭证。
 

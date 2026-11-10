@@ -26,6 +26,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 // parseVersionParts 将 "v0.1.0-a1b2c3d" 拆分为 semver 部分和 commit 部分
@@ -309,7 +310,7 @@ func (m *Manager) NeedCheckVersion() bool {
 // GetLatestVersion fetches the latest published version string from {baseURL}latest/version.txt.
 func GetLatestVersion(ctx context.Context, baseURL string) (string, error) {
 	url := baseURL + "latest/version.txt"
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := cloudendpoint.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request for %s: %v", url, err)
 	}
@@ -401,7 +402,7 @@ func (m *Manager) Install(ctx context.Context) error {
 // Uses a unique per-process temp file so concurrent CLI invocations cannot
 // trample each other's download.
 func DownloadBinary(ctx context.Context, url string, exeFilePath string) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := cloudendpoint.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request for %s: %v", url, err)
 	}

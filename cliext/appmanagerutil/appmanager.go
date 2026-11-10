@@ -18,6 +18,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 type Context struct {
@@ -250,7 +251,7 @@ func (c *Context) downloadEmbeddedPython() error {
 	}
 
 	fmt.Fprintf(c.originCtx.Stderr(), "Downloading %s\n", downloadURL)
-	resp, err := http.Get(downloadURL)
+	resp, err := cloudendpoint.HTTPGet(downloadURL)
 	if err != nil {
 		return fmt.Errorf("download failed: %v", err)
 	}
@@ -547,7 +548,7 @@ func pipErrorDetail(stderr string, err error) string {
 func (c *Context) downloadWhlFromOSS() (string, error) {
 	// Read version.txt from OSS
 	versionURL := fmt.Sprintf("%s/version.txt", downloadBaseURL)
-	resp, err := http.Get(versionURL)
+	resp, err := cloudendpoint.HTTPGet(versionURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch version.txt: %v", err)
 	}
@@ -569,7 +570,7 @@ func (c *Context) downloadWhlFromOSS() (string, error) {
 	whlURL := fmt.Sprintf("%s/%s", downloadBaseURL, whlName)
 
 	fmt.Fprintf(c.originCtx.Stderr(), "Downloading %s\n", whlURL)
-	whlResp, err := http.Get(whlURL)
+	whlResp, err := cloudendpoint.HTTPGet(whlURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to download whl: %v", err)
 	}
@@ -811,7 +812,7 @@ func (c *Context) PrepareEnv() ([]string, error) {
 }
 
 func (c *Context) ExecuteAppManagerCli(args []string) error {
-	cmd := execCommandFunc(c.execFilePath, args...)
+	cmd := execCommandFunc(c.execFilePath, cloudendpoint.WithSuffixArgs(args)...)
 	envs, _ := c.PrepareEnv()
 	cmd.Env = envs
 	cmd.Stdout = c.originCtx.Stdout()

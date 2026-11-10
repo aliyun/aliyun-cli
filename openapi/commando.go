@@ -29,9 +29,11 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/headers"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
+	"github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
 	runtime "github.com/aliyun/aliyun-openapi-runtime/runtime"
 
@@ -251,7 +253,8 @@ func (e *kebabProfileFlagCaseError) Error() string {
 
 func (e *kebabProfileFlagCaseError) Unwrap() error { return e.cause }
 
-func (*kebabProfileFlagCaseError) AIRecoveryEligible() {}
+func (*kebabProfileFlagCaseError) AIRecoveryEligible()    {}
+func (*kebabProfileFlagCaseError) LocalErrorCode() string { return "INVALID_FLAG" }
 
 // suggestKebabProfileFlagCase preserves case-sensitive rejection while adding
 // the one host-flag correction approved for kebab OpenAPI commands.
@@ -274,9 +277,10 @@ type sectionHelpAllRecoveryError struct {
 	command string
 }
 
-func (e *sectionHelpAllRecoveryError) Error() string     { return e.cause.Error() }
-func (e *sectionHelpAllRecoveryError) Unwrap() error     { return e.cause }
-func (*sectionHelpAllRecoveryError) AIRecoveryEligible() {}
+func (e *sectionHelpAllRecoveryError) Error() string        { return e.cause.Error() }
+func (e *sectionHelpAllRecoveryError) Unwrap() error        { return e.cause }
+func (*sectionHelpAllRecoveryError) AIRecoveryEligible()    {}
+func (*sectionHelpAllRecoveryError) LocalErrorCode() string { return "HELP_OPTION_ERROR" }
 
 func (e *sectionHelpAllRecoveryError) GetTip(language string) string {
 	message := "Search this Help:"
@@ -634,6 +638,13 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				}
 			}
 
+			// The selected Go plugin may have been installed after telemetry
+			// began. Record its current manifest before preparation or execution
+			// can fail or forward a subprocess exit code.
+			if local, lookupErr := plugin.LookupLocalPlugin(args[0]); lookupErr == nil {
+				telemetry.SetPluginRoute(local)
+			}
+
 			// Prepare config related env for plugin
 			// Only prepare credentials if it's NOT a version command AND NOT a help request
 			// AND it has more than 2 arguments (product + api + more)
@@ -716,6 +727,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// local command-tree error and must not be masked by an unrelated missing
 	// credential/region error. Installed and runtime plugins have already had
 	// the opportunity to own the invocation above.
+	telemetry.SetOpenAPILegacyRoute()
 	if err := c.validateCanonicalAPICommand(args, ctx); err != nil {
 		return err
 	}
@@ -863,10 +875,11 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 // dispatchInstalledMetaPlugin routes an installed metadata plugin through the in-process OpenAPI runtime.
 // It returns handled=false for Go plugins so the caller can continue to the external binary execution path.
 func (c *Commando) dispatchInstalledMetaPlugin(ctx *cli.Context, productCode, apiOrMethod string, pluginArgs []string) (bool, error) {
-	ptype, ok := plugin.InstalledPluginType(productCode)
-	if !ok || ptype != plugin.PluginTypeMeta {
+	local, lookupErr := plugin.LookupLocalPlugin(productCode)
+	if lookupErr != nil || local == nil || !local.IsMeta() {
 		return false, nil
 	}
+	telemetry.SetPluginRoute(local)
 	if err := plugin.ValidatePluginCliVersion(productCode); err != nil {
 		return true, err
 	}
@@ -876,6 +889,7 @@ func (c *Commando) dispatchInstalledMetaPlugin(ctx *cli.Context, productCode, ap
 		if err != nil {
 			return true, err
 		}
+		telemetry.SetResolvedMetaCommand(productCode, apiOrMethod)
 		cli.Printf(ctx.Stdout(), "%s %s\n", name, version)
 		return true, nil
 	}
@@ -975,6 +989,20 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 }
 
 func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
+	// PascalCase / Restful legacy path still uses the V1 Golang SDK, which does
+	// not support signature V4. Fail closed instead of signing incorrectly.
+	if useV4, err := c.profile.UseSignatureV4(); err != nil {
+		return err
+	} else if useV4 {
+		return cli.NewErrorWithTip(
+			fmt.Errorf("signature version v4 is not supported for PascalCase commands yet"),
+			"%s",
+			i18n.T(
+				"Use a kebab-case command instead (for example `aliyun ecs describe-instances`). PascalCase support is planned after migrating off the V1 Golang SDK.",
+				"请改用中划线式命令（例如 `aliyun ecs describe-instances`）。大驼峰式命令将在阶段二迁移到 V2 Golang SDK 后支持签名 V4。",
+			).Text())
+	}
+
 	// create specific invoker
 	invoker, err := c.createInvoker(ctx, productCode, apiOrMethod, path)
 	if err != nil {
@@ -1119,7 +1147,8 @@ func effectiveDryRunRegion(ctx *cli.Context, profile *config.Profile) string {
 	return ""
 }
 
-func dryRunOpenapiEndpoint(ctx *cli.Context, o *OpenapiContext) string {
+func dryRunOpenapiEndpoint(ctx *cli.Context, o *OpenapiContext) (resolved string) {
+	defer func() { resolved = endpoint.WithSuffix(resolved) }()
 	h := o.HttpContext
 	if h.openapiRequest != nil && h.openapiRequest.EndpointOverride != nil {
 		if v := *h.openapiRequest.EndpointOverride; v != "" {
@@ -1762,6 +1791,7 @@ func (c *Commando) CheckApiParamWithBuildInArgs(ctx *cli.Context, api *canonical
 	if api == nil {
 		return
 	}
+	ctx.SetParsedFlagValidator(legacyParameterFlagValidator(api))
 	for _, p := range api.LegacyTopLevelParameters() {
 		// 如果参数中包含了known参数，且 known参数已经被赋值，则将 known 参数拷贝给 unknown 参数
 		if ep, ok := ctx.Flags().GetValue(p.LegacyName()); ok {
