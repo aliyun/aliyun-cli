@@ -35,6 +35,8 @@ import (
 	"strings"
 	"time"
 
+	popgateway "github.com/alibabacloud-go/alibabacloud-gateway-pop/client"
+	slsgateway "github.com/alibabacloud-go/alibabacloud-gateway-sls/client"
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
 	"github.com/alibabacloud-go/tea/dara"
@@ -44,6 +46,22 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 )
+
+// SignatureVersionV4 enables ACS4-HMAC-SHA256 via the POP gateway SPI.
+// Empty keeps the default signing path. Other values are rejected.
+const SignatureVersionV4 = "v4"
+
+func normalizeSignatureVersion(v string) (string, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "", nil
+	}
+	if strings.EqualFold(v, SignatureVersionV4) {
+		return SignatureVersionV4, nil
+	}
+	return "", fmt.Errorf("runtime: unsupported signature_version %q; only %q is supported (set empty to clear and use default)",
+		v, SignatureVersionV4)
+}
 
 // Executor runs one API call end-to-end.
 type Executor interface {
@@ -103,10 +121,12 @@ type ExecContext struct {
 	ForceHTTPS bool
 	ForceHTTP  bool
 
-	// SkipSecureVerify / CLIVersion / UserAgent come from Host.Settings.
+	// SkipSecureVerify / CLIVersion / UserAgent / SignatureVersion come from Host.Settings.
 	SkipSecureVerify bool
 	CLIVersion       string
 	UserAgent        string // host suffixes only; composed with base in send
+	// SignatureVersion is "v4" or empty for the default signing path.
+	SignatureVersion string
 
 	// MetadataPluginName and MetadataPluginVersion identify the user/override metadata package that supplied this API.
 	// Baseline metadata leaves both empty.
@@ -558,8 +578,19 @@ func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) 
 	}
 
 	conf := &openapiClient.Config{Credential: ec.Credential}
-	if usesLegacySignature(ec.API.ProductCode) {
+	signVersion, err := normalizeSignatureVersion(ec.SignatureVersion)
+	if err != nil {
+		return nil, err
+	}
+	// Legacy RPC signing (e.g. FNF) takes precedence over signature V4: CallApi
+	// routes on SignatureVersion first, so never set v4 for these products.
+	useV4 := false
+	legacy := usesLegacySignature(ec.API.ProductCode)
+	if legacy {
 		conf.SignatureAlgorithm = tea.String("v2")
+	} else if signVersion == SignatureVersionV4 {
+		conf.SignatureVersion = tea.String(SignatureVersionV4)
+		useV4 = true
 	}
 	if ec.Region != "" {
 		conf.RegionId = tea.String(ec.Region)
@@ -599,6 +630,26 @@ func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) 
 		return nil, fmt.Errorf("runtime: create client: %w", err)
 	}
 	client.DisableSDKError = tea.Bool(true)
+	productCode := strings.TrimSpace(ec.API.ProductCode)
+	if productCode == "" && ec.Product != nil {
+		productCode = strings.TrimSpace(ec.Product.Code)
+	}
+	if strings.EqualFold(productCode, "sls") {
+		// SLS gateway implements ACS4 when SignatureVersion=v4; do not swap in POP.
+		client.Spi = &slsgateway.Client{}
+	} else if useV4 {
+		if productCode == "" {
+			return nil, errors.New("runtime: signature version v4 requires a product id")
+		}
+		client.ProductId = tea.String(productCode)
+		gateway, gerr := popgateway.NewClient()
+		if gerr != nil {
+			return nil, fmt.Errorf("runtime: init signature v4 gateway: %w", gerr)
+		}
+		if err = client.SetGatewayClient(gateway); err != nil {
+			return nil, fmt.Errorf("runtime: set signature v4 gateway: %w", err)
+		}
+	}
 
 	params := &openapiClient.Params{
 		Action:      tea.String(req.Action),

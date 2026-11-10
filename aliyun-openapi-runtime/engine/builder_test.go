@@ -112,6 +112,18 @@ func TestBuildExecContextLanguage(t *testing.T) {
 	}
 }
 
+func TestBuildExecContextSignatureVersion(t *testing.T) {
+	ec, err := buildExecContext(Request{
+		Host: runtime.StaticHost{SettingsVal: runtime.Settings{SignatureVersion: runtime.SignatureVersionV4}},
+	}, &meta.API{}, &argparser.Result{Reserved: argparser.Reserved{DryRun: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ec.SignatureVersion != runtime.SignatureVersionV4 {
+		t.Fatalf("SignatureVersion = %q, want %q", ec.SignatureVersion, runtime.SignatureVersionV4)
+	}
+}
+
 func TestDispatchPreservesUnknownFlagDetails(t *testing.T) {
 	err := newDispatchErrorTestEngine().Dispatch(Request{
 		Args: []string{"demo", "run-thing", "--instnace-type", "ecs.g6"},

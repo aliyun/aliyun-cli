@@ -15,10 +15,11 @@ import (
 )
 
 func TestHostLoadsCredentialAndWireSettingsFromExplicitProfile(t *testing.T) {
+	require.NoError(t, os.Unsetenv(config.EnvSignatureVersion))
 	ctx := cli.NewCommandContext(io.Discard, io.Discard)
 	config.AddFlags(ctx.Flags())
 	path := filepath.Join(t.TempDir(), "config.json")
-	require.NoError(t, os.WriteFile(path, []byte(`{"current":"test","profiles":[{"name":"test","mode":"AK","access_key_id":"id","access_key_secret":"secret","region_id":"cn-shanghai","read_timeout":3,"connect_timeout":4,"retry_count":2,"endpoint_type":"internal","language":"zh"}]}`), 0600))
+	require.NoError(t, os.WriteFile(path, []byte(`{"current":"test","profiles":[{"name":"test","mode":"AK","access_key_id":"id","access_key_secret":"secret","region_id":"cn-shanghai","read_timeout":3,"connect_timeout":4,"retry_count":2,"endpoint_type":"internal","language":"zh","signature_version":"v4"}]}`), 0600))
 	config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
 	config.ConfigurePathFlag(ctx.Flags()).SetValue(path)
 	config.SkipSecureVerify(ctx.Flags()).SetAssigned(true)
@@ -30,6 +31,7 @@ func TestHostLoadsCredentialAndWireSettingsFromExplicitProfile(t *testing.T) {
 	require.Equal(t, 2, settings.RetryCount)
 	require.Equal(t, "internal", settings.EndpointType)
 	require.True(t, settings.SkipSecureVerify)
+	require.Equal(t, config.SignatureVersionV4, settings.SignatureVersion)
 	credential, err := host.Credential()
 	require.NoError(t, err)
 	model, err := credential.GetCredential()

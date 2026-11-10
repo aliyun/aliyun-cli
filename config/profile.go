@@ -138,6 +138,7 @@ type Profile struct {
 	AutoPluginInstallEnablePre bool             `json:"auto_plugin_install_enable_pre,omitempty"` // install latest version (including pre-release) when true
 	BearerTokenValue           string           `json:"bearer_token,omitempty"`
 	BearerTokenHeaderKey       string           `json:"bearer_token_header_key,omitempty"`
+	SignatureVersion           string           `json:"signature_version,omitempty"` // empty (default) or "v4"
 	parent                     *Configuration   //`json:"-"`
 }
 
@@ -401,6 +402,10 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	if cp.BearerTokenHeaderKey == "" {
 		cp.BearerTokenHeaderKey = util.GetFromEnv("ALIBABA_CLOUD_BEARER_TOKEN_HEADER_KEY")
 	}
+
+	// Signature version: --cli-sign-version (including empty) > profile > env.
+	// Explicit empty flag clears and is not backfilled by env.
+	cp.applySignatureVersionFromFlags(ctx)
 
 	if cp.OIDCProviderARN == "" {
 		cp.OIDCProviderARN = util.GetFromEnv("ALIBABACLOUD_OIDC_PROVIDER_ARN", "ALIBABA_CLOUD_OIDC_PROVIDER_ARN")
@@ -926,6 +931,14 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 
 	envs["ALIBABA_CLOUD_CLI_VERSION"] = cli.GetVersion()
 
+	// Forward the already-resolved profile.SignatureVersion (OverwriteWithFlags
+	// applied flag > profile > env). Always set the key so an explicit empty
+	// clear overrides a parent-process env v4 when launching plugins.
+	if err := cp.ValidateSignatureVersion(); err != nil {
+		return nil, err
+	}
+	envs[EnvSignatureVersion] = cp.SignatureVersion
+
 	return envs, nil
 }
 
@@ -950,6 +963,18 @@ func BuildBaselineEnv(ctx *cli.Context) map[string]string {
 		envs["ALIBABA_CLOUD_LANGUAGE"] = lang
 	} else if v := util.GetFromEnv("ALIBABA_CLOUD_LANGUAGE"); v != "" {
 		envs["ALIBABA_CLOUD_LANGUAGE"] = v
+	}
+	// No-profile fallback: flag (including empty) > env > default.
+	cliValue, cliAssigned := "", false
+	if ctx != nil {
+		cliValue, cliAssigned = CliSignVersionFromFlags(ctx.Flags())
+	}
+	if resolved, err := ResolveSignatureVersion(cliValue, cliAssigned, ""); err == nil {
+		envs[EnvSignatureVersion] = resolved
+	} else if cliAssigned {
+		envs[EnvSignatureVersion] = strings.TrimSpace(cliValue)
+	} else if v, ok := os.LookupEnv(EnvSignatureVersion); ok {
+		envs[EnvSignatureVersion] = strings.TrimSpace(v)
 	}
 	return envs
 }

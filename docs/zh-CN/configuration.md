@@ -403,6 +403,46 @@ Saving profile[uri] ...Done.
 
 在受限环境中设置 `ALIBABA_CLOUD_DISABLE_EXTERNAL_PROCESS=true`，可以同时禁止外部进程执行和 CredentialsURI 请求。
 
+## 请求配置
+
+### 签名版本（短横线命令）
+
+仅支持短横线命令（例如 `aliyun ecs describe-instances`）。`--cli-sign-version` / Profile `signature_version` / `ALIBABA_CLOUD_SIGNATURE_VERSION` 当前仅支持：
+
+| 值 | 行为 |
+| --- | --- |
+| `v4` | 使用签名 V4 |
+| 空值 | 清空已配置的签名版本，恢复默认签名 |
+
+其他值会报错不支持。优先级：命令行 flag > Profile > 环境变量 > 默认行为。传入 `--cli-sign-version ''` 会清空并恢复默认，且不会再被环境变量中的 `v4` 补回。
+
+单次命令开启：
+
+```sh
+aliyun ecs describe-instances --cli-sign-version v4
+```
+
+在 Profile 中设为默认（复用同一 flag）：
+
+```sh
+aliyun configure set --profile default --cli-sign-version v4
+```
+
+清空 Profile 中的签名版本，恢复默认：
+
+```sh
+aliyun configure set --profile default --cli-sign-version ''
+```
+
+或仅对当前进程设置 / 清空环境变量：
+
+```sh
+export ALIBABA_CLOUD_SIGNATURE_VERSION=v4
+export ALIBABA_CLOUD_SIGNATURE_VERSION=
+```
+
+未设置时，签名行为与现在一致。
+
 ## 环境变量
 
 环境变量可以选择 Profile，或补全命令参数/Profile 中未提供的字段。常用变量包括：
@@ -418,6 +458,7 @@ Saving profile[uri] ...Done.
 | `ALIBABA_CLOUD_REGION_ID` | 默认地域 |
 | `ALIBABA_CLOUD_STS_ENDPOINT` | 覆盖 STS Endpoint |
 | `ALIBABA_CLOUD_ENDPOINT` | 覆盖产品 Endpoint |
+| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI 签名版本：当前仅支持 `v4`；仅在未设置 flag 且 Profile 为空时生效；设为空可清空并恢复默认 |
 | `ALIBABA_CLOUD_ENDPOINT_SUFFIX` | 设置 `aliyuncs.alibaba`，将请求地址的 `.aliyuncs.com` 后缀切换为 `.aliyuncs.alibaba` |
 | `ALIBABA_CLOUD_CREDENTIALS_URI` | CredentialsURI 地址 |
 | `ALIBABA_CLOUD_OIDC_PROVIDER_ARN` | OIDC Provider ARN |
