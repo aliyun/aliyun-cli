@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -335,7 +336,10 @@ func TestTimeoutPrecedenceAndAPIData(t *testing.T) {
 func TestProxyEnvironmentPrecedenceAndBypass(t *testing.T) {
 	_, r := fixture(t)
 	t.Setenv("HTTPS_PROXY", "http://upper.invalid:1234")
-	t.Setenv("https_proxy", "http://lower.invalid:1234")
+	// Windows treats these spellings as the same environment variable.
+	if runtime.GOOS != "windows" {
+		t.Setenv("https_proxy", "http://lower.invalid:1234")
+	}
 	p, err := legacyProxy(r)
 	require.NoError(t, err)
 	proxy, err := p(&http.Request{})
@@ -355,9 +359,14 @@ func TestProxyEnvironmentPrecedenceAndBypass(t *testing.T) {
 	t.Setenv("HTTPS_PROXY", "")
 	p, err = legacyProxy(r)
 	require.NoError(t, err)
-	proxy, err = p(&http.Request{})
-	require.NoError(t, err)
-	require.Equal(t, "lower.invalid:1234", proxy.Host)
+	if runtime.GOOS == "windows" {
+		require.Nil(t, p)
+	} else {
+		require.NotNil(t, p)
+		proxy, err = p(&http.Request{})
+		require.NoError(t, err)
+		require.Equal(t, "lower.invalid:1234", proxy.Host)
+	}
 	r.Scheme = "http"
 	t.Setenv("HTTP_PROXY", "http://http.invalid")
 	p, err = legacyProxy(r)
