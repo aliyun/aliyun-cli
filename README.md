@@ -159,6 +159,19 @@ You can also disable it by setting `ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE=1`. See 
 
 Starting with Alibaba Cloud CLI 3.5.4, use `DEBUG=dara` to enable SDK HTTP diagnostics. `DEBUG=sdk` is no longer supported. Review the output for sensitive information before sharing it.
 
+```sh
+DEBUG=dara aliyun ecs DescribeRegions --region cn-hangzhou --method GET
+```
+
+Excerpt from the diagnostic output, with credentials and signing values redacted.
+
+```text
+> GET https://ecs.cn-hangzhou.aliyuncs.com/?AccessKeyId=REDACTED&Action=DescribeRegions&...&Signature=REDACTED&...
+> x-acs-action: DescribeRegions
+< HTTP/1.1 200 OK
+< Content-Type: application/json;charset=utf-8
+```
+
 ## Documentation
 
 | Topic | English | 简体中文 |

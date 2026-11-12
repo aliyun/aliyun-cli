@@ -157,6 +157,19 @@ aliyun configure telemetry disable
 
 从阿里云 CLI 3.5.4 起，请使用 `DEBUG=dara` 启用 SDK HTTP 诊断。`DEBUG=sdk` 不再支持。分享诊断输出前请检查其中的敏感信息。
 
+```sh
+DEBUG=dara aliyun ecs DescribeRegions --region cn-hangzhou --method GET
+```
+
+以下是诊断输出节选，凭证和签名信息已脱敏。
+
+```text
+> GET https://ecs.cn-hangzhou.aliyuncs.com/?AccessKeyId=REDACTED&Action=DescribeRegions&...&Signature=REDACTED&...
+> x-acs-action: DescribeRegions
+< HTTP/1.1 200 OK
+< Content-Type: application/json;charset=utf-8
+```
+
 ## 文档
 
 | 主题 | 简体中文 | English |
