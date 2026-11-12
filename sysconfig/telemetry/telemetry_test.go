@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
-	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 )
 
 func TestTelemetryEnvironmentDisabled(t *testing.T) {
@@ -145,7 +145,7 @@ func TestBuildEventClassifiesLocalAndAPIErrors(t *testing.T) {
 		t.Fatalf("unexpected uploaded API error attributes: %+v", uploaded.Attributes)
 	}
 
-	serverEvent := build(sdkerrors.NewServerError(
+	serverEvent := build(legacyapi.NewServerError(
 		429,
 		`{"RequestId":"must-not-be-collected","Code":"Throttling.User","Message":"must-not-be-collected"}`,
 		"",

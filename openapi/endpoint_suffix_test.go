@@ -56,7 +56,7 @@ func TestLegacyEndpointSuffixBeforeSigning(t *testing.T) {
 				return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
 			}))
 			invoker.request.ApiName = "DescribeRegions"
-			_, err := invoker.client.ProcessCommonRequest(invoker.request)
+			_, err := invoker.client.Send(invoker.request)
 			require.NoError(t, err)
 			require.Equal(t, 1, calls)
 			if source == "profile" {

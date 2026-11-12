@@ -24,8 +24,8 @@ import (
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
-	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
@@ -143,7 +143,7 @@ func apiErrorDetails(err error) (string, int) {
 	if errors.As(err, &teaErr) {
 		return safeAPIErrorCode(tea.StringValue(teaErr.Code)), safeHTTPStatus(tea.IntValue(teaErr.StatusCode))
 	}
-	var serverErr *sdkerrors.ServerError
+	var serverErr *legacyapi.ServerError
 	if errors.As(err, &serverErr) {
 		return safeAPIErrorCode(serverErr.ErrorCode()), safeHTTPStatus(serverErr.HttpStatus())
 	}

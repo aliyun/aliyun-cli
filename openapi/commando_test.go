@@ -27,7 +27,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
@@ -35,6 +34,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
@@ -442,9 +442,9 @@ func Test_processInvoke(t *testing.T) {
 	defer func() {
 		hookdo = originhookdo
 	}()
-	hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
-		resp := responses.NewCommonResponse()
-		return func() (*responses.CommonResponse, error) {
+	hookdo = func(fn func() (*legacyapi.Response, error)) func() (*legacyapi.Response, error) {
+		resp := legacyapi.NewResponse()
+		return func() (*legacyapi.Response, error) {
 			return resp, nil
 		}
 	}
@@ -651,9 +651,9 @@ func TestProcessInvokeQueryFlag(t *testing.T) {
 
 	t.Run("QueryFlagAssignedWithInvalidQuery", func(t *testing.T) {
 		PagerFlag.SetAssigned(false)
-		hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
-			return func() (*responses.CommonResponse, error) {
-				resp := responses.NewCommonResponse()
+		hookdo = func(fn func() (*legacyapi.Response, error)) func() (*legacyapi.Response, error) {
+			return func() (*legacyapi.Response, error) {
+				resp := legacyapi.NewResponse()
 				return resp, nil
 			}
 		}
@@ -667,9 +667,9 @@ func TestProcessInvokeQueryFlag(t *testing.T) {
 	})
 
 	t.Run("QueryFlagNotAssigned", func(t *testing.T) {
-		hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
-			return func() (*responses.CommonResponse, error) {
-				resp := responses.NewCommonResponse()
+		hookdo = func(fn func() (*legacyapi.Response, error)) func() (*legacyapi.Response, error) {
+			return func() (*legacyapi.Response, error) {
+				resp := legacyapi.NewResponse()
 				return resp, nil
 			}
 		}
@@ -2406,9 +2406,9 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 		defer func() {
 			hookdo = originalHookdo
 		}()
-		hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
-			return func() (*responses.CommonResponse, error) {
-				resp := responses.NewCommonResponse()
+		hookdo = func(fn func() (*legacyapi.Response, error)) func() (*legacyapi.Response, error) {
+			return func() (*legacyapi.Response, error) {
+				resp := legacyapi.NewResponse()
 				return resp, nil
 			}
 		}
@@ -2468,9 +2468,9 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 		defer func() {
 			hookdo = originalHookdo
 		}()
-		hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
-			return func() (*responses.CommonResponse, error) {
-				resp := responses.NewCommonResponse()
+		hookdo = func(fn func() (*legacyapi.Response, error)) func() (*legacyapi.Response, error) {
+			return func() (*legacyapi.Response, error) {
+				resp := legacyapi.NewResponse()
 				return resp, nil
 			}
 		}
@@ -2564,9 +2564,9 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 		defer func() {
 			hookdo = originalHookdo
 		}()
-		hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
-			return func() (*responses.CommonResponse, error) {
-				resp := responses.NewCommonResponse()
+		hookdo = func(fn func() (*legacyapi.Response, error)) func() (*legacyapi.Response, error) {
+			return func() (*legacyapi.Response, error) {
+				resp := legacyapi.NewResponse()
 				return resp, nil
 			}
 		}

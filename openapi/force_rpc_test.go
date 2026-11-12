@@ -17,17 +17,16 @@ import (
 	"bufio"
 	"testing"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestForceRpcInvoker_Prepare(t *testing.T) {
 	a := &ForceRpcInvoker{
 		BasicInvoker: &BasicInvoker{
-			request: requests.NewCommonRequest(),
+			request: legacyapi.NewRequest(),
 		},
 		method: "DescribeRegion",
 	}
@@ -55,13 +54,12 @@ func TestForceRpcInvoker_Prepare(t *testing.T) {
 func TestForceRpcInvoker_Call(t *testing.T) {
 	a := &ForceRpcInvoker{
 		BasicInvoker: &BasicInvoker{
-			request: requests.NewCommonRequest(),
+			request: legacyapi.NewRequest(),
 		},
 		method: "DescribeRegion",
 	}
-	client, err := sdk.NewClientWithAccessKey("regionid", "acesskeyid", "accesskeysecret")
-	assert.Nil(t, err)
+	client := legacyapi.NewClient("regionid", "acesskeyid", "accesskeysecret", "")
 	a.client = client
-	_, err = a.Call()
+	_, err := a.Call()
 	assert.NotNil(t, err)
 }

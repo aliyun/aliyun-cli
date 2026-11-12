@@ -21,8 +21,7 @@ import (
 	"strings"
 	"time"
 
-	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 )
 
@@ -33,7 +32,7 @@ const (
 
 var throttlingRetrySleep = time.Sleep
 
-func (a *BasicInvoker) callWithThrottlingRetry(call func() (*responses.CommonResponse, error)) (*responses.CommonResponse, error) {
+func (a *BasicInvoker) callWithThrottlingRetry(call func() (*legacyapi.Response, error)) (*legacyapi.Response, error) {
 	retried := false
 	retryDelayMS := int64(0)
 	maxAttempts := a.throttlingRetryMaxAttempts()
@@ -66,7 +65,7 @@ func (a *BasicInvoker) throttlingRetryDelay(err error) (int64, bool) {
 		return 0, false
 	}
 
-	var serverErr *sdkerrors.ServerError
+	var serverErr *legacyapi.ServerError
 	if !errors.As(err, &serverErr) {
 		return 0, false
 	}

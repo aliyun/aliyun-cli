@@ -466,7 +466,7 @@ export ALIBABA_CLOUD_SIGNATURE_VERSION=
 | `ALIBABA_CLOUD_ROLE_ARN` | RAM 角色 ARN |
 | `ALIBABA_CLOUD_BEARER_TOKEN` | Bearer Token |
 | `ALIBABA_CLOUD_LANGUAGE` | `en` 或 `zh` 输出语言 |
-| `DEBUG=sdk` | 打印 SDK HTTP 诊断信息；分享前请检查敏感内容 |
+| `DEBUG=dara` | 打印 SDK HTTP 诊断信息；分享前请检查敏感内容 |
 
 例如，切换 OpenAPI（包括插件命令）、SLS、STS 和内置 OSS 的请求域名：
 

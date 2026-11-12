@@ -25,18 +25,18 @@ import (
 	"testing"
 
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	pricingruntime "github.com/aliyun/aliyun-openapi-runtime/runtime"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestBuildEstimateCostParameters(t *testing.T) {
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.QueryParams["InstanceType"] = "ecs.g6.large"
 	req.QueryParams["SystemDisk.Category"] = "cloud_essd"
 	req.QueryParams["empty"] = ""
@@ -62,7 +62,7 @@ func TestBuildEstimateCostParametersRegionNotOverridden(t *testing.T) {
 	// RegionId in the body / query wins over the request RegionId fallback —
 	// otherwise users that explicitly switch region via --RegionId would get
 	// quoted against their default profile region by surprise.
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.QueryParams["RegionId"] = "cn-beijing"
 	req.RegionId = "cn-hangzhou"
 
@@ -74,7 +74,7 @@ func TestBuildEstimateCostParametersRegionNotOverridden(t *testing.T) {
 func TestBuildEstimateCostParametersBadBody(t *testing.T) {
 	// --body that isn't a JSON object can't be merged into pricing parameters —
 	// fail with an actionable tip rather than silently dropping the body.
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.SetContent([]byte(`not-json`))
 
 	_, err := buildEstimateCostParameters(pricingruntime.PricingParameterInput{Query: req.QueryParams, Form: req.FormParams, Path: req.PathParams, Body: req.Content, Region: req.RegionId})
@@ -84,7 +84,7 @@ func TestBuildEstimateCostParametersBadBody(t *testing.T) {
 
 func TestResolveEstimateCostApiName(t *testing.T) {
 	// RPC style: api name already on the request
-	rpc := &RpcInvoker{BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()}}
+	rpc := &RpcInvoker{BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()}}
 	rpc.request.ApiName = "RunInstances"
 	name, err := resolveEstimateCostApiName(nil, rpc)
 	assert.Nil(t, err)
@@ -92,7 +92,7 @@ func TestResolveEstimateCostApiName(t *testing.T) {
 
 	// RESTful style with resolved api metadata
 	restful := &RestfulInvoker{
-		BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()},
+		BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()},
 		api:          &canonicalmeta.API{Name: "DescribeClusters"},
 	}
 	name, err = resolveEstimateCostApiName(nil, restful)
@@ -106,7 +106,7 @@ func TestResolveEstimateCostApiName(t *testing.T) {
 	AddFlags(ctx.Flags())
 	library := NewLibrary(ctx.Stdout(), "en")
 	bare := &RestfulInvoker{
-		BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()},
+		BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()},
 		method:       "GET",
 		path:         "/no/such/path",
 	}
@@ -152,7 +152,7 @@ func TestResolveEstimateCostApiNameUsesProductDefaultVersionForPathLookup(t *tes
 		},
 	}
 
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.Product = product.Code
 	req.Version = "2099-01-01"
 	restful := &RestfulInvoker{

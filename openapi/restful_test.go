@@ -21,9 +21,8 @@ import (
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -90,7 +89,7 @@ func TestCreateInvokerPatch(t *testing.T) {
 func TestRestfulInvoker_Prepare(t *testing.T) {
 	a := &RestfulInvoker{
 		BasicInvoker: &BasicInvoker{
-			request: requests.NewCommonRequest(),
+			request: legacyapi.NewRequest(),
 		},
 	}
 
@@ -132,7 +131,7 @@ func TestRestfulInvoker_Prepare(t *testing.T) {
 	// testcase 2 - using mock API since cs product not in canonical
 	a = &RestfulInvoker{
 		BasicInvoker: &BasicInvoker{
-			request: requests.NewCommonRequest(),
+			request: legacyapi.NewRequest(),
 		},
 		path:   "/k8s/[ClusterId]/user_config",
 		method: "GET",
@@ -181,7 +180,7 @@ func TestRestfulInvoker_Prepare(t *testing.T) {
 
 func TestRestfulInvokerPrepareWildcardPath(t *testing.T) {
 	a := &RestfulInvoker{
-		BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()},
+		BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()},
 		path:         "/api/v1/providers/[provider]/products/[product]/resources/*",
 		method:       "GET",
 		api: &canonicalmeta.API{Parameters: []canonicalmeta.Parameter{{
@@ -208,23 +207,21 @@ func TestRestfulInvokerPrepareWildcardPath(t *testing.T) {
 	if len(a.request.PathParams) != 0 {
 		t.Fatalf("wildcard path must not remain in PathParams: %#v", a.request.PathParams)
 	}
-	a.request.TransToAcsRequest()
-	if got, want := a.request.BuildQueries(), "/api/v1/providers/qqq/products/dd/resources/dddd:4"; got != want {
+	if got, want := a.request.Resource(), "/api/v1/providers/qqq/products/dd/resources/dddd:4"; got != want {
 		t.Fatalf("signature resource path = %q, want %q", got, want)
 	}
 }
 
 func TestRestfulInvoker_Call(t *testing.T) {
-	client, err := sdk.NewClientWithAccessKey("regionid", "accesskeyid", "accesskeysecret")
-	assert.Nil(t, err)
+	client := legacyapi.NewClient("regionid", "accesskeyid", "accesskeysecret", "")
 
 	a := &RestfulInvoker{
 		BasicInvoker: &BasicInvoker{
 			client:  client,
-			request: requests.NewCommonRequest(),
+			request: legacyapi.NewRequest(),
 		},
 	}
-	_, err = a.Call()
+	_, err := a.Call()
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "[SDK.CanNotResolveEndpoint] Can not resolve endpoint")
 }

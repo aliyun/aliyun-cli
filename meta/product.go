@@ -15,8 +15,6 @@ package meta
 
 import (
 	"strings"
-
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 )
 
 type ProductSet struct {
@@ -45,11 +43,11 @@ func (a *Product) GetLowerCode() string {
 	return strings.ToLower(a.Code)
 }
 
-func (a *Product) GetEndpoint(region string, client *sdk.Client) (endpoint string, err error) {
-	return a.GetEndpointWithType(region, client, "")
+func (a *Product) GetEndpoint(region string) (endpoint string, err error) {
+	return a.GetEndpointWithType(region, "")
 }
 
-func (a *Product) GetEndpointWithType(region string, client *sdk.Client, endpointType string) (endpoint string, err error) {
+func (a *Product) GetEndpointWithType(region string, endpointType string) (endpoint string, err error) {
 	// VPC endpoints remain independent from public endpoints generated from portal metadata.
 	if strings.ToLower(endpointType) == "vpc" && a.RegionalVpcEndpoints != nil && len(a.RegionalVpcEndpoints) > 0 {
 		ep, ok := a.RegionalVpcEndpoints[region]

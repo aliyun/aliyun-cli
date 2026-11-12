@@ -27,9 +27,9 @@ import (
 	"testing"
 
 	"github.com/alibabacloud-go/tea/tea"
-	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/mcpproxy"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
@@ -897,7 +897,7 @@ func TestNormalizeAgentErrorServerErrorsShareOneEnvelope(t *testing.T) {
 	}{
 		{
 			name:          "old SDK server keeps request id",
-			err:           sdkerrors.NewServerError(429, serverBody, ""),
+			err:           legacyapi.NewServerError(429, serverBody, ""),
 			wantMessage:   "slow down",
 			wantCode:      "Throttling.User",
 			wantStatus:    429,
@@ -1049,7 +1049,7 @@ func TestServerAgentErrorFallsBackToActionHelpWithoutCode(t *testing.T) {
 
 func TestNormalizeAgentErrorServerErrorKeepsTipPath(t *testing.T) {
 	tipped := cli.NewErrorWithTip(
-		sdkerrors.NewServerError(400, `{"Code":"PricingNotSupported","Message":"no pricing"}`, ""),
+		legacyapi.NewServerError(400, `{"Code":"PricingNotSupported","Message":"no pricing"}`, ""),
 		"no pricing mapping is registered for this OpenAPI yet, so it cannot be quoted; this does not mean the call is free — an API confirmed to be free is reported as cost-irrelevant instead",
 	)
 	got := normalizeAgentErrorWithSearch(tipped, []string{"ecs", "describe-instances"}, nil)
@@ -1108,7 +1108,7 @@ func TestSanitizeNetworkTransportErrorStripsSignedURL(t *testing.T) {
 
 	t.Run("url.Error wrapped by retry-exhausted ClientError", func(t *testing.T) {
 		inner := &url.Error{Op: "Post", URL: signedURL, Err: errors.New("connection refused")}
-		clientErr := sdkerrors.NewClientError("SDK.TimeoutError", "timeout", inner)
+		clientErr := legacyapi.NewClientError("SDK.TimeoutError", "timeout", inner)
 		sanitized := sanitizeNetworkTransportError(clientErr)
 		msg := sanitized.Error()
 		assert.Contains(t, msg, "connection refused")

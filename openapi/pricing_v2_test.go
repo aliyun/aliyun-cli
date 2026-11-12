@@ -28,10 +28,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	pricingruntime "github.com/aliyun/aliyun-openapi-runtime/runtime"
 	"github.com/stretchr/testify/require"
@@ -164,8 +164,8 @@ func TestPricingV2EntryPointsNeverInvokeTarget(t *testing.T) {
 			t.Setenv(estimateCostEndpointEnv, server.Listener.Addr().String())
 			originalLegacy, originalOpenapi := hookdo, hookHttpContextCall
 			defer func() { hookdo = originalLegacy; hookHttpContextCall = originalOpenapi }()
-			hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
-				return func() (*responses.CommonResponse, error) { targets.Add(1); return nil, nil }
+			hookdo = func(fn func() (*legacyapi.Response, error)) func() (*legacyapi.Response, error) {
+				return func() (*legacyapi.Response, error) { targets.Add(1); return nil, nil }
 			}
 			hookHttpContextCall = func(fn func() error) func() error { return func() error { targets.Add(1); return nil } }
 			EstimateCostFlag(ctx.Flags()).SetAssigned(true)
