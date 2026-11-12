@@ -155,6 +155,8 @@ aliyun configure telemetry disable
 
 [OpenAPI 问题诊断](https://api.aliyun.com/troubleshoot?source=github_sdk) 可通过 `RequestId` 或报错信息定位 OpenAPI 调用问题。
 
+迁移到 Go SDK V2 后，`DEBUG=sdk` 不再启用 SDK HTTP 诊断。请使用 `DEBUG=dara`。分享诊断输出前请检查其中的敏感信息。
+
 ## 文档
 
 | 主题 | 简体中文 | English |

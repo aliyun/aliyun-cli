@@ -454,7 +454,7 @@ Environment variables can select a profile or fill fields not supplied by flags/
 | `ALIBABA_CLOUD_ROLE_ARN` | RAM role ARN |
 | `ALIBABA_CLOUD_BEARER_TOKEN` | Bearer token |
 | `ALIBABA_CLOUD_LANGUAGE` | `en` or `zh` output language |
-| `DEBUG=sdk` | Print SDK HTTP diagnostics; review output before sharing |
+| `DEBUG=dara` | Print Go SDK V2 HTTP diagnostics. Review the output for sensitive information before sharing. |
 
 To switch OpenAPI (including plugin commands), SLS, STS and built-in OSS requests:
 

@@ -157,6 +157,8 @@ You can also disable it by setting `ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE=1`. See 
 
 [OpenAPI Troubleshoot](https://api.aliyun.com/troubleshoot?source=github_sdk) helps diagnose OpenAPI request failures by `RequestId` or error message.
 
+After the migration to Go SDK V2, `DEBUG=sdk` no longer enables SDK HTTP diagnostics. Set `DEBUG=dara` to enable them. Review the output for sensitive information before sharing it.
+
 ## Documentation
 
 | Topic | English | 简体中文 |
