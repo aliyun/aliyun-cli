@@ -1,12 +1,31 @@
 package engine
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
 	"github.com/aliyun/aliyun-openapi-runtime/loader"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 )
+
+type unavailableImportanceIndex struct{ multiVersionSource }
+
+func (unavailableImportanceIndex) LoadAPIIndex(string, string) (*meta.APIIndex, error) {
+	return nil, errors.New("index unavailable")
+}
+
+func TestProductCommandImportanceUnavailableDoesNotFailCaller(t *testing.T) {
+	for _, create := range []func() (loader.Loader, error){
+		func() (loader.Loader, error) { return nil, errors.New("loader unavailable") },
+		func() (loader.Loader, error) { return loader.New(unavailableImportanceIndex{}), nil },
+	} {
+		engine := NewEngine(create, nil)
+		if got := engine.ProductCommandImportance("demo", nil); got != nil {
+			t.Fatal(got)
+		}
+	}
+}
 
 type importanceVersionSource struct {
 	multiVersionSource

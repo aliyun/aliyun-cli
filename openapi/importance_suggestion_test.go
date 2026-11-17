@@ -3,6 +3,7 @@ package openapi
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"math"
 	"reflect"
 	"testing"
@@ -161,6 +162,79 @@ func TestHelpImportanceIsInternalAndUnknownParameterCanUseIt(t *testing.T) {
 	for _, p := range params {
 		if p.importanceScore == nil {
 			t.Fatal("internal score lost")
+		}
+	}
+}
+
+func TestImportanceKeepsNearestParameterBeforePopularDistantMatch(t *testing.T) {
+	for _, input := range []string{"UploadAa", "upload-aa"} {
+		cause := &InvalidParameterError{Name: input, ParameterNames: []string{"UploadAb", "UploadBbb"}, ImportanceScores: map[string]float64{"UploadAb": 0, "UploadBbb": 1}}
+		got, _ := rankParameterSuggestions(cause.AgentSuggestions(), cause.ImportanceScores, nil)
+		if !reflect.DeepEqual(got, []string{"--UploadAb"}) {
+			t.Fatalf("popularity overrode nearest matching candidate for %s: %v", input, got)
+		}
+	}
+}
+
+func TestImportanceCanonicalErrorPreservesExamplesAndGlobalFlagOrder(t *testing.T) {
+	var api canonicalmeta.API
+	if err := json.Unmarshal([]byte(`{"name":"Demo","parameters":[{"raw_name":"UploadAa","name":"upload_aa","type":"string","location":"query","example":"sample","importance_score":0.1},{"raw_name":"UploadAb","name":"upload_ab","type":"string","location":"query","importance_score":0.9},{"raw_name":"Ignored","type":"string","location":"header","importance_score":1}]}`), &api); err != nil {
+		t.Fatal(err)
+	}
+	flags := cli.NewFlagSet()
+	flags.Add(&cli.Flag{Name: "UploadAc"})
+	cause := NewInvalidParameterErrorFromCanonical("UploadA", &api, "demo", flags)
+	if len(cause.ImportanceScores) != 2 {
+		t.Fatal(cause.ImportanceScores)
+	}
+	want := []string{"UploadAb", "UploadAa (example: sample)", "UploadAc"}
+	if got := cause.GetSuggestions(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("text suggestions = %v, want %v", got, want)
+	}
+}
+
+func TestImportanceHelpParameterAliasesAndFallbackNames(t *testing.T) {
+	low, high := .1, .9
+	doc := &machineHelpAPIDocument{ActiveParameterSet: "kebab", ParameterSets: machineHelpParameterSets{Kebab: []machineHelpParameter{
+		{Name: "upload_aa", Options: []string{"--upload-aa", "--alias-aa"}, importanceScore: &low},
+		{Name: "upload-ab", importanceScore: &high},
+		{Name: "upload-ac"},
+	}}}
+	target := HelpTarget{Product: "demo", Action: "demo", Parameter: "--upload-a"}
+	err := invalidMachineHelpParameter(target, doc, nil, errors.New("unknown parameter flag"))
+	cause, ok := err.(*InvalidParameterError)
+	if !ok {
+		t.Fatalf("unexpected error %T", err)
+	}
+	if !reflect.DeepEqual(cause.ImportanceScores, map[string]float64{"upload-aa": .1, "alias-aa": .1, "upload-ab": .9}) {
+		t.Fatal(cause.ImportanceScores)
+	}
+	envelope := normalizeAgentError(cause, []string{"demo", "demo", "--upload-a", "--help"}).(*cli.AgentError).Envelope()
+	if !reflect.DeepEqual(envelope.DidYouMean, []string{"--upload-ab", "--upload-aa", "--upload-ac"}) {
+		t.Fatal(envelope.DidYouMean)
+	}
+}
+
+func TestImportanceBaselineTextAndAttachmentFallback(t *testing.T) {
+	cause := &InvalidBaselineCommandError{Product: "demo", Command: "describe", Candidates: []string{"describe-aaaaa", "describe-zzzzz"}, ImportanceScores: map[string]float64{"describe-zzzzz": 1}}
+	if got := cause.GetSuggestions(); !reflect.DeepEqual(got, []string{"describe-zzzzz", "describe-aaaaa"}) {
+		t.Fatal(got)
+	}
+	commando := &Commando{}
+	unavailable := &InvalidBaselineCommandError{Product: "definitely-missing-importance-product", Command: "get"}
+	commando.attachAPIImportance(unavailable, []string{unavailable.Product, "get"})
+	if len(unavailable.ImportanceScores) != 0 {
+		t.Fatal(unavailable.ImportanceScores)
+	}
+	repo := canonicalmeta.NewRepository(fstest.MapFS{
+		"canonical/demo/v1/version.json": {Data: []byte(`{"version":"v1","apis":{"GetThing":{}}}`)},
+	})
+	commando.library = &Library{canonicalRepo: repo}
+	for _, version := range []string{"v1", "missing"} {
+		err := &InvalidApiError{Name: "Get", product: &meta.Product{Code: "demo", Version: version}}
+		commando.attachAPIImportance(err, []string{"demo", "Get"})
+		if len(err.ImportanceScores) != 0 {
+			t.Fatal(err.ImportanceScores)
 		}
 	}
 }

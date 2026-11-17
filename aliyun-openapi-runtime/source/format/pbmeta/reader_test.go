@@ -69,6 +69,27 @@ func TestPBImportancePreservesOptionalZero(t *testing.T) {
 	}
 }
 
+func TestPBImportanceGetterAndPresence(t *testing.T) {
+	var absent *Argument
+	if absent.GetImportanceScore() != 0 || (&Argument{}).GetImportanceScore() != 0 {
+		t.Fatal("absent optional score getter changed")
+	}
+	for _, value := range []float64{0, .9} {
+		arg := &Argument{ImportanceScore: &value}
+		data, err := proto.Marshal(arg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var decoded Argument
+		if err := proto.Unmarshal(data, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		if decoded.ImportanceScore == nil || decoded.GetImportanceScore() != value {
+			t.Fatalf("optional score presence/value lost: %v", &decoded)
+		}
+	}
+}
+
 func TestToCanonicalRejectsIncompleteRecursivePBShapes(t *testing.T) {
 	tests := []struct {
 		name string
