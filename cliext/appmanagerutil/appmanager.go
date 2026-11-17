@@ -18,6 +18,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 type Context struct {
@@ -250,7 +251,7 @@ func (c *Context) downloadEmbeddedPython() error {
 	}
 
 	fmt.Fprintf(c.originCtx.Stderr(), "Downloading %s\n", downloadURL)
-	resp, err := http.Get(downloadURL)
+	resp, err := cloudendpoint.HTTPGet(downloadURL)
 	if err != nil {
 		return fmt.Errorf("download failed: %v", err)
 	}
@@ -482,8 +483,11 @@ func (c *Context) EnsureVenvAndPackage() error {
 // Strategy: try OSS first (faster, no PyPI publish needed), if fails, fallback to PyPI.
 func (c *Context) pipInstall(upgrade bool) error {
 	// Step 1: Try OSS
+	var ossErrMsg string
 	whlPath, err := c.downloadWhlFromOSS()
-	if err == nil {
+	if err != nil {
+		ossErrMsg = err.Error()
+	} else {
 		defer os.RemoveAll(filepath.Dir(whlPath))
 		args := []string{"install", whlPath}
 		if upgrade {
@@ -493,9 +497,11 @@ func (c *Context) pipInstall(upgrade bool) error {
 		var stderr bytes.Buffer
 		cmd.Stdout = c.originCtx.Stderr()
 		cmd.Stderr = &stderr
-		if err := cmd.Run(); err == nil {
+		runErr := cmd.Run()
+		if runErr == nil {
 			return nil // OSS succeeded
 		}
+		ossErrMsg = pipErrorDetail(stderr.String(), runErr)
 	}
 
 	// Step 2: OSS failed, fallback to PyPI
@@ -508,7 +514,8 @@ func (c *Context) pipInstall(upgrade bool) error {
 	var stderr bytes.Buffer
 	cmd.Stdout = c.originCtx.Stderr()
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err == nil {
+	runErr := cmd.Run()
+	if runErr == nil {
 		return nil // PyPI succeeded
 	}
 
@@ -516,7 +523,24 @@ func (c *Context) pipInstall(upgrade bool) error {
 		// Upgrade failure is not fatal
 		return nil
 	}
-	return fmt.Errorf("failed to install %s: both OSS and PyPI unavailable", pypiPackageName)
+	// Surface the real underlying pip errors instead of masking them with a generic
+	// "unavailable" message, so users can pinpoint the root cause such as a '--user'
+	// install forbidden inside a virtualenv. (#1409)
+	return fmt.Errorf("failed to install %s: both OSS and PyPI failed\nOSS error: %s\nPyPI error: %s",
+		pypiPackageName, ossErrMsg, pipErrorDetail(stderr.String(), runErr))
+}
+
+// pipErrorDetail builds a readable failure reason for a pip run. It prefers the
+// captured stderr, which carries pip's real ERROR lines, and falls back to the
+// exec error when stderr is empty.
+func pipErrorDetail(stderr string, err error) string {
+	if detail := strings.TrimSpace(stderr); detail != "" {
+		return detail
+	}
+	if err != nil {
+		return err.Error()
+	}
+	return "unknown error"
 }
 
 // downloadWhlFromOSS downloads the latest whl from OSS bucket.
@@ -524,7 +548,7 @@ func (c *Context) pipInstall(upgrade bool) error {
 func (c *Context) downloadWhlFromOSS() (string, error) {
 	// Read version.txt from OSS
 	versionURL := fmt.Sprintf("%s/version.txt", downloadBaseURL)
-	resp, err := http.Get(versionURL)
+	resp, err := cloudendpoint.HTTPGet(versionURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch version.txt: %v", err)
 	}
@@ -546,7 +570,7 @@ func (c *Context) downloadWhlFromOSS() (string, error) {
 	whlURL := fmt.Sprintf("%s/%s", downloadBaseURL, whlName)
 
 	fmt.Fprintf(c.originCtx.Stderr(), "Downloading %s\n", whlURL)
-	whlResp, err := http.Get(whlURL)
+	whlResp, err := cloudendpoint.HTTPGet(whlURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to download whl: %v", err)
 	}
@@ -788,7 +812,7 @@ func (c *Context) PrepareEnv() ([]string, error) {
 }
 
 func (c *Context) ExecuteAppManagerCli(args []string) error {
-	cmd := execCommandFunc(c.execFilePath, args...)
+	cmd := execCommandFunc(c.execFilePath, cloudendpoint.WithSuffixArgs(args)...)
 	envs, _ := c.PrepareEnv()
 	cmd.Env = envs
 	cmd.Stdout = c.originCtx.Stdout()

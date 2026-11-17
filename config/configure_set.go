@@ -19,6 +19,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 )
 
 func NewConfigureSetCommand() *cli.Command {
@@ -63,15 +64,18 @@ func doConfigureSet(ctx *cli.Context) error {
 		}
 	}
 
+	authModeSource := telemetry.AuthModeSourceExisting
 	mode, ok := ModeFlag(flags).GetValue()
 	if ok {
 		profile.Mode = NormalizeMode(mode)
-	} else {
-		if profile.Mode == "" {
-			profile.Mode = AK
-		}
+		authModeSource = telemetry.AuthModeSourceExplicit
+	} else if profile.Mode == "" {
+		profile.Mode = AK
+		authModeSource = telemetry.AuthModeSourceDefault
 	}
+	telemetry.SetAuthenticationMode(string(profile.Mode), authModeSource)
 
+	oldTarget := cloudSSOTarget(&profile)
 	switch profile.Mode {
 	case AK:
 		profile.AccessKeyId = AccessKeyIdFlag(flags).GetStringOrDefault(profile.AccessKeyId)
@@ -107,11 +111,15 @@ func doConfigureSet(ctx *cli.Context) error {
 		profile.ProcessCommand = ProcessCommandFlag(flags).GetStringOrDefault(profile.ProcessCommand)
 	case OIDC:
 		profile.OIDCProviderARN = OIDCProviderARNFlag(flags).GetStringOrDefault(profile.OIDCProviderARN)
-		profile.OIDCTokenFile = OIDCTokenFileFlag(flags).GetStringOrDefault(profile.OIDCTokenFile)
+		profile.OIDCToken, profile.OIDCTokenFile = applyExclusiveOIDCTokenSource(
+			OIDCTokenFlag(flags), OIDCTokenFileFlag(flags), profile.OIDCToken, profile.OIDCTokenFile)
 		profile.RamRoleArn = RamRoleArnFlag(flags).GetStringOrDefault(profile.RamRoleArn)
 		profile.RoleSessionName = RoleSessionNameFlag(flags).GetStringOrDefault(profile.RoleSessionName)
 		profile.ExpiredSeconds = ExpiredSecondsFlag(flags).GetIntegerOrDefault(profile.ExpiredSeconds)
 	case CloudSSO:
+		if f := SSOSessionFlag(flags); f != nil {
+			profile.SSOSession = f.GetStringOrDefault(profile.SSOSession)
+		}
 		profile.CloudSSOAccessConfig = CloudSSOAccessConfigFlag(flags).GetStringOrDefault(profile.CloudSSOAccessConfig)
 		profile.CloudSSOAccountId = CloudSSOAccountIdFlag(flags).GetStringOrDefault(profile.CloudSSOAccountId)
 		profile.CloudSSOSignInUrl = CloudSSOSignInUrlFlag(flags).GetStringOrDefault(profile.CloudSSOSignInUrl)
@@ -122,6 +130,17 @@ func doConfigureSet(ctx *cli.Context) error {
 		profile.BearerTokenHeaderKey = BearerTokenHeaderKeyFlag(flags).GetStringOrDefault(profile.BearerTokenHeaderKey)
 	}
 
+	if profile.Mode == CloudSSO {
+		if oldTarget != cloudSSOTarget(&profile) {
+			clearCloudSSOSTS(&profile)
+		}
+		if profile.SSOSession != "" {
+			if _, err := loadSSOSession(ctx, profile.SSOSession); err != nil {
+				return err
+			}
+			clearCloudSSOLogin(&profile)
+		}
+	}
 	profile.RegionId = RegionFlag(flags).GetStringOrDefault(profile.RegionId)
 	profile.Language = LanguageFlag(flags).GetStringOrDefault(profile.Language)
 	profile.OutputFormat = "json" // "output", profile.OutputFormat)
@@ -134,6 +153,15 @@ func doConfigureSet(ctx *cli.Context) error {
 	profile.EndpointType = EndpointTypeFlag(flags).GetStringOrDefault(profile.EndpointType)
 	profile.Endpoint = EndpointFlag(flags).GetStringOrDefault(profile.Endpoint)
 	profile.ExternalAccountType = ExternalAccountTypeFlag(flags).GetStringOrDefault(profile.ExternalAccountType)
+	// Reuse the same --cli-sign-version flag as invoke; persist into profile.signature_version.
+	if f := CliSignVersionFlag(flags); f != nil && f.IsAssigned() {
+		profile.SignatureVersion = f.GetStringOrDefault(profile.SignatureVersion)
+	}
+	if normalized, err := NormalizeSignatureVersion(profile.SignatureVersion); err != nil {
+		return fmt.Errorf("fail to set configuration: %w", err)
+	} else {
+		profile.SignatureVersion = normalized
+	}
 
 	if autoPluginInstallFlag := AutoPluginInstallFlag(flags); autoPluginInstallFlag != nil && autoPluginInstallFlag.IsAssigned() {
 		if val, ok := autoPluginInstallFlag.GetValue(); ok {

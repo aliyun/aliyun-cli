@@ -33,6 +33,7 @@ import (
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newCtx() *cli.Context {
@@ -201,7 +202,11 @@ func TestValidateWithOIDC(t *testing.T) {
 	assert.EqualError(t, err, "oidc_provider_arn is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
 	actual.OIDCProviderARN = "oidc_provider_arn"
 	err = actual.Validate()
-	assert.EqualError(t, err, "oidc_token_file is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
+	assert.EqualError(t, err, "oidc_token or oidc_token_file is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
+	actual.OIDCToken = "header.payload.sig"
+	err = actual.Validate()
+	assert.EqualError(t, err, "ram_role_arn is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
+	actual.OIDCToken = ""
 	actual.OIDCTokenFile = "/path/to/oidc/token/file"
 	err = actual.Validate()
 	assert.EqualError(t, err, "ram_role_arn is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
@@ -377,6 +382,85 @@ func TestOverwriteWithFlagsWithRegionIDEnv(t *testing.T) {
 	actual.OverwriteWithFlags(ctx)
 	exp.RegionId = "alibaba"
 	assert.Equal(t, exp, actual)
+}
+
+func TestOverwriteWithFlagsOIDCTokenBeatsFile(t *testing.T) {
+	resetEnv()
+	t.Setenv("ALIBABA_CLOUD_OIDC_TOKEN", "env-token")
+	t.Setenv("ALIBABA_CLOUD_OIDC_TOKEN_FILE", "/env/token")
+
+	buf := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(buf, stderr)
+	AddFlags(ctx.Flags())
+
+	withFile := newProfile()
+	withFile.OIDCTokenFile = "/explicit/token"
+	withFile.OverwriteWithFlags(ctx)
+	assert.Equal(t, "env-token", withFile.OIDCToken)
+	assert.Equal(t, "/explicit/token", withFile.OIDCTokenFile)
+
+	explicit := newProfile()
+	explicit.OIDCToken = "explicit-token"
+	explicit.OverwriteWithFlags(ctx)
+	assert.Equal(t, "explicit-token", explicit.OIDCToken)
+
+	t.Setenv("ALIBABA_CLOUD_OIDC_TOKEN", "")
+	fileOnly := newProfile()
+	fileOnly.OverwriteWithFlags(ctx)
+	assert.Empty(t, fileOnly.OIDCToken)
+	assert.Equal(t, "/env/token", fileOnly.OIDCTokenFile)
+}
+
+func TestOverwriteWithFlagsExplicitOIDCSourceClearsTheOther(t *testing.T) {
+	resetEnv()
+	t.Setenv("ALIBABA_CLOUD_OIDC_TOKEN", "")
+	t.Setenv("ALIBABA_CLOUD_OIDC_TOKEN_FILE", "")
+
+	ctx := newCtx()
+	saved := newProfile()
+	saved.OIDCToken = "expired-saved-token"
+	saved.OIDCTokenFile = "/saved/token"
+
+	fileFlag := OIDCTokenFileFlag(ctx.Flags())
+	fileFlag.SetAssigned(true)
+	fileFlag.SetValue("/path/to/fresh-token")
+	saved.OverwriteWithFlags(ctx)
+	assert.Empty(t, saved.OIDCToken)
+	assert.Equal(t, "/path/to/fresh-token", saved.OIDCTokenFile)
+
+	ctx = newCtx()
+	saved = newProfile()
+	saved.OIDCToken = "expired-saved-token"
+	saved.OIDCTokenFile = "/saved/token"
+	tokenFlag := OIDCTokenFlag(ctx.Flags())
+	tokenFlag.SetAssigned(true)
+	tokenFlag.SetValue("fresh-token-value")
+	saved.OverwriteWithFlags(ctx)
+	assert.Equal(t, "fresh-token-value", saved.OIDCToken)
+	assert.Empty(t, saved.OIDCTokenFile)
+
+	keptToken, keptFile := applyExclusiveOIDCTokenSource(nil, nil, "saved-token", "/saved/file")
+	assert.Equal(t, "saved-token", keptToken)
+	assert.Equal(t, "/saved/file", keptFile)
+
+	ctx = newCtx()
+	tokenFlag = OIDCTokenFlag(ctx.Flags())
+	fileFlag = OIDCTokenFileFlag(ctx.Flags())
+	tokenFlag.SetAssigned(true)
+	tokenFlag.SetValue("both-token")
+	fileFlag.SetAssigned(true)
+	fileFlag.SetValue("/both/file")
+	bothToken, bothFile := applyExclusiveOIDCTokenSource(tokenFlag, fileFlag, "saved-token", "/saved/file")
+	assert.Equal(t, "both-token", bothToken)
+	assert.Equal(t, "/both/file", bothFile)
+
+	clearedFileToken, clearedFile := applyExclusiveOIDCTokenSource(tokenFlag, nil, "saved-token", "/saved/file")
+	assert.Equal(t, "both-token", clearedFileToken)
+	assert.Empty(t, clearedFile)
+	clearedToken, keptExplicitFile := applyExclusiveOIDCTokenSource(nil, fileFlag, "saved-token", "/saved/file")
+	assert.Empty(t, clearedToken)
+	assert.Equal(t, "/both/file", keptExplicitFile)
 }
 
 func TestOverwriteWithFlagsWithStsTokenEnv(t *testing.T) {
@@ -697,6 +781,53 @@ func TestGetCredentialWithOIDCStsEndpoint(t *testing.T) {
 	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", credentialSTSEndpoint(t, credential))
 }
 
+func TestGetCredentialWithOIDCToken(t *testing.T) {
+	actual := newProfile()
+	actual.Mode = OIDC
+	actual.OIDCProviderARN = "acs:ram::123456789:oidc-provider/test"
+	actual.OIDCToken = "header.payload.sig"
+	actual.RamRoleArn = "acs:ram::123456789:role/test"
+	actual.RoleSessionName = "ack-session"
+
+	credential, err := actual.GetCredential(newCtx(), nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, credential)
+	assert.Equal(t, "oidc_role_arn", *credential.GetType())
+}
+
+func TestCommandOIDCTokenWithoutTokenFile(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
+	t.Setenv("ALIBABA_CLOUD_OIDC_TOKEN", "")
+	t.Setenv("ALIBABA_CLOUD_OIDC_TOKEN_FILE", "")
+	t.Setenv("ALIBABACLOUD_OIDC_TOKEN_FILE", "")
+
+	ctx := newCtx()
+	parser := cli.NewParser([]string{
+		"--mode", "OIDC",
+		"--region", "cn-hangzhou",
+		"--oidc-provider-arn", "acs:ram::123456789:oidc-provider/test",
+		"--oidc-token-value", "header.payload.sig",
+		"--ram-role-arn", "acs:ram::123456789:role/test",
+		"--role-session-name", "ack-session",
+	}, ctx)
+	remain, err := parser.ReadAll()
+	assert.NoError(t, err)
+	assert.Empty(t, remain)
+	_, fileAssigned := ctx.Flags().GetValue(OIDCTokenFileFlagName)
+	assert.False(t, fileAssigned)
+
+	ctx.SetInConfigureMode(true)
+	profile, err := LoadProfileWithContext(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "header.payload.sig", profile.OIDCToken)
+	assert.Empty(t, profile.OIDCTokenFile)
+
+	credential, err := profile.GetCredential(ctx, nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, credential)
+	assert.Equal(t, "oidc_role_arn", *credential.GetType())
+}
+
 func TestGetCredentialWithRamRoleArnStsEndpoint(t *testing.T) {
 	actual := newProfile()
 	actual.Mode = RamRoleArn
@@ -790,6 +921,10 @@ func TestAutoModeRecognition(t *testing.T) {
 	assert.Equal(t, External, p.Mode)
 
 	p = &Profile{OIDCProviderARN: "oidc_provider_arn", OIDCTokenFile: "/path/to/tokenfile", RamRoleArn: "ram/role/arn"}
+	AutoModeRecognition(p)
+	assert.Equal(t, OIDC, p.Mode)
+
+	p = &Profile{OIDCProviderARN: "oidc_provider_arn", OIDCToken: "header.payload.sig", RamRoleArn: "ram/role/arn"}
 	AutoModeRecognition(p)
 	assert.Equal(t, OIDC, p.Mode)
 
@@ -922,7 +1057,7 @@ func TestGetProfileWithCloudSSO(t *testing.T) {
 	p.CloudSSOSignInUrl = "333"
 	cf.PutProfile(*p)
 
-	saveConfigurationFunc = func(config *Configuration) (err error) {
+	saveConfigurationFunc = func(ctx *cli.Context, config *Configuration) (err error) {
 		// 模拟保存配置成功
 		return nil
 	}
@@ -949,7 +1084,7 @@ func TestGetCredentialWithCloudSSOMockSuccess(t *testing.T) {
 		}, nil
 	}
 
-	saveConfigurationFunc = func(config *Configuration) (err error) {
+	saveConfigurationFunc = func(ctx *cli.Context, config *Configuration) (err error) {
 		// 模拟保存配置成功
 		return nil
 	}
@@ -1463,7 +1598,7 @@ func TestGetCredentialWithOAuthStsExpired(t *testing.T) {
 	}()
 
 	// Mock保存配置函数
-	saveConfigurationFunc = func(config *Configuration) error {
+	saveConfigurationFunc = func(ctx *cli.Context, config *Configuration) error {
 		return nil
 	}
 
@@ -1579,7 +1714,7 @@ func TestGetCredentialWithOAuthRefreshError(t *testing.T) {
 	}()
 
 	// Mock保存配置函数
-	saveConfigurationFunc = func(config *Configuration) error {
+	saveConfigurationFunc = func(ctx *cli.Context, config *Configuration) error {
 		return nil
 	}
 
@@ -1672,7 +1807,7 @@ func TestGetCredentialWithOAuthMissingCredentials(t *testing.T) {
 	}()
 
 	// Mock保存配置函数
-	saveConfigurationFunc = func(config *Configuration) error {
+	saveConfigurationFunc = func(ctx *cli.Context, config *Configuration) error {
 		return nil
 	}
 
@@ -1811,6 +1946,36 @@ func TestGetRuntimeEnv_OptionalFields(t *testing.T) {
 	assert.Equal(t, "30", envs["ALIBABA_CLOUD_READ_TIMEOUT"])
 	assert.Equal(t, "10", envs["ALIBABA_CLOUD_CONNECT_TIMEOUT"])
 	assert.Equal(t, "3", envs["ALIBABA_CLOUD_RETRY_COUNT"])
+}
+
+func TestGetRuntimeEnv_SignatureVersion(t *testing.T) {
+	require.NoError(t, os.Unsetenv(EnvSignatureVersion))
+	p := newProfile()
+	p.Mode = AK
+	p.AccessKeyId = "ak"
+	p.AccessKeySecret = "sk"
+	p.RegionId = "cn-hangzhou"
+	p.SignatureVersion = SignatureVersionV4
+
+	envs, err := p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	assert.Equal(t, SignatureVersionV4, envs[EnvSignatureVersion])
+
+	// Always forward the already-resolved profile field (including empty),
+	// so an explicit clear overrides a parent-process env in plugins.
+	p.SignatureVersion = ""
+	envs, err = p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	val, has := envs[EnvSignatureVersion]
+	assert.True(t, has)
+	assert.Empty(t, val)
+
+	// GetRuntimeEnv does not re-apply env; profile > env was resolved earlier.
+	p.SignatureVersion = SignatureVersionV4
+	t.Setenv(EnvSignatureVersion, "")
+	envs, err = p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	assert.Equal(t, SignatureVersionV4, envs[EnvSignatureVersion])
 }
 
 func TestGetRuntimeEnv_OptionalFieldsOmitted(t *testing.T) {

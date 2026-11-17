@@ -4,6 +4,8 @@
 
 阿里云 CLI 默认将具名 Profile 保存在 `~/.aliyun/config.json`。
 
+遥测设置与采集范围见[遥测数据采集](./telemetry.md)。
+
 ## 创建和管理 Profile
 
 本地交互使用推荐从 OAuth 开始：
@@ -46,7 +48,7 @@ export ALIBABA_CLOUD_PROFILE=production
 | 模式 | 适用场景 |
 | --- | --- |
 | `OAuth` | 本地用户交互登录，避免保存长期 AccessKey |
-| `CloudSSO` | 阿里云 CloudSSO 人员身份访问 |
+| `CloudSSO` | 阿里云 CloudSSO 人员身份访问，支持多 profile 共享 session |
 | `AK` | 静态 AccessKey ID 和 Secret；仅在无法使用更安全方式时采用 |
 | `StsToken` | 已签发的临时 AccessKey 和 SecurityToken；不会自动续期 |
 | `RamRoleArn` | 使用 AccessKey 身份扮演 RAM 角色 |
@@ -203,6 +205,18 @@ Saving profile[oidc-profile] ...Done.
 
 ### OAuth
 
+远程机器没有浏览器时，使用手动回调模式：
+
+```sh
+aliyun configure --mode OAuth --profile oauth-profile --no-browser
+```
+
+在另一台设备的浏览器中打开授权链接，登录后复制地址栏中的完整回调 URL
+（包含 `code` 和 `state`），粘贴回当前终端。回调页面提示连接失败不影响此操作。
+CLI 会校验回调地址和本次登录的 `state`，再通过 PKCE 兑换凭证。
+此模式不监听本地端口、不需要端口转发；按 Ctrl+C 可取消。`--no-browser` 仅适用于 OAuth。
+
+
 OAuth 会打开基于浏览器的登录流程，并将获得的临时凭证保存到 Profile：
 
 ```text
@@ -217,16 +231,88 @@ Saving profile[oauth-profile] ...Done.
 
 ### CloudSSO
 
-CloudSSO 会通过配置的 CloudSSO 门户启动交互式登录流程：
+CloudSSO 支持多个 profile 共享同一个 session。Session 保存登录 URL 和 AccessToken；每个 profile 分别指定目标阿里云账号和访问配置，并保存各自的 STS 凭证。
 
-```text
-$ aliyun configure --mode CloudSSO --profile cloud-sso
-Configuring profile 'cloud-sso' in 'CloudSSO' authenticate mode...
-CloudSSO Sign In Url []: https://signin-cn-shanghai.alibabacloudsso.com/start/login
-按照命令提示完成登录，并选择账号和访问配置。
-Default Region Id []: cn-hangzhou
-Saving profile[cloud-sso] ...Done.
+#### 共享 session
+
+首次使用时，可以一步完成配置和登录：
+
+```sh
+aliyun configure sso login --sso-session company \
+  --cloud-sso-sign-in-url 'https://signin-example.alibabacloudsso.com/device/login'
 ```
+
+请将示例 URL 替换为实际的 CloudSSO 登录入口。命令先保存配置，再打开浏览器完成授权。不传 URL 时，已有 session 直接使用保存的 URL；新 session 会提示输入。授权失败后配置仍会保留，可重新执行登录命令；URL 未变化时，登录失败也不会清除原有 token。
+
+如果只想保存配置、不立即登录，使用：
+
+```sh
+aliyun configure sso set --sso-session company \
+  --cloud-sso-sign-in-url 'https://signin-example.alibabacloudsso.com/device/login'
+```
+
+登录成功后，交互式配置一个 profile，按提示选择账号和访问配置：
+
+```sh
+aliyun configure --mode CloudSSO --profile prod-readonly --sso-session company
+```
+
+也可以直接指定账号和访问配置，创建另一个引用相同 session 的 profile：
+
+```sh
+aliyun configure set --mode CloudSSO --profile test-admin \
+  --sso-session company \
+  --cloud-sso-account-id '<AccountId>' \
+  --cloud-sso-access-config '<AccessConfigurationId>' \
+  --region cn-hangzhou
+```
+
+请将账号 ID 和访问配置 ID 替换为已授权给当前 CloudSSO 用户的实际值。不同 profile 可以使用不同账号和权限，同时共享一次登录：
+
+```sh
+aliyun sts GetCallerIdentity --profile prod-readonly
+aliyun sts GetCallerIdentity --profile test-admin
+```
+
+共享 session 有效时，CLI 按需获取或刷新各 profile 的 STS 凭证，不重复打开浏览器。Session 过期后，重新登录一次即可供所有引用它的 profile 使用：
+
+```sh
+aliyun configure sso login --sso-session company
+# 也可以通过 profile 找到它引用的 session 并登录。
+aliyun configure sso login --profile prod-readonly
+```
+
+重新登录不会清除尚未过期的 STS。不同用户身份应使用不同 session 名称。修改 profile 的 session、账号或访问配置时，会清空该 profile 的旧 STS 凭证。
+
+#### 删除 session
+
+删除不再使用的 session：
+
+```sh
+aliyun configure sso delete --sso-session company
+```
+
+如果仍有 profile 引用该 session，删除会被拒绝，并列出相关 profile。请先修改这些 profile 的关联，或显式删除不再使用的 profile。
+
+#### 原有的 profile 登录流程
+
+没有配置 `sso_session` 的已有 CloudSSO profile，仍使用原流程：
+
+```sh
+aliyun configure --mode CloudSSO --profile cloud-sso
+aliyun sts GetCallerIdentity --profile cloud-sso
+```
+
+按提示输入登录 URL，在浏览器完成授权，再选择账号和访问配置。登录 URL、AccessToken 和 STS 都保存在该 profile 中。登录过期后，重新执行同一条 `configure` 命令。
+
+已有 profile 不会自动迁移。如需关联共享 session，先登录该 session，再执行：
+
+```sh
+aliyun configure --mode CloudSSO --profile cloud-sso --sso-session company
+```
+
+原账号和访问配置仍可用时，会继续使用已有选择。保存成功后，profile 改为引用共享 session，不再单独保存 CloudSSO 登录 URL 和 AccessToken。
+
 
 ## 外部凭证源
 
@@ -317,6 +403,46 @@ Saving profile[uri] ...Done.
 
 在受限环境中设置 `ALIBABA_CLOUD_DISABLE_EXTERNAL_PROCESS=true`，可以同时禁止外部进程执行和 CredentialsURI 请求。
 
+## 请求配置
+
+### 签名版本（短横线命令）
+
+仅支持短横线命令（例如 `aliyun ecs describe-instances`）。`--cli-sign-version` / Profile `signature_version` / `ALIBABA_CLOUD_SIGNATURE_VERSION` 当前仅支持：
+
+| 值 | 行为 |
+| --- | --- |
+| `v4` | 使用签名 V4 |
+| 空值 | 清空已配置的签名版本，恢复默认签名 |
+
+其他值会报错不支持。优先级：命令行 flag > Profile > 环境变量 > 默认行为。传入 `--cli-sign-version ''` 会清空并恢复默认，且不会再被环境变量中的 `v4` 补回。
+
+单次命令开启：
+
+```sh
+aliyun ecs describe-instances --cli-sign-version v4
+```
+
+在 Profile 中设为默认（复用同一 flag）：
+
+```sh
+aliyun configure set --profile default --cli-sign-version v4
+```
+
+清空 Profile 中的签名版本，恢复默认：
+
+```sh
+aliyun configure set --profile default --cli-sign-version ''
+```
+
+或仅对当前进程设置 / 清空环境变量：
+
+```sh
+export ALIBABA_CLOUD_SIGNATURE_VERSION=v4
+export ALIBABA_CLOUD_SIGNATURE_VERSION=
+```
+
+未设置时，签名行为与现在一致。
+
 ## 环境变量
 
 环境变量可以选择 Profile，或补全命令参数/Profile 中未提供的字段。常用变量包括：
@@ -332,13 +458,24 @@ Saving profile[uri] ...Done.
 | `ALIBABA_CLOUD_REGION_ID` | 默认地域 |
 | `ALIBABA_CLOUD_STS_ENDPOINT` | 覆盖 STS Endpoint |
 | `ALIBABA_CLOUD_ENDPOINT` | 覆盖产品 Endpoint |
+| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI 签名版本：当前仅支持 `v4`；仅在未设置 flag 且 Profile 为空时生效；设为空可清空并恢复默认 |
+| `ALIBABA_CLOUD_ENDPOINT_SUFFIX` | 设置 `aliyuncs.alibaba`，将请求地址的 `.aliyuncs.com` 后缀切换为 `.aliyuncs.alibaba` |
 | `ALIBABA_CLOUD_CREDENTIALS_URI` | CredentialsURI 地址 |
 | `ALIBABA_CLOUD_OIDC_PROVIDER_ARN` | OIDC Provider ARN |
 | `ALIBABA_CLOUD_OIDC_TOKEN_FILE` | OIDC Token 文件 |
 | `ALIBABA_CLOUD_ROLE_ARN` | RAM 角色 ARN |
 | `ALIBABA_CLOUD_BEARER_TOKEN` | Bearer Token |
 | `ALIBABA_CLOUD_LANGUAGE` | `en` 或 `zh` 输出语言 |
-| `DEBUG=sdk` | 打印 SDK HTTP 诊断信息；分享前请检查敏感内容 |
+| `DEBUG=dara` | 打印 SDK HTTP 诊断信息；分享前请检查敏感内容 |
+
+例如，切换 OpenAPI（包括插件命令）、SLS、STS 和内置 OSS 的请求域名：
+
+```bash
+export ALIBABA_CLOUD_ENDPOINT_SUFFIX=aliyuncs.alibaba
+aliyun ecs DescribeRegions --region cn-hangzhou
+```
+
+此设置覆盖 `aliyun` 主程序处理的请求地址，包括扩展工具（如 ossutil）的下载和版本检查、插件包下载、自升级、登录和凭证请求，以及主程序转交给外部工具的 endpoint 参数和环境变量。仅替换主机名末尾的 `.aliyuncs.com`，保留协议、端口、路径和查询参数；其他域名和 IP 地址保持原样。dry-run 显示切换后的地址。未设置、空值或 `aliyuncs.com` 使用原域名；值会去除首尾空白，其他值会报错。使用 `unset ALIBABA_CLOUD_ENDPOINT_SUFFIX` 恢复默认行为。外部工具自行生成的请求地址仍需该工具自身支持此变量。Spark 提交工具使用临时配置传递切换后的 endpoint，避免把环境变量的效果写入持久配置。
 
 命令行参数对当前调用具有更高优先级。不要在共享机器上全局导出敏感凭证。
 

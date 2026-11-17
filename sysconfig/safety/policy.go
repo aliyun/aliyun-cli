@@ -102,7 +102,11 @@ func (p *Policy) Check(cmd CommandInfo) CheckResult {
 
 	cmdPattern := buildCommandPattern(cmd)
 
-	// Rules are evaluated in order; first match wins
+	// Preserve first-match ordering: users can place a specific allow before a
+	// broader deny. Sorting by action or API specificity would break that policy.
+	// Match only the entered command name, without PascalCase/kebab-case alias
+	// expansion. Configuration-time notices remind users to cover both forms;
+	// they do not change runtime matching or implicitly add restrictions.
 	for i := range p.Rules {
 		rule := &p.Rules[i]
 		if matchPattern(rule.Pattern, cmdPattern) {

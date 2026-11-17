@@ -20,9 +20,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	jmespath "github.com/jmespath/go-jmespath"
 )
 
@@ -211,7 +211,7 @@ func (a *Pager) FeedResponse(body string) error {
 	return nil
 }
 
-func (a *Pager) MoveNextPage(request *requests.CommonRequest) {
+func (a *Pager) MoveNextPage(request *legacyapi.Request) {
 	if a.nextTokenMode {
 		request.QueryParams[a.NextTokenFlag] = a.nextToken
 	} else {

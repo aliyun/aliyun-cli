@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	"io"
 	"net/http"
 	"net/url"
@@ -226,7 +227,7 @@ func startDeviceAuthorization(signInUrl *url.URL) (*DeviceAuthorizationResponse,
 	}
 
 	// 创建HTTP请求
-	req, err := http.NewRequest("POST", requestURL, bytes.NewBuffer(jsonData))
+	req, err := cloudendpoint.NewRequest("POST", requestURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("%s: %v", i18n.T("Error creating HTTP request", "创建HTTP请求错误").GetMessage(), err)
 	}
@@ -297,7 +298,7 @@ func createAccessToken(parsedSignInUrl string, deviceCode string) (*AccessTokenR
 	}
 
 	// 创建HTTP请求
-	req, err := http.NewRequest("POST", requestURL, bytes.NewBuffer(jsonData))
+	req, err := cloudendpoint.NewRequest("POST", requestURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("%s: %v", i18n.T("Error creating HTTP request", "创建HTTP请求错误").GetMessage(), err)
 	}

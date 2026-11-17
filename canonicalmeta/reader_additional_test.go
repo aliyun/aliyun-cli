@@ -1,12 +1,37 @@
 package canonicalmeta
 
 import (
+	"io/fs"
 	"testing"
 	"testing/fstest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type inaccessibleMetadataFS struct{}
+
+func (inaccessibleMetadataFS) Open(string) (fs.File, error) { return nil, fs.ErrPermission }
+
+func TestReaderPreservesFilesystemErrors(t *testing.T) {
+	repo := NewRepository(inaccessibleMetadataFS{})
+	_, err := repo.GetProducts()
+	require.ErrorIs(t, err, fs.ErrPermission)
+	_, err = repo.GetVersionIndex("demo", "v1")
+	require.ErrorIs(t, err, fs.ErrPermission)
+
+	reader := NewReader(fstest.MapFS{"body.json": {Data: []byte(`{"v1_body_parameters":[{"name":"Bad","position":"cookie"}]}`)}})
+	_, err = reader.ReadAPIFromPath("body.json")
+	require.ErrorContains(t, err, "unknown v1 parameter position")
+
+	repo = NewRepository(fstest.MapFS{"canonical/demo/v1/Find.json": {Data: []byte(`{"name":"Find","method":"GET","pathPattern":"/things/[Id]"}`)}})
+	api, err := repo.GetAPIByPath("demo", "v1", "GET", "/things/item", []string{"Missing", "Find"})
+	require.NoError(t, err)
+	require.Equal(t, "Find", api.Name)
+	require.False(t, api.MatchLegacyPath("POST", "/things/item"))
+	_, err = repo.GetAPIByPath("demo", "v1", "GET", "/other", []string{"Missing", "Find"})
+	require.ErrorContains(t, err, "no canonical API found")
+}
 
 func TestReaderFallbackLayoutsAndDirectAPIPath(t *testing.T) {
 	fsys := fstest.MapFS{
@@ -94,4 +119,6 @@ func TestAPIAndVersionEntrySmallContracts(t *testing.T) {
 	assert.Empty(t, entry.Title("en"))
 	assert.Equal(t, "标题", entry.TitleOrDescription("zh"))
 	assert.Equal(t, "description", entry.TitleOrDescription("en"))
+	entry.TitleZh = ""
+	assert.Equal(t, "描述", entry.TitleOrDescription("zh"))
 }

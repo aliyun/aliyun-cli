@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	"io"
 	"net/http"
 	"strconv"
@@ -53,7 +54,7 @@ func (p *AccessConfigurationsParameter) ListAccessConfigurationsForAccount(req A
 	}
 
 	// 创建HTTP请求
-	httpReq, err := http.NewRequest("GET", query, nil)
+	httpReq, err := cloudendpoint.NewRequest("GET", query, nil)
 	if err != nil {
 		return nil, err
 	}

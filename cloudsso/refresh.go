@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	"io"
 	"net/http"
 	"net/url"
@@ -115,7 +116,7 @@ func CreateCloudCredential(prefix string, accessToken string, options CloudCrede
 	}
 
 	// Create HTTP request
-	req, err := http.NewRequest("POST", urlFetch, bytes.NewBuffer(data))
+	req, err := cloudendpoint.NewRequest("POST", urlFetch, bytes.NewBuffer(data))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

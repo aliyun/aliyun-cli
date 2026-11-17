@@ -17,6 +17,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 type Context struct {
@@ -48,7 +49,7 @@ var (
 	downloadAndInstallFunc       = DownloadAndInstall
 	loadAgentBayProfileFunc      = loadAgentBayProfile
 	execCommandFunc              = exec.Command
-	httpGetFunc                  = http.Get
+	httpGetFunc                  = cloudendpoint.HTTPGet
 	httpDoFunc                   = func(req *http.Request) (*http.Response, error) {
 		client := &http.Client{
 			Timeout: 30 * time.Second,
@@ -110,7 +111,7 @@ func (c *Context) Run(args []string) error {
 	}
 
 	childArgs, agentBayOptions := extractAgentBayCLIOptions(args)
-	cmd := execCommandFunc(c.execFilePath, childArgs...)
+	cmd := execCommandFunc(c.execFilePath, cloudendpoint.WithSuffixArgs(childArgs)...)
 	env, err := c.BuildExecEnv(agentBayOptions)
 	if err != nil {
 		return err
@@ -131,6 +132,9 @@ type agentBayCLIOptions struct {
 }
 
 func (c *Context) BuildExecEnv(options agentBayCLIOptions) ([]string, error) {
+	if err := cloudendpoint.Validate(); err != nil {
+		return nil, err
+	}
 	profile, err := loadAgentBayProfileFunc(c.originCtx)
 	if err != nil {
 		return nil, err
@@ -140,7 +144,7 @@ func (c *Context) BuildExecEnv(options agentBayCLIOptions) ([]string, error) {
 		return nil, err
 	}
 	if endpoint := c.agentBayEndpoint(profile, options); endpoint != "" {
-		envs["AGENTBAY_CLI_ENDPOINT"] = endpoint
+		envs["AGENTBAY_CLI_ENDPOINT"] = cloudendpoint.WithSuffix(endpoint)
 	}
 	return mergeAgentBayEnv(os.Environ(), envs), nil
 }
@@ -428,7 +432,7 @@ func DownloadAndInstall(url string, destFile string, exeFilePath string) error {
 }
 
 func downloadFile(url string, destFile string) error {
-	resp, err := httpGetFunc(url)
+	resp, err := httpGetFunc(cloudendpoint.WithSuffix(url))
 	if err != nil {
 		return fmt.Errorf("failed to download %s: %v", url, err)
 	}
@@ -558,7 +562,7 @@ func fileExists(path string) bool {
 }
 
 func GetLatestAgentBayVersion() (string, error) {
-	req, err := http.NewRequest("GET", versionManifestURL, nil)
+	req, err := cloudendpoint.NewRequest("GET", versionManifestURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request for %s: %v", versionManifestURL, err)
 	}

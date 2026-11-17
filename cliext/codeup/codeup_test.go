@@ -3,6 +3,7 @@ package codeup
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -198,5 +199,22 @@ func TestFileExists(t *testing.T) {
 	}
 	if fileExists(filepath.Join(tmpDir, "nonexistent")) {
 		t.Errorf("fileExists should return false for non-existing file")
+	}
+}
+
+func TestRemoveFlagsForMainCli_StripsSSOSession(t *testing.T) {
+	for _, selector := range [][]string{{"--sso-session", "company"}, {"--sso-session=company"}} {
+		t.Run(selector[0], func(t *testing.T) {
+			args := append([]string{"list", "--profile", "prod"}, selector...)
+			args = append(args, "--region", "cn-hangzhou", "--child-option", "value")
+			got, err := new(Context).RemoveFlagsForMainCli(args)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []string{"list", "--region", "cn-hangzhou", "--child-option", "value"}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("got %v, want %v", got, want)
+			}
+		})
 	}
 }

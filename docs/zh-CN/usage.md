@@ -255,6 +255,27 @@ aliyun ecs DescribeInstances \
 
 API 调用或 JMESPath 求值失败时，Waiter 会立即停止。到达超时时间时，错误信息会包含表达式、期望值和最后一次观测值。`--waiter` 不能与 `--pager` 或 `--cli-dry-run` 同时使用。
 
+## 询价结果
+
+在 OpenAPI 命令后添加 `--estimate-cost`，CLI 会调用询价服务，返回费用估算。例如：
+
+```sh
+aliyun ecs CreateDisk --RegionId cn-hangzhou --ZoneId cn-hangzhou-i \
+  --DiskCategory cloud_essd --Size 40 --estimate-cost
+```
+
+CLI 请求服务端第 2 版响应信封，并保留服务端的 `success`、`code`、`message`、`requestId` 字段。有报价时返回 `price`，无报价时省略该字段；CLI 不补造字段，也兼容服务端显式返回 `price: null`。
+
+| 结果 | success | code | price | 退出码 |
+| --- | --- | --- | --- | --- |
+| 获得报价 | true | Success | 报价对象 | 0 |
+| 确认费用无关 | true | PricingNotRequired | 省略 | 0 |
+| 暂不支持询价 | false | PricingNotSupported | 省略 | 3 |
+
+业务结果写入标准输出，失败时不会再向标准错误重复输出错误文本。`--cli-query`、表格输出和 `--quiet` 只影响展示，退出码由未过滤响应的顶层 `success` 决定。文案语言由 CLI 的 `--language`、profile 和系统语言设置传给服务端。
+
+滚动升级期间，CLI 也能读取旧服务端的报价或业务错误 JSON，保留原始字段及 RequestId。鉴权、参数校验和网络错误继续使用通常的错误处理。
+
 ## 安全策略与非交互使用
 
 有潜在破坏性的操作可能受到 CLI 安全策略和人工确认控制。管理安全策略：
@@ -267,9 +288,11 @@ aliyun configure safety-policy --help
 
 安全策略默认关闭，`confirm` 只是 CLI 本地执行前确认，不代表云端授权或审批。使用 `show`/`list` 查看当前生效策略；如果设置了 `ALIBABA_CLOUD_SAFETY_POLICY_ENABLED` 或 `ALIBABA_CLOUD_SAFETY_POLICY_RULES`，展示结果包含环境变量覆盖后的配置。策略文件或环境规则无法完整解析时，CLI 会拒绝继续执行。
 
-### 命令匹配约定
+添加或更新精确规则后，CLI 根据内置默认 API 版本的元数据查找另一种命令名称。如果该名称尚未被配置文件中的相同动作规则覆盖，会在标准错误（stderr）中提示具体名称。通配符、REST 路径、插件命令层级及无法明确识别的名称不触发提示。此提示不会自动新增规则，也不会改变规则的匹配顺序。
 
-安全策略按调用方输入的命令写法匹配，这是预期设计，不会根据解析后的 OpenAPI 身份合并规则。匹配不区分大小写，`*` 可以匹配任意长度的字符序列；不会展开 API 别名，也不会在大驼峰和短横线写法之间转换。例如，`ecs:DeleteInstance` 匹配 `ECS:deleteinstance`，但不匹配 `ecs:delete-instance`，即使两种命令调用的是同一个 API。AI mode 也遵循这一约定。
+### 命令匹配规则
+
+安全策略按输入的命令名称匹配，不会自动识别同一 API 的其他名称。匹配不区分大小写，`*` 可以匹配任意长度的字符序列；不会展开 API 别名，也不会在大驼峰和短横线写法之间转换。例如，`ecs:DeleteInstance` 匹配 `ECS:deleteinstance`，但不匹配 `ecs:delete-instance`，即使两种命令调用的是同一个 API。AI 模式同样适用。
 
 应为脚本或 Agent 使用的每种写法分别配置规则：
 

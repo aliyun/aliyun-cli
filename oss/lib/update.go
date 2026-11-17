@@ -3,9 +3,9 @@ package lib
 import (
 	"errors"
 	"fmt"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"runtime"
 	"sort"
@@ -209,7 +209,7 @@ func (uc *UpdateCommand) anonymousGetToFileRetry(bucketName, objectName, filePat
 }
 
 func (uc *UpdateCommand) ossAnonymousGetToFile(host, filePath string) error {
-	response, err := http.Get(host)
+	response, err := cloudendpoint.HTTPGet(host)
 	if err != nil {
 		return err
 	}

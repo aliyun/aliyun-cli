@@ -65,48 +65,102 @@ go build -tags aliyun_cli_packed_meta -ldflags "-X 'github.com/aliyun/aliyun-cli
 
 FLAGS="oss://aliyun-cli --force --access-key-id ${ACCESS_KEY_ID} --access-key-secret ${ACCESS_KEY_SECRET} --region cn-hangzhou"
 
+# Upload the publisher signature before the bytes it covers. Versioned
+# signatures come from the build jobs. latest aliases are signed here
+# because the asset name is part of the signed message.
+publish_oss() {
+  local file=$1
+  if [[ ! -f "${file}.minisig" ]]; then
+    bash "${SCRIPT_DIR}/sign_asset.sh" "${file}"
+  fi
+  ${ALIYUN} oss cp "${file}.minisig" $FLAGS
+  ${ALIYUN} oss cp "${file}" $FLAGS
+}
+
+publish_traced() {
+  local file=$1
+  publish_oss "${file}"
+  publish_oss "${file}.cdx.json"
+  publish_oss "${file}.provenance.json"
+}
+
+retarget_latest() {
+  local src=$1
+  local dst=$2
+  cp "${src}" "${dst}"
+  cp "${src}.cdx.json" "${dst}.cdx.json"
+  go run ./tools/buildtrace/cmd/buildtrace retarget \
+    --from "${src}.provenance.json" \
+    --asset "${dst}" \
+    --sbom "${dst}.cdx.json"
+  publish_traced "${dst}"
+}
+
 # mac amd64
-${ALIYUN} oss cp ./aliyun-cli-macosx-"${VERSION}"-amd64.tgz $FLAGS
+publish_traced ./aliyun-cli-macosx-"${VERSION}"-amd64.tgz
 # mac arm64
-${ALIYUN} oss cp ./aliyun-cli-macosx-"${VERSION}"-arm64.tgz $FLAGS
+publish_traced ./aliyun-cli-macosx-"${VERSION}"-arm64.tgz
 # mac universal
-${ALIYUN} oss cp ./aliyun-cli-macosx-"${VERSION}"-universal.tgz $FLAGS
+publish_traced ./aliyun-cli-macosx-"${VERSION}"-universal.tgz
 # mac pkg
-${ALIYUN} oss cp ./aliyun-cli-"${VERSION}".pkg $FLAGS
-  # linux amd64
-${ALIYUN} oss cp ./aliyun-cli-linux-"${VERSION}"-amd64.tgz $FLAGS
+publish_traced ./aliyun-cli-"${VERSION}".pkg
+# linux amd64
+publish_traced ./aliyun-cli-linux-"${VERSION}"-amd64.tgz
 # linux arm64
-${ALIYUN} oss cp ./aliyun-cli-linux-"${VERSION}"-arm64.tgz $FLAGS
+publish_traced ./aliyun-cli-linux-"${VERSION}"-arm64.tgz
 # windows
-${ALIYUN} oss cp ./aliyun-cli-windows-"${VERSION}"-amd64.zip $FLAGS
+publish_traced ./aliyun-cli-windows-"${VERSION}"-amd64.zip
 
 if [[ "${update_latest}" != "1" && "${write_stable_version}" != "1" && "${mark_official}" != "1" ]]; then
   echo "prerelease. skip."
 else
   if [[ "${update_latest}" == "1" ]]; then
-    cp ./aliyun-cli-macosx-"${VERSION}"-amd64.tgz ./aliyun-cli-macosx-latest-amd64.tgz
-    ${ALIYUN} oss cp ./aliyun-cli-macosx-latest-amd64.tgz $FLAGS
-
-    cp ./aliyun-cli-macosx-"${VERSION}"-arm64.tgz ./aliyun-cli-macosx-latest-arm64.tgz
-    ${ALIYUN} oss cp ./aliyun-cli-macosx-latest-arm64.tgz $FLAGS
-
-    cp ./aliyun-cli-macosx-"${VERSION}"-universal.tgz ./aliyun-cli-macosx-latest-universal.tgz
-    ${ALIYUN} oss cp ./aliyun-cli-macosx-latest-universal.tgz $FLAGS
-
-    cp ./aliyun-cli-"${VERSION}".pkg ./aliyun-cli-latest.pkg
-    ${ALIYUN} oss cp ./aliyun-cli-latest.pkg $FLAGS
-
-    cp ./aliyun-cli-linux-"${VERSION}"-amd64.tgz ./aliyun-cli-linux-latest-amd64.tgz
-    ${ALIYUN} oss cp ./aliyun-cli-linux-latest-amd64.tgz $FLAGS
-
-    cp ./aliyun-cli-linux-"${VERSION}"-arm64.tgz ./aliyun-cli-linux-latest-arm64.tgz
-    ${ALIYUN} oss cp ./aliyun-cli-linux-latest-arm64.tgz $FLAGS
-
-    cp ./aliyun-cli-windows-"${VERSION}"-amd64.zip ./aliyun-cli-windows-latest-amd64.zip
-    ${ALIYUN} oss cp ./aliyun-cli-windows-latest-amd64.zip $FLAGS
+    retarget_latest ./aliyun-cli-macosx-"${VERSION}"-amd64.tgz ./aliyun-cli-macosx-latest-amd64.tgz
+    retarget_latest ./aliyun-cli-macosx-"${VERSION}"-arm64.tgz ./aliyun-cli-macosx-latest-arm64.tgz
+    retarget_latest ./aliyun-cli-macosx-"${VERSION}"-universal.tgz ./aliyun-cli-macosx-latest-universal.tgz
+    retarget_latest ./aliyun-cli-"${VERSION}".pkg ./aliyun-cli-latest.pkg
+    retarget_latest ./aliyun-cli-linux-"${VERSION}"-amd64.tgz ./aliyun-cli-linux-latest-amd64.tgz
+    retarget_latest ./aliyun-cli-linux-"${VERSION}"-arm64.tgz ./aliyun-cli-linux-latest-arm64.tgz
+    retarget_latest ./aliyun-cli-windows-"${VERSION}"-amd64.zip ./aliyun-cli-windows-latest-amd64.zip
   fi
 
   if [[ "${write_stable_version}" == "1" ]]; then
+    # /version stays one version plus a newline. History is a separate object
+    # so already-released CLIs keep reading a single version token.
+    versions_file="out/versions"
+    versions_err=$(mktemp)
+    rm -f "${versions_file}"
+    set +e
+    ${ALIYUN} oss cp oss://aliyun-cli/versions "${versions_file}" \
+      --access-key-id "${ACCESS_KEY_ID}" \
+      --access-key-secret "${ACCESS_KEY_SECRET}" \
+      --region cn-hangzhou >"${versions_err}" 2>&1
+    versions_status=$?
+    set -e
+    if [[ ${versions_status} -ne 0 ]]; then
+      if grep -Eq 'NoSuchKey|No such object|does not exist|404' "${versions_err}"; then
+        : > "${versions_file}"
+      else
+        echo "refuse release: cannot read oss://aliyun-cli/versions" >&2
+        cat "${versions_err}" >&2
+        rm -f "${versions_err}"
+        exit 1
+      fi
+    fi
+    rm -f "${versions_err}"
+    # The list is the key generations this binary supports, not a range inferred
+    # from neighboring versions. CLI_RELEASE_PUBLIC_KEYS overrides it, for
+    # example "1,2" on a bridge release.
+    public_keys="${CLI_RELEASE_PUBLIC_KEYS:-}"
+    if [[ -z "${public_keys}" ]]; then
+      public_keys=$(go run ./tools/releasever/cmd/releasever supported-public-keys)
+    fi
+    go run ./tools/releasever/cmd/releasever append-version -- "${VERSION}" "${versions_file}" "${public_keys}" > out/versions.next
+    mv out/versions.next "${versions_file}"
+    ${ALIYUN} oss cp "${versions_file}" oss://aliyun-cli --force \
+      --access-key-id "${ACCESS_KEY_ID}" \
+      --access-key-secret "${ACCESS_KEY_SECRET}" \
+      --region cn-hangzhou
     echo "${VERSION}" > out/version
     ${ALIYUN} oss cp out/version $FLAGS
   fi

@@ -36,6 +36,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
@@ -475,7 +476,7 @@ func oauthRefresh(endpoint string, data url.Values) (*OAuthTokenResponse, error)
 	parsedURL, _ := url.Parse(fullURL)
 	log.Printf("OAuth refresh: attempting to refresh token at %s", safeURLForLog(parsedURL))
 
-	req, err := http.NewRequest("POST", fullURL, strings.NewReader(data.Encode()))
+	req, err := cloudendpoint.NewRequest("POST", fullURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -766,6 +767,10 @@ func promptAuthorizationCode(stderr io.Writer, reader *bufio.Reader) (string, er
 }
 
 func OpenBrowser(url string) error {
+	if err := cloudendpoint.Validate(); err != nil {
+		return err
+	}
+	url = cloudendpoint.WithSuffix(url)
 	// return errors.New("not implemented")
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
@@ -836,7 +841,7 @@ func newOpenAPIClient(ctx *cli.Context, profile config.Profile, endpoint string)
 	conf := &openapiClient.Config{
 		Credential: credential,
 		RegionId:   tea.String(profile.RegionId),
-		Endpoint:   tea.String(endpoint),
+		Endpoint:   tea.String(cloudendpoint.WithSuffix(endpoint)),
 		UserAgent:  tea.String(util.GetAliyunCliUserAgent()),
 	}
 

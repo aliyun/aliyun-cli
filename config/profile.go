@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
@@ -33,6 +32,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	"github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 )
 
@@ -117,7 +117,9 @@ type Profile struct {
 	ProcessCommand             string           `json:"process_command,omitempty"`
 	CredentialsURI             string           `json:"credentials_uri,omitempty"`
 	OIDCProviderARN            string           `json:"oidc_provider_arn,omitempty"`
+	OIDCToken                  string           `json:"oidc_token,omitempty"`
 	OIDCTokenFile              string           `json:"oidc_token_file,omitempty"`
+	SSOSession                 string           `json:"sso_session,omitempty"`
 	CloudSSOSignInUrl          string           `json:"cloud_sso_sign_in_url,omitempty"`
 	AccessToken                string           `json:"access_token,omitempty"`                  // for CloudSSO, read only
 	CloudSSOAccessTokenExpire  int64            `json:"cloud_sso_access_token_expire,omitempty"` // for CloudSSO, read only
@@ -136,6 +138,7 @@ type Profile struct {
 	AutoPluginInstallEnablePre bool             `json:"auto_plugin_install_enable_pre,omitempty"` // install latest version (including pre-release) when true
 	BearerTokenValue           string           `json:"bearer_token,omitempty"`
 	BearerTokenHeaderKey       string           `json:"bearer_token_header_key,omitempty"`
+	SignatureVersion           string           `json:"signature_version,omitempty"` // empty (default) or "v4"
 	parent                     *Configuration   //`json:"-"`
 }
 
@@ -230,8 +233,8 @@ func (cp *Profile) Validate() error {
 			return fmt.Errorf("oidc_provider_arn is not configured for profile '%s'. Run `aliyun configure --profile %s --mode OIDC` to set it",
 				cp.Name, cp.Name)
 		}
-		if cp.OIDCTokenFile == "" {
-			return fmt.Errorf("oidc_token_file is not configured for profile '%s'. Run `aliyun configure --profile %s --mode OIDC` to set it",
+		if cp.OIDCToken == "" && cp.OIDCTokenFile == "" {
+			return fmt.Errorf("oidc_token or oidc_token_file is not configured for profile '%s'. Run `aliyun configure --profile %s --mode OIDC` to set it",
 				cp.Name, cp.Name)
 		}
 		if cp.RamRoleArn == "" {
@@ -256,7 +259,12 @@ func (cp *Profile) Validate() error {
 				cp.Name, cp.Name)
 		}
 	case CloudSSO:
-		if cp.CloudSSOSignInUrl == "" {
+		if cp.SSOSession != "" {
+			if err := validateSSOSessionName(cp.SSOSession); err != nil {
+				return err
+			}
+		}
+		if cp.CloudSSOSignInUrl == "" && cp.SSOSession == "" {
 			return fmt.Errorf("cloud_sso_sign_in_url is not configured for profile '%s'. Run `aliyun configure --profile %s --mode CloudSSO` to set it",
 				cp.Name, cp.Name)
 		}
@@ -283,6 +291,27 @@ func (cp *Profile) Validate() error {
 
 func (cp *Profile) GetParent() *Configuration {
 	return cp.parent
+}
+
+// applyExclusiveOIDCTokenSource keeps a saved token and token file unless this
+// command explicitly sets one of them. Setting one clears the other, so a stale
+// saved token cannot outrank a newly selected token file.
+func applyExclusiveOIDCTokenSource(tokenFlag, fileFlag *cli.Flag, token, file string) (string, string) {
+	tokenAssigned := tokenFlag != nil && tokenFlag.IsAssigned()
+	fileAssigned := fileFlag != nil && fileFlag.IsAssigned()
+	if tokenAssigned {
+		token = tokenFlag.GetStringOrDefault("")
+	}
+	if fileAssigned {
+		file = fileFlag.GetStringOrDefault("")
+	}
+	if tokenAssigned && !fileAssigned {
+		file = ""
+	}
+	if fileAssigned && !tokenAssigned {
+		token = ""
+	}
+	return token, file
 }
 
 func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
@@ -312,10 +341,18 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.ExpiredSeconds = ExpiredSecondsFlag(ctx.Flags()).GetIntegerOrDefault(cp.ExpiredSeconds)
 	cp.ProcessCommand = ProcessCommandFlag(ctx.Flags()).GetStringOrDefault(cp.ProcessCommand)
 	cp.OIDCProviderARN = OIDCProviderARNFlag(ctx.Flags()).GetStringOrDefault(cp.OIDCProviderARN)
-	cp.OIDCTokenFile = OIDCTokenFileFlag(ctx.Flags()).GetStringOrDefault(cp.OIDCTokenFile)
+	cp.OIDCToken, cp.OIDCTokenFile = applyExclusiveOIDCTokenSource(
+		OIDCTokenFlag(ctx.Flags()), OIDCTokenFileFlag(ctx.Flags()), cp.OIDCToken, cp.OIDCTokenFile)
+	oldTarget := cloudSSOTarget(cp)
+	if f := SSOSessionFlag(ctx.Flags()); f != nil {
+		cp.SSOSession = f.GetStringOrDefault(cp.SSOSession)
+	}
 	cp.CloudSSOSignInUrl = CloudSSOSignInUrlFlag(ctx.Flags()).GetStringOrDefault(cp.CloudSSOSignInUrl)
 	cp.CloudSSOAccessConfig = CloudSSOAccessConfigFlag(ctx.Flags()).GetStringOrDefault(cp.CloudSSOAccessConfig)
 	cp.CloudSSOAccountId = CloudSSOAccountIdFlag(ctx.Flags()).GetStringOrDefault(cp.CloudSSOAccountId)
+	if cp.Mode == CloudSSO && oldTarget != cloudSSOTarget(cp) {
+		clearCloudSSOSTS(cp)
+	}
 	cp.EndpointType = EndpointTypeFlag(ctx.Flags()).GetStringOrDefault(cp.EndpointType)
 	cp.Endpoint = EndpointFlag(ctx.Flags()).GetStringOrDefault(cp.Endpoint)
 	cp.ExternalAccountType = ExternalAccountTypeFlag(ctx.Flags()).GetStringOrDefault(cp.ExternalAccountType)
@@ -366,8 +403,16 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 		cp.BearerTokenHeaderKey = util.GetFromEnv("ALIBABA_CLOUD_BEARER_TOKEN_HEADER_KEY")
 	}
 
+	// Signature version: --cli-sign-version (including empty) > profile > env.
+	// Explicit empty flag clears and is not backfilled by env.
+	cp.applySignatureVersionFromFlags(ctx)
+
 	if cp.OIDCProviderARN == "" {
 		cp.OIDCProviderARN = util.GetFromEnv("ALIBABACLOUD_OIDC_PROVIDER_ARN", "ALIBABA_CLOUD_OIDC_PROVIDER_ARN")
+	}
+
+	if cp.OIDCToken == "" {
+		cp.OIDCToken = os.Getenv("ALIBABA_CLOUD_OIDC_TOKEN")
 	}
 
 	if cp.OIDCTokenFile == "" {
@@ -416,9 +461,9 @@ func AutoModeRecognition(cp *Profile) {
 		cp.Mode = EcsRamRole
 	} else if cp.ProcessCommand != "" {
 		cp.Mode = External
-	} else if cp.OIDCProviderARN != "" && cp.OIDCTokenFile != "" && cp.RamRoleArn != "" {
+	} else if cp.OIDCProviderARN != "" && (cp.OIDCToken != "" || cp.OIDCTokenFile != "") && cp.RamRoleArn != "" {
 		cp.Mode = OIDC
-	} else if cp.CloudSSOSignInUrl != "" {
+	} else if cp.CloudSSOSignInUrl != "" || cp.SSOSession != "" {
 		cp.Mode = CloudSSO
 	} else if cp.BearerTokenValue != "" {
 		cp.Mode = BearerToken
@@ -453,15 +498,18 @@ func normalizeSTSEndpointHost(endpoint string) string {
 
 func resolveSTSEndpoint(cp *Profile) string {
 	if cp.StsEndpoint != "" {
-		return normalizeSTSEndpointHost(cp.StsEndpoint)
+		return endpoint.WithSuffix(normalizeSTSEndpointHost(cp.StsEndpoint))
 	}
-	return getSTSEndpoint(cp.StsRegion)
+	return endpoint.WithSuffix(getSTSEndpoint(cp.StsRegion))
 }
 
 // mergeProfileAfterCredentialRefresh persists STS / OAuth token fields from the in-memory profile onto the on-disk profile.
 // in-memory profile may include one-off CLI overrides(e.g. --endpoint) merged via OverwriteWithFlags; those must not overwrite stored settings.
 func mergeProfileAfterCredentialRefresh(disk Profile, cp *Profile) Profile {
 	out := disk
+	if cp.Mode == CloudSSO && cloudSSOTarget(&disk) != cloudSSOTarget(cp) {
+		return out
+	}
 	out.AccessKeyId = cp.AccessKeyId
 	out.AccessKeySecret = cp.AccessKeySecret
 	out.StsToken = cp.StsToken
@@ -473,6 +521,9 @@ func mergeProfileAfterCredentialRefresh(disk Profile, cp *Profile) Profile {
 }
 
 func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred credentialsv2.Credential, err error) {
+	if err = endpoint.Validate(); err != nil {
+		return nil, err
+	}
 	config := new(credentialsv2.Config)
 	// The AK, StsToken are direct credential
 	// Others are indirect credential
@@ -639,7 +690,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			return nil, fmt.Errorf("invalid credentials uri")
 		}
 
-		res, err := http.Get(uri)
+		res, err := endpoint.HTTPGet(uri)
 		if err != nil {
 			return nil, err
 		}
@@ -679,6 +730,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 	case OIDC:
 		config.SetType("oidc_role_arn").
 			SetOIDCProviderArn(cp.OIDCProviderARN).
+			SetOIDCToken(cp.OIDCToken).
 			SetOIDCTokenFilePath(cp.OIDCTokenFile).
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).
@@ -686,6 +738,16 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetSessionExpiration(3600)
 
 	case CloudSSO:
+		if cp.SSOSession != "" {
+			session, loadErr := loadSSOSession(ctx, cp.SSOSession)
+			if loadErr != nil {
+				return nil, loadErr
+			}
+			if session.AccessToken == "" || session.ExpiresAt <= util.GetCurrentUnixTime() {
+				return nil, ssoLoginRequired(cp.SSOSession)
+			}
+			cp.CloudSSOSignInUrl, cp.AccessToken, cp.CloudSSOAccessTokenExpire = session.SignInURL, session.AccessToken, session.ExpiresAt
+		}
 		// check sts expiration
 		stsExpiration := cp.StsExpiration
 		currentUnixTime := util.GetCurrentUnixTime()
@@ -721,7 +783,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			// update expiration
 			cp.StsExpiration = token.ExpirationInt64 - 5
 			// flush back
-			conf, err := loadOrCreateConfiguration()
+			conf, err := hookLoadOrCreateConfiguration(LoadOrCreateConfiguration)(getConfigurePath(ctx))
 			if err != nil {
 				return nil, err
 			}
@@ -731,7 +793,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 					break
 				}
 			}
-			err = saveConfigurationFunc(conf)
+			err = saveConfigurationFunc(ctx, conf)
 			if err != nil {
 				return nil, err
 			}
@@ -765,7 +827,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			if err != nil {
 				return nil, err
 			}
-			conf, err := loadOrCreateConfiguration()
+			conf, err := hookLoadOrCreateConfiguration(LoadOrCreateConfiguration)(getConfigurePath(ctx))
 			if err != nil {
 				return nil, err
 			}
@@ -775,7 +837,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 					break
 				}
 			}
-			err = saveConfigurationFunc(conf)
+			err = saveConfigurationFunc(ctx, conf)
 			if err != nil {
 				return nil, err
 			}
@@ -801,9 +863,12 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 	return credentialsv2.NewCredential(config)
 }
 
-var saveConfigurationFunc = SaveConfiguration
+var saveConfigurationFunc = SaveConfigurationWithContext
 
 func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
+	if err := endpoint.Validate(); err != nil {
+		return nil, err
+	}
 	envs := map[string]string{
 		"ALIBABA_CLOUD_REGION_ID": cp.RegionId,
 	}
@@ -846,10 +911,10 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 		envs["ALIBABA_CLOUD_ENDPOINT_TYPE"] = cp.EndpointType
 	}
 	if cp.Endpoint != "" {
-		envs["ALIBABA_CLOUD_ENDPOINT"] = cp.Endpoint
+		envs["ALIBABA_CLOUD_ENDPOINT"] = endpoint.WithSuffix(cp.Endpoint)
 	}
 	if cp.StsEndpoint != "" {
-		envs["ALIBABA_CLOUD_STS_ENDPOINT"] = cp.StsEndpoint
+		envs["ALIBABA_CLOUD_STS_ENDPOINT"] = endpoint.WithSuffix(cp.StsEndpoint)
 	}
 	if cp.ExternalAccountType != "" {
 		envs["ALIBABA_CLOUD_EXTERNAL_ACCOUNT_TYPE"] = cp.ExternalAccountType
@@ -866,6 +931,14 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 
 	envs["ALIBABA_CLOUD_CLI_VERSION"] = cli.GetVersion()
 
+	// Forward the already-resolved profile.SignatureVersion (OverwriteWithFlags
+	// applied flag > profile > env). Always set the key so an explicit empty
+	// clear overrides a parent-process env v4 when launching plugins.
+	if err := cp.ValidateSignatureVersion(); err != nil {
+		return nil, err
+	}
+	envs[EnvSignatureVersion] = cp.SignatureVersion
+
 	return envs, nil
 }
 
@@ -881,15 +954,27 @@ func BuildBaselineEnv(ctx *cli.Context) map[string]string {
 	} else if v := util.GetFromEnv("ALIBABA_CLOUD_REGION_ID"); v != "" {
 		envs["ALIBABA_CLOUD_REGION_ID"] = v
 	}
-	if endpoint, ok := EndpointFlag(ctx.Flags()).GetValue(); ok && endpoint != "" {
-		envs["ALIBABA_CLOUD_ENDPOINT"] = endpoint
+	if value, ok := EndpointFlag(ctx.Flags()).GetValue(); ok && value != "" {
+		envs["ALIBABA_CLOUD_ENDPOINT"] = endpoint.WithSuffix(value)
 	} else if v := util.GetFromEnv("ALIBABA_CLOUD_ENDPOINT"); v != "" {
-		envs["ALIBABA_CLOUD_ENDPOINT"] = v
+		envs["ALIBABA_CLOUD_ENDPOINT"] = endpoint.WithSuffix(v)
 	}
 	if lang, ok := LanguageFlag(ctx.Flags()).GetValue(); ok && lang != "" {
 		envs["ALIBABA_CLOUD_LANGUAGE"] = lang
 	} else if v := util.GetFromEnv("ALIBABA_CLOUD_LANGUAGE"); v != "" {
 		envs["ALIBABA_CLOUD_LANGUAGE"] = v
+	}
+	// No-profile fallback: flag (including empty) > env > default.
+	cliValue, cliAssigned := "", false
+	if ctx != nil {
+		cliValue, cliAssigned = CliSignVersionFromFlags(ctx.Flags())
+	}
+	if resolved, err := ResolveSignatureVersion(cliValue, cliAssigned, ""); err == nil {
+		envs[EnvSignatureVersion] = resolved
+	} else if cliAssigned {
+		envs[EnvSignatureVersion] = strings.TrimSpace(cliValue)
+	} else if v, ok := os.LookupEnv(EnvSignatureVersion); ok {
+		envs[EnvSignatureVersion] = strings.TrimSpace(v)
 	}
 	return envs
 }

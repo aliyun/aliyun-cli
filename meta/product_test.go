@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -37,20 +36,18 @@ func TestProduct_GetEndpoint(t *testing.T) {
 		},
 		LocationServiceCode: "arms",
 	}
-	client, err := sdk.NewClientWithAccessKey("regionid", "acesskeyid", "accesskeysecret")
-	assert.Nil(t, err)
-	endpoint, err := product.GetEndpoint("cn-hangzhou", client)
+	endpoint, err := product.GetEndpoint("cn-hangzhou")
 	assert.Nil(t, err)
 	assert.Equal(t, endpoint, "arms.cn-hangzhou.aliyuncs.com")
 
 	product.LocationServiceCode = ""
 	product.GlobalEndpoint = "arms.aliyuncs.com"
-	endpoint, err = product.GetEndpoint("us-west-1", client)
+	endpoint, err = product.GetEndpoint("us-west-1")
 	assert.Nil(t, err)
 	assert.Equal(t, endpoint, "arms.aliyuncs.com")
 
 	product.GlobalEndpoint = ""
-	_, err = product.GetEndpoint("us-west-1", client)
+	_, err = product.GetEndpoint("us-west-1")
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "us-west-1")
 }
@@ -91,7 +88,7 @@ func TestProduct_GetEndpointWithType(t *testing.T) {
 			},
 			LocationServiceCode: "ecs",
 		}
-		endpoint, err := product.GetEndpointWithType("cn-hangzhou", nil, "vpc")
+		endpoint, err := product.GetEndpointWithType("cn-hangzhou", "vpc")
 		assert.Nil(t, err)
 		assert.Equal(t, "ecs-vpc.cn-hangzhou.aliyuncs.com", endpoint)
 	})
@@ -104,7 +101,7 @@ func TestProduct_GetEndpointWithType(t *testing.T) {
 			},
 			LocationServiceCode: "ecs",
 		}
-		endpoint, err := product.GetEndpointWithType("cn-hangzhou", nil, "vpc")
+		endpoint, err := product.GetEndpointWithType("cn-hangzhou", "vpc")
 		assert.Nil(t, err)
 		assert.Equal(t, "ecs-vpc.cn-hangzhou.aliyuncs.com", endpoint)
 	})
@@ -120,7 +117,7 @@ func TestProduct_GetEndpointWithType(t *testing.T) {
 			},
 			LocationServiceCode: "ecs",
 		}
-		endpoint, err := product.GetEndpointWithType("cn-hangzhou", nil, "vpc")
+		endpoint, err := product.GetEndpointWithType("cn-hangzhou", "vpc")
 		assert.Nil(t, err)
 		assert.Equal(t, "ecs.cn-hangzhou.aliyuncs.com", endpoint)
 	})
@@ -133,7 +130,7 @@ func TestProduct_GetEndpointWithType(t *testing.T) {
 			},
 			GlobalEndpoint: "ecs.aliyuncs.com",
 		}
-		endpoint, err := product.GetEndpointWithType("us-west-1", nil, "vpc")
+		endpoint, err := product.GetEndpointWithType("us-west-1", "vpc")
 		assert.Nil(t, err)
 		assert.Equal(t, "ecs.aliyuncs.com", endpoint)
 	})
@@ -148,7 +145,7 @@ func TestProduct_GetEndpointWithType(t *testing.T) {
 		}
 
 		// A nil client would panic if endpoint resolution attempted a Location CommonRequest.
-		endpoint, err := product.GetEndpointWithType("cn-hangzhou", nil, "")
+		endpoint, err := product.GetEndpointWithType("cn-hangzhou", "")
 		assert.Nil(t, err)
 		assert.Equal(t, "green-cip.cn-hangzhou.aliyuncs.com", endpoint)
 	})
@@ -160,7 +157,7 @@ func TestProduct_GetEndpointWithType(t *testing.T) {
 			LocationServiceCode: "test",
 		}
 
-		endpoint, err := product.GetEndpointWithType("us-west-1", nil, "")
+		endpoint, err := product.GetEndpointWithType("us-west-1", "")
 		assert.Nil(t, err)
 		assert.Equal(t, "test.aliyuncs.com", endpoint)
 	})
@@ -172,7 +169,7 @@ func TestProduct_GetEndpointWithType(t *testing.T) {
 			RegionalEndpointPattern: "test.[RegionId].aliyuncs.com",
 		}
 
-		_, err := product.GetEndpointWithType("unknown-region", nil, "")
+		_, err := product.GetEndpointWithType("unknown-region", "")
 		assert.EqualError(t, err, "unknown endpoint for region unknown-region")
 		assert.NotContains(t, err.Error(), "LC_Error")
 	})
@@ -182,7 +179,7 @@ func TestProduct_GetEndpointWithType(t *testing.T) {
 			Code:                "test",
 			LocationServiceCode: "",
 		}
-		_, err := product.GetEndpointWithType("us-west-1", nil, "vpc")
+		_, err := product.GetEndpointWithType("us-west-1", "vpc")
 		assert.NotNil(t, err)
 		assert.Contains(t, err.Error(), "us-west-1")
 	})
@@ -198,7 +195,7 @@ func TestProduct_GetEndpointWithType(t *testing.T) {
 			},
 			LocationServiceCode: "",
 		}
-		endpoint, err := product.GetEndpointWithType("cn-hangzhou", nil, "")
+		endpoint, err := product.GetEndpointWithType("cn-hangzhou", "")
 		assert.Nil(t, err)
 		assert.Equal(t, "test.cn-hangzhou.aliyuncs.com", endpoint)
 	})
@@ -211,7 +208,7 @@ func TestProduct_GetEndpointWithType(t *testing.T) {
 				"cn-hangzhou": "test.cn-hangzhou.aliyuncs.com",
 			},
 		}
-		endpoint, err := product.GetEndpointWithType("cn-hangzhou", nil, "vpc")
+		endpoint, err := product.GetEndpointWithType("cn-hangzhou", "vpc")
 		assert.Nil(t, err)
 		assert.Equal(t, "test.cn-hangzhou.aliyuncs.com", endpoint)
 	})

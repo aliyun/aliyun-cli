@@ -17,10 +17,12 @@ package mcpproxy
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -722,6 +724,9 @@ func TestMCPProxy_ServeMCPProxyRequest_AccessControl(t *testing.T) {
 			}
 
 			proxy := NewMCPProxy(config)
+			proxy.upstreamClient = &http.Client{Transport: proxyRoundTripper(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("upstream"))}, nil
+			})}
 
 			req := httptest.NewRequest("GET", tt.requestPath, nil)
 			w := httptest.NewRecorder()

@@ -4,7 +4,7 @@
 
 ## MCP proxy
 
-The MCP proxy exposes discovered Alibaba Cloud API MCP servers through one local endpoint and handles the OAuth flow used to reach the upstream service.
+The MCP proxy exposes discovered Alibaba Cloud API MCP servers through one local endpoint. It uses MCP OAuth by default. Add `--skip-mcp-oauth` to authenticate with credentials from your CLI configuration.
 
 Start it with the public command path:
 
@@ -12,19 +12,34 @@ Start it with the public command path:
 aliyun utils mcp-proxy --region-type CN --port 8088
 ```
 
-The defaults are:
+The MCP proxy supports the options listed in this section. Their defaults are:
 
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `--host` | `127.0.0.1` | Local listen address |
 | `--port` | `8088` | Local listen port |
 | `--region-type` | `CN` | Endpoint family; use `CN` or `INTL` |
+| `--skip-mcp-oauth` | `false` | Skip MCP OAuth and authenticate with CLI credentials; `true` when used without a value |
 | `--scope` | `/acs/mcp-server` | OAuth scope |
 | `--no-browser` | off | When set, use manual authorization-code input instead of opening a browser |
 | `--oauth-app-name` | empty | Reuse an existing OAuth application by name |
 | `--upstream-url` | empty | Override the configured upstream MCP endpoint |
 
 After startup, the CLI prints the local MCP and SSE URLs for the discovered servers. Configure the MCP client with the printed URL rather than constructing a path from the server name.
+
+### Use CLI credentials to skip MCP OAuth
+
+Configure credentials in the CLI, then add `--skip-mcp-oauth`:
+
+```sh
+aliyun utils mcp-proxy --skip-mcp-oauth
+```
+
+`BearerToken` and `Anonymous` credentials are not supported with `--skip-mcp-oauth`.
+
+When using CLI credentials, grant the corresponding RAM identity `AliyunOpenAPIMCPServerStaticCredentialAccess` and the permissions needed by the requested APIs and MCP server discovery.
+
+Update manually configured STS credentials when they expire. For a shared CloudSSO session, log in again with `aliyun configure sso login --sso-session <name>` when it expires; see [CloudSSO configuration](configuration.md#cloudsso).
 
 ### Access control
 

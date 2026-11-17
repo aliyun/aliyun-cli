@@ -8,6 +8,7 @@ import (
 // API represents a Canonical API JSON file.
 // Fields not needed by the old CLI are omitted from deserialization.
 type API struct {
+	TimeoutMS    int64  `json:"timeout_ms,omitempty"`
 	Name         string `json:"name"`
 	CmdName      string `json:"cmd_name,omitempty"`
 	CmdFullName  string `json:"cmd_full_name,omitempty"`
@@ -84,9 +85,19 @@ type ProductEntry struct {
 
 // VersionIndex is the lightweight API index stored beside per-API JSON files.
 type VersionIndex struct {
-	APIs    map[string]VersionAPIEntry `json:"apis"`
-	Style   string                     `json:"style"`
-	Version string                     `json:"version"`
+	APIs      map[string]VersionAPIEntry `json:"apis"`
+	Style     string                     `json:"style"`
+	Version   string                     `json:"version"`
+	Endpoints []VersionEndpoint          `json:"endpoints"`
+}
+
+// VersionEndpoint holds product Help endpoint data for one API version.
+type VersionEndpoint struct {
+	RegionID     string `json:"region_id"`
+	RegionNameZh string `json:"region_name_zh"`
+	RegionNameEn string `json:"region_name_en"`
+	Endpoint     string `json:"endpoint"`
+	VPCEndpoint  string `json:"vpc_endpoint"`
 }
 
 // VersionAPIEntry is one API entry in version.json.

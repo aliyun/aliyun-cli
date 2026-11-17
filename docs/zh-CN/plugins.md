@@ -51,10 +51,13 @@ aliyun plugin install --name <plugin-name> --enable-pre
 
 ```sh
 aliyun plugin install --package ./plugin-package.tar.gz
-aliyun plugin install --package https://example.com/plugin-package.zip
+aliyun plugin install --package https://example.com/plugin-package.zip --skip-signature-verify
 ```
 
-支持 `.zip`、`.tar.gz` 和 `.tgz`。从本地文件或 URL 安装时，请确认插件来源可信。
+支持 `.zip`、`.tar.gz` 和 `.tgz`。本地文件安装不会访问远程 Discovery，也不使用
+`--skip-signature-verify`；可以通过 `--checksum <sha256>` 额外校验本地文件。
+直接安装远程 URL 会绕过签名索引，因此需要显式指定
+`--skip-signature-verify`。
 
 ## 更新和卸载
 
@@ -80,14 +83,24 @@ aliyun plugin uninstall --name <plugin-name>
 aliyun configure plugin-settings show
 ```
 
-设置或清除自定义插件树根地址：
+选择官方信任站点，或设置、清除自定义插件树根地址：
 
 ```sh
+# 默认访问 https://api.aliyun.com
+aliyun configure plugin-settings set --site cn
+# 国内站超时或不可达时改用 https://api.alibabacloud.com
+aliyun configure plugin-settings set --site intl
 aliyun configure plugin-settings set --source-base https://example.com/plugins
 aliyun configure plugin-settings clear
 ```
 
-单次命令可以使用 `--source-base <url>` 覆盖全局设置。环境变量 `ALIBABA_CLOUD_CLI_PLUGIN_SOURCE_BASE` 的优先级高于已保存设置。
+`site` 只选择信任 Discovery 门户。公网仓库通过该门户校验。
+非公网 `source-base` 不会发给门户；CLI 继续使用公网仓库的信任锚点，
+并直接读取该仓库自己的签名 timestamp。timestamp 不是内置信任锚点所签时安装停止，
+显式指定 `--skip-signature-verify` 后才会跳过签名校验。单次命令可以
+使用 `--source-base <url>` 覆盖全局设置。环境变量
+`ALIBABA_CLOUD_CLI_PLUGIN_SITE` 和
+`ALIBABA_CLOUD_CLI_PLUGIN_SOURCE_BASE` 的优先级高于已保存设置。
 
 ## 自动安装产品插件
 

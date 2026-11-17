@@ -15,24 +15,28 @@ package openapi
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
-	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	pricingruntime "github.com/aliyun/aliyun-openapi-runtime/runtime"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestBuildEstimateCostParameters(t *testing.T) {
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.QueryParams["InstanceType"] = "ecs.g6.large"
 	req.QueryParams["SystemDisk.Category"] = "cloud_essd"
 	req.QueryParams["empty"] = ""
@@ -41,14 +45,14 @@ func TestBuildEstimateCostParameters(t *testing.T) {
 	req.RegionId = "cn-hangzhou"
 	req.SetContent([]byte(`{"Period": 1, "AutoRenew": true}`))
 
-	parameters, err := buildEstimateCostParameters(req)
+	parameters, err := buildEstimateCostParameters(pricingruntime.PricingParameterInput{Query: req.QueryParams, Form: req.FormParams, Path: req.PathParams, Body: req.Content, Region: req.RegionId})
 	assert.Nil(t, err)
 	assert.Equal(t, "ecs.g6.large", parameters["InstanceType"])
 	assert.Equal(t, "cloud_essd", parameters["SystemDisk.Category"])
 	assert.Equal(t, "from-form", parameters["Description"])
 	assert.Equal(t, "c-123", parameters["ClusterId"])
 	assert.Equal(t, "cn-hangzhou", parameters["RegionId"])
-	assert.Equal(t, float64(1), parameters["Period"])
+	assert.Equal(t, json.Number("1"), parameters["Period"])
 	assert.Equal(t, true, parameters["AutoRenew"])
 	_, ok := parameters["empty"]
 	assert.False(t, ok, "empty-string param should be dropped, otherwise GetApiPrice sees noise")
@@ -58,11 +62,11 @@ func TestBuildEstimateCostParametersRegionNotOverridden(t *testing.T) {
 	// RegionId in the body / query wins over the request RegionId fallback —
 	// otherwise users that explicitly switch region via --RegionId would get
 	// quoted against their default profile region by surprise.
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.QueryParams["RegionId"] = "cn-beijing"
 	req.RegionId = "cn-hangzhou"
 
-	parameters, err := buildEstimateCostParameters(req)
+	parameters, err := buildEstimateCostParameters(pricingruntime.PricingParameterInput{Query: req.QueryParams, Form: req.FormParams, Path: req.PathParams, Body: req.Content, Region: req.RegionId})
 	assert.Nil(t, err)
 	assert.Equal(t, "cn-beijing", parameters["RegionId"])
 }
@@ -70,17 +74,17 @@ func TestBuildEstimateCostParametersRegionNotOverridden(t *testing.T) {
 func TestBuildEstimateCostParametersBadBody(t *testing.T) {
 	// --body that isn't a JSON object can't be merged into pricing parameters —
 	// fail with an actionable tip rather than silently dropping the body.
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.SetContent([]byte(`not-json`))
 
-	_, err := buildEstimateCostParameters(req)
+	_, err := buildEstimateCostParameters(pricingruntime.PricingParameterInput{Query: req.QueryParams, Form: req.FormParams, Path: req.PathParams, Body: req.Content, Region: req.RegionId})
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "JSON object")
 }
 
 func TestResolveEstimateCostApiName(t *testing.T) {
 	// RPC style: api name already on the request
-	rpc := &RpcInvoker{BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()}}
+	rpc := &RpcInvoker{BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()}}
 	rpc.request.ApiName = "RunInstances"
 	name, err := resolveEstimateCostApiName(nil, rpc)
 	assert.Nil(t, err)
@@ -88,7 +92,7 @@ func TestResolveEstimateCostApiName(t *testing.T) {
 
 	// RESTful style with resolved api metadata
 	restful := &RestfulInvoker{
-		BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()},
+		BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()},
 		api:          &canonicalmeta.API{Name: "DescribeClusters"},
 	}
 	name, err = resolveEstimateCostApiName(nil, restful)
@@ -102,7 +106,7 @@ func TestResolveEstimateCostApiName(t *testing.T) {
 	AddFlags(ctx.Flags())
 	library := NewLibrary(ctx.Stdout(), "en")
 	bare := &RestfulInvoker{
-		BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()},
+		BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()},
 		method:       "GET",
 		path:         "/no/such/path",
 	}
@@ -148,7 +152,7 @@ func TestResolveEstimateCostApiNameUsesProductDefaultVersionForPathLookup(t *tes
 		},
 	}
 
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.Product = product.Code
 	req.Version = "2099-01-01"
 	restful := &RestfulInvoker{
@@ -165,50 +169,124 @@ func TestResolveEstimateCostApiNameUsesProductDefaultVersionForPathLookup(t *tes
 	assert.Equal(t, "DescribeItem", name)
 }
 
-func TestTranslateEstimateCostErrorPassthrough(t *testing.T) {
-	// Non-server errors fall through unchanged so callers see the original
-	// network/transport error instead of a misleading "pricing rejected" tip.
-	plain := assert.AnError
-	assert.Equal(t, plain, translateEstimateCostError("Ecs", "2014-05-26", "RunInstances", plain))
+// quoteServer stands up a TLS stub of the quote endpoint, points
+// --estimate-cost at it and relaxes cert verification (self-signed), so the
+// full request path — signing, transport, status handling — is exercised
+// rather than the body classifier alone. Returns the ready command context.
+func quoteServer(t *testing.T, status int, body string) (*cli.Context, *bytes.Buffer, *config.Profile) {
+	for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"} {
+		t.Setenv(key, "")
+	}
+
+	t.Helper()
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv(estimateCostEndpointEnv, srv.Listener.Addr().String())
+
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, w)
+	cmd := &cli.Command{EnableUnknownFlag: true}
+	AddFlags(cmd.Flags())
+	config.AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	config.SkipSecureVerify(ctx.Flags()).SetAssigned(true)
+
+	profile := config.NewProfile("estimate-cost-test")
+	profile.Mode = "AK"
+	profile.AccessKeyId = "test-ak"
+	profile.AccessKeySecret = "test-secret"
+	profile.RegionId = "cn-hangzhou"
+	return ctx, w, &profile
 }
 
-func TestTranslateEstimateCostErrorPricingNotSupported(t *testing.T) {
-	// The common "this API isn't billable" case — must be turned into the
-	// friendly hint, not a raw error string with the upstream Code embedded.
-	body := `{"RequestId":"req-pns","Code":"PricingNotSupported","Message":"no pricing","HostId":"host"}`
-	serverErr := sdkerrors.NewServerError(404, body, "")
-	err := translateEstimateCostError("Ecs", "2014-05-26", "DescribeRegions", serverErr)
-	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "no pricing information for Ecs/2014-05-26/DescribeRegions")
-	tip, _ := err.(cli.ErrorWithTip)
-	assert.NotNil(t, tip)
-	assert.Contains(t, tip.GetTip(""), "incurs no cost or has no pricing mapping registered yet")
+func TestInvokeEstimateCostSuccessBodyPassesThrough(t *testing.T) {
+	// A normal 2xx quote is untouched by the cost-irrelevant handling.
+	ctx, _, profile := quoteServer(t, http.StatusOK, `{"price":{"originalAmount":0.178},"requestId":"req-ok"}`)
+
+	out, err := invokeEstimateCost(ctx, profile, "Ecs", "2014-05-26", "RunInstances", map[string]interface{}{})
+	assert.Nil(t, err)
+	assert.Contains(t, out, "originalAmount")
+	assert.NotContains(t, out, "costIrrelevant")
 }
 
-func TestTranslateEstimateCostErrorInvalidParameter(t *testing.T) {
-	// Parameter-side rejection (bad popCode/version, missing required field)
-	// gets a "check parameters" tip; raw error keeps its detail (the upstream
-	// SDK.ServerError formatted body) so users can see what the server
-	// objected to. Tip is delivered via cli.ErrorWithTip.GetTip, not the
-	// Error() string itself — Error() preserves the wrapped error verbatim.
-	body := `{"RequestId":"req-ip","Code":"InvalidParameter","Message":"bad popVersion","HostId":"host"}`
-	serverErr := sdkerrors.NewServerError(400, body, "")
-	err := translateEstimateCostError("Ecs", "2014-05-26", "RunInstances", serverErr)
-	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "InvalidParameter")
-	tip, _ := err.(cli.ErrorWithTip)
-	assert.NotNil(t, tip)
-	assert.Contains(t, tip.GetTip(""), "check them against the target API")
-}
+func TestMainEstimateCostPreservesServerMessageAcrossLanguages(t *testing.T) {
+	const english = "this OpenAPI is confirmed to incur no charge, so there is nothing to quote"
+	const chinese = "该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。"
+	previousLanguage := i18n.GetLanguage()
+	t.Cleanup(func() { i18n.SetLanguage(previousLanguage) })
 
-func TestTranslateEstimateCostErrorUnknownServerCode(t *testing.T) {
-	// Server errors with codes we don't special-case (Throttling, Forbidden,
-	// random new ones) fall through unchanged — better the user sees the
-	// upstream code+message than a vague "pricing failed" wrapper.
-	body := `{"RequestId":"req-th","Code":"Throttling.User","Message":"slow down","HostId":"host"}`
-	serverErr := sdkerrors.NewServerError(429, body, "")
-	got := translateEstimateCostError("Ecs", "2014-05-26", "RunInstances", serverErr)
-	assert.Equal(t, serverErr, got)
+	for _, route := range []struct {
+		name string
+		args []string
+	}{
+		{"metadata", []string{"ecs", "DescribeRegions"}},
+		{"by triple", []string{"tablestore", "CreateVCUInstance"}},
+		{"OSS bridge", []string{"oss", "CreateBucket"}},
+		{"ossutil bridge", []string{"ossutil", "CreateBucket"}},
+	} {
+		t.Run(route.name, func(t *testing.T) {
+			for _, test := range []struct {
+				name, profileLanguage, flagLanguage, locale, message string
+			}{
+				{"English profile", "en", "", "zh_CN.UTF-8", english},
+				{"Chinese profile", "zh", "", "en_US.UTF-8", chinese},
+				{"English flag overrides profile", "zh", "en", "zh_CN.UTF-8", english},
+				{"Chinese flag overrides profile", "en", "zh", "en_US.UTF-8", chinese},
+				{"English locale fallback", "", "", "en_US.UTF-8", english},
+				{"Chinese locale fallback", "", "", "zh_CN.UTF-8", chinese},
+			} {
+				t.Run(test.name, func(t *testing.T) {
+					t.Setenv("LANG", test.locale)
+					// Each case models a fresh CLI process, whose initial language
+					// comes from LANG before profiles without a language are loaded.
+					i18n.SetLanguage("")
+					ctx, out, profile := quoteServer(t, http.StatusBadRequest,
+						`{"Code":"PricingNotRequired","Message":"server-only message","RequestId":"req-language"}`)
+					profile.Language = test.profileLanguage
+					configuration := config.Configuration{CurrentProfile: profile.Name, Profiles: []config.Profile{*profile}}
+					data, err := json.Marshal(configuration)
+					if !assert.NoError(t, err) {
+						return
+					}
+					configPath := filepath.Join(t.TempDir(), "config.json")
+					if !assert.NoError(t, os.WriteFile(configPath, data, 0o600)) {
+						return
+					}
+					config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
+					config.ConfigurePathFlag(ctx.Flags()).SetValue(configPath)
+					if test.flagLanguage != "" {
+						config.LanguageFlag(ctx.Flags()).SetAssigned(true)
+						config.LanguageFlag(ctx.Flags()).SetValue(test.flagLanguage)
+					}
+					EstimateCostFlag(ctx.Flags()).SetAssigned(true)
+					command := NewCommando(out, *profile)
+					ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
+					switch route.name {
+					case "OSS bridge":
+						err = command.processOssEstimateCost(ctx, route.args[1])
+					case "ossutil bridge":
+						err = EstimateOssCost(ctx, route.args[1], nil, nil)
+					default:
+						err = command.main(ctx, route.args)
+					}
+					if !assert.NoError(t, err) {
+						return
+					}
+					var got struct{ Code, Message, RequestId string }
+					assert.NoError(t, json.Unmarshal(out.Bytes(), &got))
+					assert.Equal(t, "PricingNotRequired", got.Code)
+					assert.Equal(t, "req-language", got.RequestId)
+					assert.Equal(t, "server-only message", got.Message)
+					assert.NotContains(t, out.String(), "costIrrelevant")
+				})
+			}
+		})
+	}
 }
 
 func TestPrintEstimateCostResultQuietSkipsOutput(t *testing.T) {
@@ -495,11 +573,11 @@ func TestEstimateCostBusinessErrorFailure(t *testing.T) {
 }
 
 func TestEstimateCostBusinessErrorSuccessAndTolerantShapes(t *testing.T) {
-	// success:true, missing price node, bare-DTO shape and non-JSON output must
-	// all keep exit code 0 — only explicit business failure is an error.
+	// Legacy success responses remain supported; malformed or incomplete
+	// responses must no longer be mistaken for a successful quote.
 	assert.Nil(t, estimateCostBusinessError(`{"price":{"success":true},"requestId":"r"}`))
-	assert.Nil(t, estimateCostBusinessError(`{"requestId":"r"}`))
-	assert.Nil(t, estimateCostBusinessError(`not json`))
+	assert.Error(t, estimateCostBusinessError(`{"requestId":"r"}`))
+	assert.Error(t, estimateCostBusinessError(`not json`))
 	// bare DTO without the gateway "price" envelope
 	assert.NotNil(t, estimateCostBusinessError(`{"success":false,"errorCode":"E"}`))
 	assert.Nil(t, estimateCostBusinessError(`{"success":true}`))
@@ -565,8 +643,8 @@ func TestBuildEstimateCostParametersFromOpenapi(t *testing.T) {
 	assert.Equal(t, "2", parameters["shardCount"])
 	assert.Equal(t, "my-project", parameters["project"])
 	assert.Equal(t, "my-store", parameters["logstoreName"])
-	assert.Equal(t, float64(30), parameters["ttl"])
-	assert.Equal(t, float64(7), parameters["hot_ttl"])
+	assert.Equal(t, json.Number("30"), parameters["ttl"])
+	assert.Equal(t, json.Number("7"), parameters["hot_ttl"])
 	// RegionId defaulted from the profile so mapping expressions can rely on it.
 	assert.Equal(t, "cn-hangzhou", parameters["RegionId"])
 }
@@ -594,7 +672,7 @@ func TestBuildEstimateCostParametersFromOpenapiBodyVariants(t *testing.T) {
 	oc.openapiRequest.Body = `{"ttl":15}`
 	parameters, err = buildEstimateCostParametersFromOpenapi(ctx, oc)
 	assert.NoError(t, err)
-	assert.Equal(t, float64(15), parameters["ttl"])
+	assert.Equal(t, json.Number("15"), parameters["ttl"])
 
 	// Non-object body must be rejected, mirroring the RPC/ROA path contract.
 	oc = newOpenapiEstimateCostContext(api)
@@ -696,7 +774,7 @@ func TestBuildEstimateCostParametersFromFlags(t *testing.T) {
 	parameters, err := buildEstimateCostParametersFromFlags(ctx, &profile)
 	assert.NoError(t, err)
 	assert.Equal(t, "ws-123", parameters["WorkspaceId"])
-	assert.Equal(t, float64(2), parameters["Priority"])
+	assert.Equal(t, json.Number("2"), parameters["Priority"])
 	assert.NotNil(t, parameters["TrainingSpec"])
 	assert.Equal(t, "cn-hangzhou", parameters["RegionId"])
 
@@ -819,7 +897,7 @@ func TestBuildEstimateCostParametersFromFlagsBodyAndRegionFallbacks(t *testing.T
 	bodyFlag.SetValue(`{"Period":2}`)
 	params, err := buildEstimateCostParametersFromFlags(ctx, profile)
 	assert.Nil(t, err)
-	assert.Equal(t, float64(2), params["Period"])
+	assert.Equal(t, json.Number("2"), params["Period"])
 	assert.Equal(t, "cn-shanghai", params["RegionId"], "profile region is the last fallback")
 
 	// --body that is not a JSON object fails with the actionable error.
@@ -876,9 +954,9 @@ func TestMergeEstimateCostBodyForms(t *testing.T) {
 
 	// Raw []byte and string forms decode as JSON objects.
 	assert.Nil(t, mergeEstimateCostBody(params, []byte(`{"A":1}`)))
-	assert.Equal(t, float64(1), params["A"])
+	assert.Equal(t, json.Number("1"), params["A"])
 	assert.Nil(t, mergeEstimateCostBody(params, `{"B":2}`))
-	assert.Equal(t, float64(2), params["B"])
+	assert.Equal(t, json.Number("2"), params["B"])
 
 	// Anything else is rejected with the actionable tip.
 	err := mergeEstimateCostBody(params, 42)
@@ -892,13 +970,12 @@ func TestEstimateCostBusinessErrorShapes(t *testing.T) {
 	err := estimateCostBusinessError(`{"success":false,"errorCode":"X","errorMessage":"m","upstreamRequestId":"r"}`)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "X")
-	assert.Contains(t, err.Error(), "upstreamRequestId: r")
+	assert.Contains(t, err.Error(), "requestId: r")
 
-	// Unparseable / non-JSON output is not the exit-code contract's business:
-	// transport and server errors surface earlier, so this returns nil.
-	assert.Nil(t, estimateCostBusinessError("not-json"))
-	// Missing success field means success.
-	assert.Nil(t, estimateCostBusinessError(`{"price":{}}`))
+	// Malformed responses must not be reported as successful quotes.
+	assert.Error(t, estimateCostBusinessError("not-json"))
+	// Missing success is a protocol error.
+	assert.Error(t, estimateCostBusinessError(`{"price":{}}`))
 }
 
 func TestFilterSupportedPricingApisEdgeShapes(t *testing.T) {

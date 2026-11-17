@@ -6,9 +6,7 @@ import (
 	"testing"
 	"time"
 
-	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/logutil"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/stretchr/testify/assert"
@@ -38,12 +36,12 @@ func TestCallWithThrottlingRetry(t *testing.T) {
 	}
 
 	calls := 0
-	resp, err := invoker.callWithThrottlingRetry(func() (*responses.CommonResponse, error) {
+	resp, err := invoker.callWithThrottlingRetry(func() (*legacyapi.Response, error) {
 		calls++
 		if calls == 1 {
 			return nil, newThrottlingServerError("Throttling.User", "50")
 		}
-		return &responses.CommonResponse{}, nil
+		return &legacyapi.Response{}, nil
 	})
 
 	require.NoError(t, err)
@@ -74,12 +72,12 @@ func TestCallWithThrottlingRetryHiddenByDefault(t *testing.T) {
 	}
 
 	calls := 0
-	_, err := invoker.callWithThrottlingRetry(func() (*responses.CommonResponse, error) {
+	_, err := invoker.callWithThrottlingRetry(func() (*legacyapi.Response, error) {
 		calls++
 		if calls == 1 {
 			return nil, newThrottlingServerError("Throttling.User", "50")
 		}
-		return &responses.CommonResponse{}, nil
+		return &legacyapi.Response{}, nil
 	})
 
 	require.NoError(t, err)
@@ -103,7 +101,7 @@ func TestCallWithThrottlingRetryPrintsEachRetryNotice(t *testing.T) {
 	})
 
 	invoker := &BasicInvoker{
-		request: requests.NewCommonRequest(),
+		request: legacyapi.NewRequest(),
 		throttlingRetryConfig: &throttlingretry.Config{
 			MaxAttempts: 3,
 			MaxDelayMS:  60000,
@@ -116,7 +114,7 @@ func TestCallWithThrottlingRetryPrintsEachRetryNotice(t *testing.T) {
 	}
 	headersByCall := make([]retryHeaders, 0, 3)
 	calls := 0
-	resp, err := invoker.callWithThrottlingRetry(func() (*responses.CommonResponse, error) {
+	resp, err := invoker.callWithThrottlingRetry(func() (*legacyapi.Response, error) {
 		calls++
 		headersByCall = append(headersByCall, retryHeaders{
 			attempts: invoker.request.Headers["x-acs-retry-attempts"],
@@ -128,7 +126,7 @@ func TestCallWithThrottlingRetryPrintsEachRetryNotice(t *testing.T) {
 		case 2:
 			return nil, newThrottlingServerError("Throttling.Api", "200")
 		default:
-			return &responses.CommonResponse{}, nil
+			return &legacyapi.Response{}, nil
 		}
 	})
 
@@ -169,7 +167,7 @@ func TestCallWithThrottlingRetryExhaustedNotice(t *testing.T) {
 	}
 
 	calls := 0
-	_, err := invoker.callWithThrottlingRetry(func() (*responses.CommonResponse, error) {
+	_, err := invoker.callWithThrottlingRetry(func() (*legacyapi.Response, error) {
 		calls++
 		return nil, newThrottlingServerError("Throttling.User", "100")
 	})
@@ -190,7 +188,7 @@ func TestCallWithThrottlingRetryStopsWhenDisabled(t *testing.T) {
 	}
 
 	calls := 0
-	_, err := invoker.callWithThrottlingRetry(func() (*responses.CommonResponse, error) {
+	_, err := invoker.callWithThrottlingRetry(func() (*legacyapi.Response, error) {
 		calls++
 		return nil, newThrottlingServerError("Throttling.User", "100")
 	})
@@ -218,8 +216,8 @@ func TestThrottlingRetryDelayRequiresRetryAfterHeader(t *testing.T) {
 }
 
 func newThrottlingServerError(code string, retryAfter string) error {
-	err := sdkerrors.NewServerError(400, `{"Code":"`+code+`","Message":"too many requests"}`, "")
-	serverErr := err.(*sdkerrors.ServerError)
+	err := legacyapi.NewServerError(400, `{"Code":"`+code+`","Message":"too many requests"}`, "")
+	serverErr := err.(*legacyapi.ServerError)
 	serverErr.RespHeaders = map[string][]string{
 		"x-acs-retry-after": {retryAfter},
 	}
@@ -257,7 +255,7 @@ func TestApplyRetryRequestHeadersEdgeCases(t *testing.T) {
 	invoker.applyRetryRequestHeaders(0, 100)
 	invoker.applyRetryRequestHeaders(1, 100)
 
-	invoker.request = requests.NewCommonRequest()
+	invoker.request = legacyapi.NewRequest()
 	invoker.request.Headers = nil
 	invoker.applyRetryRequestHeaders(2, 250)
 	assert.Equal(t, "2", invoker.request.Headers["x-acs-retry-attempts"])

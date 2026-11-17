@@ -6,6 +6,7 @@ import (
 
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	runtimeredact "github.com/aliyun/aliyun-openapi-runtime/redact"
 )
 
@@ -123,6 +124,7 @@ func buildCliDryRunFromOpenapi(oc *OpenapiContext) *CliDryRunOutput {
 		}
 	}
 
+	out.Endpoint = endpoint.WithSuffix(out.Endpoint)
 	if oc.openapiRequest != nil && oc.openapiRequest.Headers != nil {
 		h := make(map[string]string, len(oc.openapiRequest.Headers))
 		for k, v := range oc.openapiRequest.Headers {

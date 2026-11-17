@@ -26,12 +26,13 @@ func TestGeneratedCommandDefinitionAccessors(t *testing.T) {
 		ProductCode: "ecs", Name: "RunInstances", CmdName: "run-instances", CmdFullName: "ecs run-instances",
 		DescriptionZh: "中文", DescriptionEn: "English", Method: "POST", MultiVersion: true, Deprecated: true,
 		KebabExample: "--name value", CamelExample: "--Name value", Operation: operation, Parameters: []*Argument{parameter},
+		TimeoutMs: 57000,
 	}
 	if message.GetProductCode() != "ecs" || message.GetName() != "RunInstances" || message.GetCmdName() != "run-instances" ||
 		message.GetCmdFullName() != "ecs run-instances" || message.GetDescriptionZh() != "中文" || message.GetDescriptionEn() != "English" ||
 		message.GetMethod() != "POST" || !message.GetMultiVersion() || !message.GetDeprecated() ||
 		message.GetKebabExample() != "--name value" || message.GetCamelExample() != "--Name value" ||
-		message.GetOperation() != operation || len(message.GetParameters()) != 1 {
+		message.GetOperation() != operation || len(message.GetParameters()) != 1 || message.GetTimeoutMs() != 57000 {
 		t.Fatalf("generated getters returned unexpected values: %#v", message)
 	}
 	if message.String() == "" || message.ProtoReflect().Descriptor().FullName() == "" {
@@ -45,7 +46,7 @@ func TestGeneratedCommandDefinitionAccessors(t *testing.T) {
 	var zero *CommandDefinition
 	if zero.GetProductCode() != "" || zero.GetName() != "" || zero.GetCmdName() != "" || zero.GetCmdFullName() != "" ||
 		zero.GetDescriptionZh() != "" || zero.GetDescriptionEn() != "" || zero.GetMethod() != "" || zero.GetMultiVersion() || zero.GetDeprecated() ||
-		zero.GetKebabExample() != "" || zero.GetCamelExample() != "" || zero.GetOperation() != nil || zero.GetParameters() != nil {
+		zero.GetKebabExample() != "" || zero.GetCamelExample() != "" || zero.GetOperation() != nil || zero.GetParameters() != nil || zero.GetTimeoutMs() != 0 {
 		t.Fatal("nil CommandDefinition getters did not return zero values")
 	}
 	if zero.ProtoReflect().Descriptor().FullName() == "" {
@@ -53,7 +54,7 @@ func TestGeneratedCommandDefinitionAccessors(t *testing.T) {
 	}
 
 	message.Reset()
-	if message.GetName() != "" || message.GetOperation() != nil {
+	if message.GetName() != "" || message.GetOperation() != nil || message.GetTimeoutMs() != 0 {
 		t.Fatalf("Reset() left data behind: %#v", message)
 	}
 }

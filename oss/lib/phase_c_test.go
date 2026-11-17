@@ -329,7 +329,7 @@ func TestPhaseCWriterFailureAndRecoveryClassification(t *testing.T) {
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, `<ListAllMyBucketsResult/>`) }))
 	defer server.Close()
-	_, opts, err := parseOSSOptions([]string{"--endpoint", server.URL, "-i", "fake-ak", "-k", "fake-secret"})
+	_, opts, err := parseOSSOptions([]string{"--endpoint", server.URL, "-i", "fake-ak", "-k", "fake-secret"}, "")
 	require.NoError(t, err)
 	lc := ListCommand{command: listCommand.command}
 	require.NoError(t, lc.Init(nil, opts))

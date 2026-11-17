@@ -16,8 +16,8 @@ package openapi
 import (
 	"fmt"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 )
 
 type ForceRpcInvoker struct {
@@ -61,8 +61,8 @@ func (a *ForceRpcInvoker) Prepare(ctx *cli.Context) (err error) {
 	return
 }
 
-func (a *ForceRpcInvoker) Call() (resp *responses.CommonResponse, err error) {
-	return a.callWithThrottlingRetry(func() (*responses.CommonResponse, error) {
-		return a.client.ProcessCommonRequest(a.request)
+func (a *ForceRpcInvoker) Call() (resp *legacyapi.Response, err error) {
+	return a.callWithThrottlingRetry(func() (*legacyapi.Response, error) {
+		return a.client.Send(a.request)
 	})
 }

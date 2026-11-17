@@ -60,6 +60,26 @@ func TestAgentErrorPreservesCompactLocalEnvelope(t *testing.T) {
 	}
 }
 
+func TestAgentErrorWithExitCodePreservesOriginal(t *testing.T) {
+	cause := errors.New("profile not configured")
+	original := NewAgentError(AgentErrorEnvelope{
+		Message: "profile configuration failed",
+		Recovery: AgentErrorRecovery{
+			Action: "check_configuration",
+			Hint:   "Check the selected profile.",
+		},
+	}, cause)
+
+	for _, code := range []int{1, 3} {
+		withCode := original.WithExitCode(code)
+		assert.Equal(t, 2, original.ExitCode())
+		assert.Equal(t, code, withCode.ExitCode())
+		assert.Equal(t, original.Envelope(), withCode.Envelope())
+		assert.ErrorIs(t, withCode, cause)
+		assert.Equal(t, code, withCode.WithSchemaVersion().ExitCode())
+	}
+}
+
 func TestNewAgentErrorRejectsIncompleteRequiredEnvelope(t *testing.T) {
 	valid := AgentErrorEnvelope{
 		Message: "invalid local usage",

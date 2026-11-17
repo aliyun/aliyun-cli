@@ -27,15 +27,19 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cloudsso"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"golang.org/x/term"
 )
 
 var oauthClientMap = map[string]string{
@@ -70,6 +74,11 @@ var hookFileStat = func(fn func(name string) (os.FileInfo, error)) func(name str
 }
 
 var stdin io.Reader = os.Stdin
+
+var configureStdinIsTerminal = func() bool {
+	file, ok := stdin.(*os.File)
+	return ok && term.IsTerminal(int(file.Fd()))
+}
 
 // 为了方便 mock 的函数变量
 var cloudssoGetAccessToken = func(ssoLogin *cloudsso.SsoLogin) (*cloudsso.AccessTokenResponse, error) {
@@ -134,6 +143,9 @@ func NewConfigureCommand() *cli.Command {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
 			}
+			if configureStdinIsTerminal() {
+				printTelemetryNotice(ctx)
+			}
 			profileName, _ := ProfileFlag(ctx.Flags()).GetValue()
 			mode, _ := ModeFlag(ctx.Flags()).GetValue()
 			if mode == "" {
@@ -167,6 +179,12 @@ func NewConfigureCommand() *cli.Command {
 		},
 	}
 
+	c.Flags().Add(&cli.Flag{
+		Name:         "no-browser",
+		AssignedMode: cli.AssignedNone,
+		Short:        i18n.T("Complete OAuth login by pasting the callback URL, without opening a browser", "不打开浏览器，通过粘贴回调 URL 完成 OAuth 登录"),
+	})
+	c.AddSubCommand(NewConfigureSSOCommand())
 	c.AddSubCommand(NewConfigureGetCommand())
 	c.AddSubCommand(NewConfigureSetCommand())
 	c.AddSubCommand(NewConfigureListCommand())
@@ -174,12 +192,19 @@ func NewConfigureCommand() *cli.Command {
 	c.AddSubCommand(NewConfigureSwitchCommand())
 	c.AddSubCommand(NewConfigureSafetyPolicyCommand())
 	c.AddSubCommand(NewConfigureAiModeCommand())
+	c.AddSubCommand(NewConfigureTelemetryCommand())
 	c.AddSubCommand(NewConfigurePluginSettingsCommand())
 	return c
 }
 
 func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 	w := ctx.Stdout()
+	authModeSource := telemetry.AuthModeSourceDefault
+	if modeFlag := ModeFlag(ctx.Flags()); modeFlag != nil && modeFlag.IsAssigned() {
+		if value, _ := modeFlag.GetValue(); strings.TrimSpace(value) != "" {
+			authModeSource = telemetry.AuthModeSourceExplicit
+		}
+	}
 
 	var err error
 	var conf *Configuration
@@ -217,9 +242,17 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 	cp, ok := conf.GetProfile(profileName)
 	if !ok {
 		cp = conf.NewProfile(profileName)
+	} else if authModeSource != telemetry.AuthModeSourceExplicit {
+		authModeSource = telemetry.AuthModeSourceExisting
 	}
 
 	normalizedMode := NormalizeMode(mode)
+	telemetry.SetAuthenticationMode(string(normalizedMode), authModeSource)
+	noBrowser := ctx.Flags().Get("no-browser")
+	manualOAuth := noBrowser != nil && noBrowser.IsAssigned()
+	if manualOAuth && normalizedMode != OAuth {
+		return fmt.Errorf("--no-browser is only supported with --mode OAuth")
+	}
 	cli.Printf(w, "Configuring profile '%s' in '%s' authenticate mode...\n", profileName, normalizedMode)
 
 	if mode != "" {
@@ -256,6 +289,10 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 			configureOIDC(w, &cp)
 		case CloudSSO:
 			cp.Mode = CloudSSO
+			oldTarget := cloudSSOTarget(&cp)
+			if f := SSOSessionFlag(ctx.Flags()); f != nil {
+				cp.SSOSession = f.GetStringOrDefault(cp.SSOSession)
+			}
 			// parameter from command has higher priority, use it directly
 			if CloudSSOSignInUrlFlag(ctx.Flags()).IsAssigned() {
 				cp.CloudSSOSignInUrl, _ = CloudSSOSignInUrlFlag(ctx.Flags()).GetValue()
@@ -266,7 +303,15 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 			if CloudSSOAccessConfigFlag(ctx.Flags()).IsAssigned() {
 				cp.CloudSSOAccessConfig, _ = CloudSSOAccessConfigFlag(ctx.Flags()).GetValue()
 			}
-			err := configureCloudSSO(w, &cp)
+			if oldTarget != cloudSSOTarget(&cp) {
+				clearCloudSSOSTS(&cp)
+			}
+			var err error
+			if cp.SSOSession != "" {
+				err = configureSharedCloudSSO(ctx, w, &cp)
+			} else {
+				err = configureCloudSSO(w, &cp)
+			}
 			if err != nil {
 				return err
 			}
@@ -274,11 +319,15 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 			// only siteType is supported now
 			cp.Mode = OAuth
 			// restart oauth flow
-			err := configureOAuth(w, &cp)
+			flow := oauthStartOauthFlow
+			if manualOAuth {
+				flow = startManualOauthFlow
+			}
+			err := configureOAuthWithFlow(w, &cp, flow)
 			if err != nil {
 				return err
 			}
-			cli.Printf(w, "OAuth configuration completed. The temporary Access Key Id and Access Key Secret have been set in the profile.\n")
+			cli.Printf(w, "OAuth configuration completed. The temporary Access Key Id and Access Key Secret have been set in the profile.\n\n")
 		case BearerToken:
 			cp.Mode = BearerToken
 			err := configureBearerToken(w, &cp)
@@ -334,6 +383,10 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 }
 
 func configureOAuth(w io.Writer, cp *Profile) error {
+	return configureOAuthWithFlow(w, cp, oauthStartOauthFlow)
+}
+
+func configureOAuthWithFlow(w io.Writer, cp *Profile, flow func(io.Writer, *Profile) error) error {
 	var oauthSiteType = cp.OAuthSiteType
 	startChooseSiteType := false
 	if oauthSiteType != "CN" && oauthSiteType != "INTL" {
@@ -360,7 +413,7 @@ func configureOAuth(w io.Writer, cp *Profile) error {
 	}
 	cp.OAuthSiteType = oauthSiteType
 	// start oauth flow
-	err := oauthStartOauthFlow(w, cp)
+	err := flow(w, cp)
 	if err != nil {
 		return err
 	}
@@ -399,7 +452,7 @@ func exchangeFromOAuth(w io.Writer, cp *Profile) error {
 	}
 
 	// 构造请求
-	req, err := http.NewRequest("POST", exchangeUrl, nil)
+	req, err := cloudendpoint.NewRequest("POST", exchangeUrl, nil)
 	if err != nil {
 		return err
 	}
@@ -540,7 +593,7 @@ func tryRefreshOauthToken(w io.Writer, cp *Profile) error {
 	data.Set("grant_type", "refresh_token")
 	data.Set("refresh_token", refreshToken)
 	data.Set("client_id", oauthClientId)
-	req, err := http.NewRequest("POST", tokenUrl, strings.NewReader(data.Encode()))
+	req, err := cloudendpoint.NewRequest("POST", tokenUrl, strings.NewReader(data.Encode()))
 	if err != nil {
 		return err
 	}
@@ -578,20 +631,29 @@ func tryRefreshOauthToken(w io.Writer, cp *Profile) error {
 }
 
 func startOauthFlow(w io.Writer, cp *Profile) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	return startOauthFlowWithContext(ctx, w, cp)
+}
+
+func startOauthFlowWithContext(ctx context.Context, w io.Writer, cp *Profile) error {
 	currentOauthSiteType := cp.OAuthSiteType
 	if currentOauthSiteType != "CN" && currentOauthSiteType != "INTL" {
 		return fmt.Errorf("invalid OAuth site type: %s, only support CN or INTL", currentOauthSiteType)
 	}
 	oauthClientId := oauthClientMap[cp.OAuthSiteType]
-	oauthBaseUrl := oauthBaseUrlMap[cp.OAuthSiteType]
 	signInUrl := signInMap[cp.OAuthSiteType]
 	// start port and listen to callback
 	// port range 12345 - 12349
-	port, err := detectPortUse(12345, 12349)
+	listener, err := listenOAuthCallback(12345, 12349)
 	if err != nil {
 		return err
 	}
-	// start http server
+	defer listener.Close()
+	port := listener.Addr().(*net.TCPAddr).Port
+	// Keep the listener bound until the callback server finishes.
 	redirectUri := fmt.Sprintf("http://127.0.0.1:%s/cli/callback", strconv.Itoa(port))
 	state := util.RandStringBytesMaskImprSrc(16)
 	codeVerifier := generateCodeVerifier()
@@ -602,17 +664,18 @@ func startOauthFlow(w io.Writer, cp *Profile) error {
 	if err != nil {
 		return err
 	}
-	// open browser
-	_ = utilOpenBrowser(oauthUrl)
-	fmt.Println(i18n.T("If the browser does not open automatically, use the following URL to complete the login process:",
-		"如果浏览器没有自动打开，请使用以下URL完成登录过程:").GetMessage())
-	fmt.Println()
-	fmt.Printf("%s: %s\n", i18n.T("SignIn url", "登录URL").GetMessage(), oauthUrl)
-	fmt.Println()
-	fmt.Println(i18n.T("Now you can login to your account with OAuth configuration in the browser.", "现在您可以在浏览器中使用OAuth配置登录您的账户。").GetMessage())
 
-	codeCh := make(chan string)
-	errCh := make(chan error)
+	type callbackResult struct {
+		code string
+		err  error
+	}
+	resultCh := make(chan callbackResult, 1)
+	deliver := func(result callbackResult) {
+		select {
+		case resultCh <- result:
+		default:
+		}
+	}
 
 	// Create a new ServeMux to avoid conflicts with global handlers
 	mux := http.NewServeMux()
@@ -622,13 +685,13 @@ func startOauthFlow(w io.Writer, cp *Profile) error {
 			return
 		}
 		if r.FormValue("state") != state {
-			errCh <- fmt.Errorf("invalid state")
+			deliver(callbackResult{err: fmt.Errorf("invalid state")})
 			http.Error(w, "Invalid state", http.StatusBadRequest)
 			return
 		}
 		code := r.FormValue("code")
 		if code == "" {
-			errCh <- fmt.Errorf("code not found")
+			deliver(callbackResult{err: fmt.Errorf("code not found")})
 			http.Error(w, "Code not found", http.StatusBadRequest)
 			return
 		}
@@ -636,29 +699,45 @@ func startOauthFlow(w io.Writer, cp *Profile) error {
 		if err != nil {
 			return
 		}
-		codeCh <- code
+		deliver(callbackResult{code: code})
 	})
 
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
+		Addr:    listener.Addr().String(),
 		Handler: mux,
 	}
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
+		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			deliver(callbackResult{err: err})
 		}
 	}()
-	// wait for code or error
+	// open browser
+	_ = utilOpenBrowser(oauthUrl)
+	fmt.Println(i18n.T("If the browser does not open automatically, use the following URL to complete the login process:",
+		"如果浏览器没有自动打开，请使用以下URL完成登录过程:").GetMessage())
+	fmt.Println()
+	fmt.Printf("%s: %s\n", i18n.T("SignIn url", "登录URL").GetMessage(), oauthUrl)
+	fmt.Println()
+	fmt.Println(i18n.T("Now you can login to your account with OAuth configuration in the browser.", "现在您可以在浏览器中使用OAuth配置登录您的账户。").GetMessage())
+	fmt.Println(i18n.T(
+		"On a remote machine or a machine without a browser, press Ctrl+C and rerun this command with --no-browser. You can then sign in on another device and paste the complete callback URL into the CLI.",
+		"如果当前是远程机器或没有浏览器，请按 Ctrl+C 取消，然后在原命令后添加 --no-browser 重新运行。您可以在其他设备上登录，再将完整的回调 URL 粘贴到 CLI 中。").GetMessage())
+
+	// wait for code, server error, cancellation, or timeout
 	var code string
 	select {
-	case code = <-codeCh:
-	case err = <-errCh:
+	case result := <-resultCh:
+		code, err = result.code, result.err
+	case <-ctx.Done():
+		err = fmt.Errorf("waiting for OAuth callback at %s: %w", redirectUri, ctx.Err())
 	}
 	// shutdown server
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if srv != nil {
-		_ = srv.Shutdown(shutdownCtx)
+		if shutdownErr := srv.Shutdown(shutdownCtx); shutdownErr != nil {
+			_ = srv.Close()
+		}
 	}
 	if err != nil {
 		return err
@@ -666,6 +745,12 @@ func startOauthFlow(w io.Writer, cp *Profile) error {
 	if code == "" {
 		return fmt.Errorf("code not found")
 	}
+	return exchangeOAuthCode(ctx, cp, code, codeVerifier, redirectUri)
+}
+
+func exchangeOAuthCode(ctx context.Context, cp *Profile, code, codeVerifier, redirectUri string) error {
+	oauthClientId := oauthClientMap[cp.OAuthSiteType]
+	oauthBaseUrl := oauthBaseUrlMap[cp.OAuthSiteType]
 	// exchange code for token with PKCE
 	tokenUrl := fmt.Sprintf("%s/v1/token", oauthBaseUrl)
 	data := url.Values{}
@@ -674,7 +759,7 @@ func startOauthFlow(w io.Writer, cp *Profile) error {
 	data.Set("client_id", oauthClientId)
 	data.Set("redirect_uri", redirectUri)
 	data.Set("code_verifier", codeVerifier)
-	req, err := http.NewRequest("POST", tokenUrl, strings.NewReader(data.Encode()))
+	req, err := cloudendpoint.NewRequestWithContext(ctx, "POST", tokenUrl, strings.NewReader(data.Encode()))
 	if err != nil {
 		return err
 	}
@@ -684,6 +769,7 @@ func startOauthFlow(w io.Writer, cp *Profile) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 	var tokenRespErr struct {
 		Error            string `json:"error"`
 		ErrorDescription string `json:"error_description"`
@@ -732,15 +818,14 @@ func generateCodeChallenge(codeVerifier string) string {
 	return base64.RawURLEncoding.EncodeToString(h[:])
 }
 
-func detectPortUse(start int, end int) (int, error) {
+func listenOAuthCallback(start int, end int) (net.Listener, error) {
 	for port := start; port <= end; port++ {
-		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		ln, err := net.Listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 		if err == nil {
-			_ = ln.Close()
-			return port, nil
+			return ln, nil
 		}
 	}
-	return 0, fmt.Errorf("no available port found in range %d-%d", start, end)
+	return nil, fmt.Errorf("no available OAuth callback port on 127.0.0.1 in range %d-%d", start, end)
 }
 
 func configureBearerToken(w io.Writer, cp *Profile) error {
@@ -862,8 +947,14 @@ func configureCredentialsURI(w io.Writer, cp *Profile) error {
 func configureOIDC(w io.Writer, cp *Profile) error {
 	cli.Printf(w, "OIDC Provider ARN [%s]: ", cp.OIDCProviderARN)
 	cp.OIDCProviderARN = ReadInput(cp.OIDCProviderARN)
-	cli.Printf(w, "OIDC Token File [%s]: ", cp.OIDCTokenFile)
-	cp.OIDCTokenFile = ReadInput(cp.OIDCTokenFile)
+	previousFile := cp.OIDCTokenFile
+	cli.Printf(w, "OIDC Token File [%s]: ", previousFile)
+	cp.OIDCTokenFile = ReadInput(previousFile)
+	// Enter keeps the saved file and token. Typing a file replaces a saved
+	// token, so that file is the source that gets used.
+	if cp.OIDCTokenFile != previousFile {
+		cp.OIDCToken = ""
+	}
 	cli.Printf(w, "RAM Role ARN [%s]: ", cp.RamRoleArn)
 	cp.RamRoleArn = ReadInput(cp.RamRoleArn)
 	cli.Printf(w, "Role Session Name [%s]: ", cp.RoleSessionName)
@@ -906,8 +997,15 @@ func configureCloudSSO(w io.Writer, cp *Profile) error {
 	}
 	cp.AccessToken = accessToken.AccessToken
 	cp.CloudSSOAccessTokenExpire = utilGetCurrentUnixTime() + int64(accessToken.ExpiresIn)
+	return configureCloudSSOTarget(w, cp, httpClient)
+}
+
+func configureCloudSSOTarget(w io.Writer, cp *Profile, httpClient *http.Client) error {
 	// parse base url
-	baseUrl, err := url.Parse(ssoLogin.SignInUrl)
+	baseUrl, err := url.Parse(cp.CloudSSOSignInUrl)
+	if err != nil {
+		return err
+	}
 	// list account for choose
 	userParameter := cloudsso.ListUserParameter{
 		AccessToken: cp.AccessToken,
@@ -1043,6 +1141,14 @@ func configureCloudSSO(w io.Writer, cp *Profile) error {
 	unixTime := parsedTime.Unix()
 	cp.StsExpiration = unixTime - 5
 	return nil
+}
+
+func printTelemetryNotice(ctx *cli.Context) {
+	message := i18n.T(
+		"Alibaba Cloud CLI telemetry is enabled by default to improve product reliability and usability. It does not collect credentials, account identifiers, command argument values, or business payloads. To disable it, run \"aliyun configure telemetry disable\" or set ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE=1.",
+		"阿里云 CLI 遥测默认开启，用于改进产品稳定性和易用性。遥测不会收集凭据、账号标识、命令参数值或业务数据内容。如需关闭，请运行“aliyun configure telemetry disable”或设置 ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE=1。",
+	).GetMessage()
+	cli.Printf(ctx.Stdout(), "\n%s\n", message)
 }
 
 func ReadInput(defaultValue string) string {

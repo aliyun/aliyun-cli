@@ -14,9 +14,8 @@
 package openapi
 
 import (
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	jmespath "github.com/jmespath/go-jmespath"
 	"github.com/stretchr/testify/assert"
 
@@ -109,13 +108,12 @@ func TestPager_CallWith(t *testing.T) {
 	assert.Equal(t, "PageSize", pager.PageSizeFlag)
 	assert.Equal(t, 0, pager.totalCount)
 
-	client, err := sdk.NewClientWithAccessKey("regionid", "accesskeyid", "accesskeysecret")
-	assert.Nil(t, err)
+	client := legacyapi.NewClient("regionid", "accesskeyid", "accesskeysecret", "")
 
 	invoker := &RpcInvoker{
 		BasicInvoker: &BasicInvoker{
 			client:  client,
-			request: requests.NewCommonRequest(),
+			request: legacyapi.NewRequest(),
 		},
 	}
 	str, err := pager.CallWith(invoker)
@@ -137,7 +135,7 @@ func TestPager_NextToken(t *testing.T) {
 	assert.NotNil(t, pager)
 	assert.Nil(t, pager.FeedResponse(pagerTestJsonNextToken1))
 	assert.True(t, pager.HasMore())
-	request := requests.NewCommonRequest()
+	request := legacyapi.NewRequest()
 	pager.MoveNextPage(request)
 	assert.Equal(t, "7a758b45874db76a0147eb118b6f597f2df87e458f7fbf48e0b5e8707e68181f", request.QueryParams["NextToken"])
 	assert.Nil(t, pager.FeedResponse(pagerTestJsonNextToken2))
@@ -211,7 +209,7 @@ func TestPager_FeedResponse(t *testing.T) {
 }
 
 func TestPager_MoveNextPage(t *testing.T) {
-	request := requests.NewCommonRequest()
+	request := legacyapi.NewRequest()
 	pager := Pager{
 		collectionPath: "",
 		totalCount:     0,

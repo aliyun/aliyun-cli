@@ -17,12 +17,12 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 )
 
@@ -258,7 +258,7 @@ func TestParseCustomUserAgentSegments(t *testing.T) {
 }
 
 func TestBuildDryRunInvokeMeta(t *testing.T) {
-	req := requests.NewCommonRequest()
+	req := legacyapi.NewRequest()
 	req.Product = "ecs"
 	req.Version = "2014-05-26"
 	req.RegionId = "cn-hangzhou"
@@ -277,7 +277,7 @@ func TestBuildDryRunInvokeMeta(t *testing.T) {
 
 	// Test with unknown product - should fallback to METHOD/path format
 	rest2 := &RestfulInvoker{
-		BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()},
+		BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()},
 		method:       "GET",
 		path:         "/instances",
 		api:          nil,

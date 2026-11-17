@@ -27,9 +27,10 @@ import (
 	"testing"
 
 	"github.com/alibabacloud-go/tea/tea"
-	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
+	"github.com/aliyun/aliyun-cli/v3/mcpproxy"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
@@ -46,6 +47,52 @@ func requireAgentEnvelope(t *testing.T, err error, args []string, validator Reco
 	require.ErrorAs(t, normalized, &agentErr)
 	assert.ErrorIs(t, agentErr, err)
 	return agentErr.Envelope()
+}
+
+func TestNormalizeMCPAuthenticationError(t *testing.T) {
+	cmd := mcpproxy.NewMCPProxyCommand()
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.EnterCommand(cmd)
+	ctx.Flags().Get("skip-mcp-oauth").SetAssigned(true)
+	ctx.Flags().Get("skip-mcp-oauth").SetValue("invalid")
+	cause := cmd.Run(ctx, nil)
+	require.EqualError(t, cause, "--skip-mcp-oauth must be true or false")
+
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "direct", err: cause},
+		{name: "wrapped", err: fmt.Errorf("proxy startup failed: %w", cause)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := normalizeAgentError(tc.err, []string{"utils", "mcp-proxy"})
+			var agentErr *cli.AgentError
+			require.ErrorAs(t, got, &agentErr)
+			require.ErrorIs(t, agentErr, cause)
+			require.ErrorIs(t, agentErr, tc.err)
+			require.Equal(t, 1, agentErr.ExitCode())
+			require.Equal(t, cli.AgentErrorEnvelope{
+				Message: "--skip-mcp-oauth must be true or false",
+				Recovery: cli.AgentErrorRecovery{
+					Action: "inspect_command_help",
+					Hint:   "Pass --skip-mcp-oauth without a value, or set it to true or false. Use `aliyun utils mcp-proxy --help` to inspect the command options.",
+				},
+			}, agentErr.Envelope())
+		})
+	}
+}
+
+func TestNormalizeIncompleteMCPAuthenticationError(t *testing.T) {
+	for name, cause := range map[string]*mcpproxy.AuthenticationError{
+		"missing message": {Action: "check_configuration", Hint: "Check the profile."},
+		"missing action":  {Message: "authentication failed", Hint: "Check the profile."},
+		"missing hint":    {Message: "authentication failed", Action: "check_configuration"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.Same(t, cause, normalizeAgentError(cause, []string{"utils", "mcp-proxy"}))
+		})
+	}
 }
 
 func TestKebabProfileCaseMismatchSuggestsLowercaseProfile(t *testing.T) {
@@ -714,8 +761,6 @@ func TestNormalizeAgentErrorStrictlyBypassesExcludedErrors(t *testing.T) {
 		name string
 		err  error
 	}{
-		{name: "runtime credential", err: &engine.CredentialError{Err: errors.New("profile not configured")}},
-		{name: "host credential", err: &credentialConfigurationError{Err: errors.New("profile not configured")}},
 		{name: "network", err: &net.DNSError{Err: "temporary failure", Name: "ecs.aliyuncs.com", IsTemporary: true}},
 		{name: "external plugin", err: &externalPluginError{err: errors.New("plugin process failed")}},
 		{name: "postprocessing", err: errors.New("invalid --cli-query expression")},
@@ -730,6 +775,90 @@ func TestNormalizeAgentErrorStrictlyBypassesExcludedErrors(t *testing.T) {
 			var agentErr *cli.AgentError
 			assert.False(t, errors.As(got, &agentErr))
 		})
+	}
+}
+
+func TestNormalizeAgentErrorProfileConfiguration(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+		err  error
+		code int
+	}{
+		{"profile with tip", []string{"ecs", "DescribeInstances"}, cli.NewErrorWithTip(&credentialConfigurationError{Err: errors.New("unknown profile missing")}, "configure it"), 3},
+		{"profile without tip", []string{"ecs", "describe-instances"}, &credentialConfigurationError{Err: errors.New("credential-secret")}, 1},
+		{"runtime profile", []string{"ecs", "describe-instances"}, &engine.CredentialError{Err: errors.New("credential-secret")}, 1},
+		{"configure validation", []string{"configure", "set"}, errors.New("invalid region credential-secret"), 1},
+		{"configure leading profile", []string{"--profile", "default", "configure", "set"}, errors.New("invalid region credential-secret"), 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := normalizeAgentError(test.err, test.args)
+			var agentErr *cli.AgentError
+			require.ErrorAs(t, got, &agentErr)
+			assert.ErrorIs(t, got, test.err)
+			assert.Equal(t, test.code, agentErr.ExitCode())
+			assert.Equal(t, test.code, agentErr.WithSchemaVersion().ExitCode())
+			assert.Empty(t, agentErr.Envelope().ErrorCode)
+			assert.Equal(t, "check_configuration", agentErr.Envelope().Recovery.Action)
+			assert.Equal(t, "aliyun configure", agentErr.Envelope().Recovery.Command)
+			assert.NotContains(t, agentErr.Error(), "credential-secret")
+		})
+	}
+}
+
+func TestProfileConfigurationErrorOutput(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+		text string
+	}{
+		{"legacy profile", []string{"ecs", "DescribeInstances", "--profile", "missing"}, "unknown profile missing"},
+		{"kebab profile", []string{"ecs", "describe-instances", "--biz-region-id", "cn-hangzhou", "--profile", "missing"}, "resolve credential: unknown profile missing"},
+		{"configure validation", []string{"configure", "set", "--region", "#bad"}, "fail to set configuration: invalid region #bad"},
+		{"configure leading profile", []string{"--profile", "default", "configure", "set", "--region", "#bad"}, "fail to set configuration: invalid region #bad"},
+		{"configure profile", []string{"configure", "get", "--profile", "missing"}, "profile missing not found"},
+	} {
+		for _, aiMode := range []string{"false", "true"} {
+			t.Run(test.name+"/ai="+aiMode, func(t *testing.T) {
+				testHome := t.TempDir()
+				defer setTestHomeDir(t, testHome)()
+				writeMinimalConfigJSON(t, testHome)
+				t.Setenv(aimode.EnvAIMode, aiMode)
+				t.Setenv("NO_COLOR", "1")
+				stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+				cmd := &cli.Command{Name: "aliyun", EnableUnknownFlag: true}
+				config.AddFlags(cmd.Flags())
+				AddFlags(cmd.Flags())
+				commando := NewCommando(stdout, config.Profile{Language: "en"})
+				commando.InitWithCommand(cmd)
+				cmd.AddSubCommand(config.NewConfigureCommand())
+				ctx := cli.NewCommandContext(stdout, stderr)
+				ctx.EnterCommand(cmd)
+				cli.DisableExitCode()
+				defer cli.EnableExitCode()
+				originalArgs := os.Args
+				os.Args = append([]string{"aliyun"}, test.args...)
+				defer func() { os.Args = originalArgs }()
+				cmd.Execute(ctx, test.args)
+
+				assert.Empty(t, stdout.String())
+				if aiMode == "false" {
+					assert.Contains(t, stderr.String(), "ERROR: "+test.text)
+					assert.False(t, json.Valid(stderr.Bytes()))
+					return
+				}
+				var envelope cli.AgentErrorEnvelope
+				require.NoError(t, json.Unmarshal(stderr.Bytes(), &envelope))
+				assert.Equal(t, "v1", envelope.SchemaVersion)
+				assert.Empty(t, envelope.ErrorCode)
+				var fields map[string]json.RawMessage
+				require.NoError(t, json.Unmarshal(stderr.Bytes(), &fields))
+				assert.NotContains(t, fields, "error_code")
+				assert.Equal(t, "aliyun configure", envelope.Recovery.Command)
+				assert.Equal(t, 1, strings.Count(stderr.String(), "\n"))
+				assert.NotContains(t, stderr.String(), "\x1b[")
+			})
+		}
 	}
 }
 
@@ -768,7 +897,7 @@ func TestNormalizeAgentErrorServerErrorsShareOneEnvelope(t *testing.T) {
 	}{
 		{
 			name:          "old SDK server keeps request id",
-			err:           sdkerrors.NewServerError(429, serverBody, ""),
+			err:           legacyapi.NewServerError(429, serverBody, ""),
 			wantMessage:   "slow down",
 			wantCode:      "Throttling.User",
 			wantStatus:    429,
@@ -920,8 +1049,8 @@ func TestServerAgentErrorFallsBackToActionHelpWithoutCode(t *testing.T) {
 
 func TestNormalizeAgentErrorServerErrorKeepsTipPath(t *testing.T) {
 	tipped := cli.NewErrorWithTip(
-		sdkerrors.NewServerError(400, `{"Code":"PricingNotSupported","Message":"no pricing"}`, ""),
-		"this OpenAPI either incurs no cost or has no pricing mapping registered yet",
+		legacyapi.NewServerError(400, `{"Code":"PricingNotSupported","Message":"no pricing"}`, ""),
+		"no pricing mapping is registered for this OpenAPI yet, so it cannot be quoted; this does not mean the call is free — an API confirmed to be free is reported as cost-irrelevant instead",
 	)
 	got := normalizeAgentErrorWithSearch(tipped, []string{"ecs", "describe-instances"}, nil)
 	assert.Same(t, tipped, got)
@@ -979,7 +1108,7 @@ func TestSanitizeNetworkTransportErrorStripsSignedURL(t *testing.T) {
 
 	t.Run("url.Error wrapped by retry-exhausted ClientError", func(t *testing.T) {
 		inner := &url.Error{Op: "Post", URL: signedURL, Err: errors.New("connection refused")}
-		clientErr := sdkerrors.NewClientError("SDK.TimeoutError", "timeout", inner)
+		clientErr := legacyapi.NewClientError("SDK.TimeoutError", "timeout", inner)
 		sanitized := sanitizeNetworkTransportError(clientErr)
 		msg := sanitized.Error()
 		assert.Contains(t, msg, "connection refused")

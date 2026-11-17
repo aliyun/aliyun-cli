@@ -40,6 +40,9 @@ func (e *LegacyDocRequiredError) Error() string {
 }
 
 func (*LegacyDocRequiredError) AIRecoveryEligible() {}
+func (*LegacyDocRequiredError) LocalErrorCode() string {
+	return "MISSING_REQUIRED_PARAMETER"
+}
 
 func (e *ConstraintViolationError) Error() string {
 	switch e.Constraint {
@@ -59,6 +62,8 @@ func (e *ConstraintViolationError) Error() string {
 		return fmt.Sprintf("--%s value %q violates its schema constraint", e.Flag, e.Value)
 	}
 }
+
+func (*ConstraintViolationError) LocalErrorCode() string { return "INVALID_ARGUMENT" }
 
 func legacyAIModeEnabled(ctx *cli.Context) bool {
 	if ctx == nil {
@@ -159,6 +164,14 @@ func validateLegacyDocRequiredNode(
 	missing map[string]bool,
 ) {
 	if parameter == nil {
+		return
+	}
+	// JSON parameters are passed as a single parent value. Their schema children
+	// describe help content, not required indexed CLI flags.
+	if parameter.IsJSONEncoded() {
+		if parameter.DocRequired() && !nonEmpty[path] {
+			missing[path] = true
+		}
 		return
 	}
 	// Keep the previously accepted parent-value form unchanged. Indexed flat

@@ -18,6 +18,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 type Context struct {
@@ -47,7 +48,7 @@ var (
 	runtimeGOOSFunc      = func() string { return runtime.GOOS }
 	runtimeGOARCHFunc    = func() string { return runtime.GOARCH }
 	execCommandFunc      = exec.Command
-	httpGetFunc          = http.Get
+	httpGetFunc          = cloudendpoint.HTTPGet
 	timeNowFunc          = func() time.Time { return time.Now() }
 	osSymlinkFunc        = os.Symlink
 	ioCopyFunc           = io.Copy
@@ -141,7 +142,7 @@ func (c *Context) latestVersionURL() string {
 }
 
 func (c *Context) GetLatestVersion() (string, error) {
-	resp, err := httpGetFunc(c.latestVersionURL())
+	resp, err := httpGetFunc(cloudendpoint.WithSuffix(c.latestVersionURL()))
 	if err != nil {
 		return "", fmt.Errorf("GET latest: %w", err)
 	}
@@ -268,7 +269,7 @@ func (c *Context) SaveLocalVersion() error {
 }
 
 func httpGetToFile(url, dest string) error {
-	resp, err := httpGetFunc(url)
+	resp, err := httpGetFunc(cloudendpoint.WithSuffix(url))
 	if err != nil {
 		return fmt.Errorf("GET %s: %w", url, err)
 	}
@@ -288,7 +289,7 @@ func httpGetToFile(url, dest string) error {
 }
 
 func fetchExpectedSha(url string) (string, error) {
-	resp, err := httpGetFunc(url)
+	resp, err := httpGetFunc(cloudendpoint.WithSuffix(url))
 	if err != nil {
 		return "", fmt.Errorf("GET %s: %w", url, err)
 	}
@@ -606,7 +607,7 @@ func (c *Context) RemoveFlagsForMainCli(args []string) []string {
 func (c *Context) Execute(childArgs []string) error {
 	http.DefaultClient.CloseIdleConnections()
 
-	cmd := execCommandFunc(c.execFilePath, childArgs...)
+	cmd := execCommandFunc(c.execFilePath, cloudendpoint.WithSuffixArgs(childArgs)...)
 	cmd.Env = mergeEnv(os.Environ(), c.envMap)
 	cmd.Stdout = c.originCtx.Stdout()
 	cmd.Stderr = c.originCtx.Stderr()

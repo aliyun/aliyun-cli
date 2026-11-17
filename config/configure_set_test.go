@@ -263,6 +263,65 @@ func TestDoConfigureSetWithMock(t *testing.T) {
 	assert.Empty(t, stdout.String())
 }
 
+func TestDoConfigureSet_OIDCSourceReplacesTheOther(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	AddFlags(ctx.Flags())
+
+	originhook := hookLoadOrCreateConfiguration
+	originhookSave := hookSaveConfigurationWithContext
+	defer func() {
+		hookLoadOrCreateConfiguration = originhook
+		hookSaveConfigurationWithContext = originhookSave
+	}()
+
+	var savedProfile Profile
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
+			p, _ := config.GetProfile(config.CurrentProfile)
+			savedProfile = p
+			return nil
+		}
+	}
+	load := func(token, file string) {
+		hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+			return func(path string) (*Configuration, error) {
+				return &Configuration{
+					CurrentProfile: "default",
+					Profiles: []Profile{{
+						Name:            "default",
+						Mode:            OIDC,
+						RegionId:        "cn-hangzhou",
+						OIDCProviderARN: "acs:ram::123456789:oidc-provider/test",
+						OIDCToken:       token,
+						OIDCTokenFile:   file,
+						RamRoleArn:      "acs:ram::123456789:role/test",
+						RoleSessionName: "ack-session",
+					}},
+				}, nil
+			}
+		}
+	}
+
+	load("expired-saved-token", "/saved/token")
+	fileFlag := OIDCTokenFileFlag(ctx.Flags())
+	fileFlag.SetAssigned(true)
+	fileFlag.SetValue("/path/to/fresh-token")
+	assert.NoError(t, doConfigureSet(ctx))
+	assert.Empty(t, savedProfile.OIDCToken)
+	assert.Equal(t, "/path/to/fresh-token", savedProfile.OIDCTokenFile)
+
+	fileFlag.SetAssigned(false)
+	load("/keep-token", "/saved/token")
+	tokenFlag := OIDCTokenFlag(ctx.Flags())
+	tokenFlag.SetAssigned(true)
+	tokenFlag.SetValue("fresh-token-value")
+	assert.NoError(t, doConfigureSet(ctx))
+	assert.Equal(t, "fresh-token-value", savedProfile.OIDCToken)
+	assert.Empty(t, savedProfile.OIDCTokenFile)
+}
+
 func TestDoConfigureSet_ExternalAccountType(t *testing.T) {
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)

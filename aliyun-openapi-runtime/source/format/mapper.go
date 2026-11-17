@@ -29,6 +29,7 @@ import (
 // Endpoints are NOT set here — they live at the product level in the canonical layout and are injected by the Source after decoding.
 func schemaToAPI(def *crschema.CommandDefinition) *meta.API {
 	api := &meta.API{
+		TimeoutMS:    def.TimeoutMS,
 		Name:         def.Name,
 		CmdName:      def.CmdName,
 		CmdFullName:  def.CmdFullName,

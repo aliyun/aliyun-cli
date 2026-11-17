@@ -211,3 +211,27 @@ func TestLegacyBodyFieldsAndProtocolDefaults(t *testing.T) {
 		t.Fatal("V1 projection must suppress canonical body fields")
 	}
 }
+
+func TestLegacyParameterViewIsJSONEncoded(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		view *LegacyParameterView
+		want bool
+	}{
+		{"canonical JSON array", NewCanonicalView(&Parameter{Type: "array", ParamStyle: "json"}), true},
+		{"canonical JSON object", NewCanonicalView(&Parameter{Type: "object", ParamStyle: "json"}), true},
+		{"canonical repeat list", NewCanonicalView(&Parameter{Type: "array", ParamStyle: "repeatList"}), false},
+		{"canonical flat array", NewCanonicalView(&Parameter{Type: "array", ParamStyle: "flat"}), false},
+		{"canonical scalar", NewCanonicalView(&Parameter{Type: "string"}), false},
+		{"field", NewFieldView(&Field{Type: "array"}, "query"), false},
+		{"body", NewBodyView(&V1Parameter{Type: "array", ParamStyle: "json"}), false},
+		{"v1", NewV1View(&V1Parameter{Type: "string"}), false},
+		{"unknown source", &LegacyParameterView{source: LegacyParameterSource(99)}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.view.IsJSONEncoded(); got != tc.want {
+				t.Fatalf("IsJSONEncoded() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

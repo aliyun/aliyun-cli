@@ -18,9 +18,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 )
 
 type RpcInvoker struct {
@@ -37,6 +37,7 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 	request.ApiName = api.Name
 	request.Scheme = api.GetProtocol()
 	request.Method = api.GetMethod()
+	a.applyMetadataTimeout(api)
 
 	// if `--insecure` assigned, use http
 	if _, ok := InsecureFlag(ctx.Flags()).GetValue(); ok {
@@ -119,9 +120,9 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 	return nil
 }
 
-func (a *RpcInvoker) Call() (*responses.CommonResponse, error) {
-	return a.callWithThrottlingRetry(func() (*responses.CommonResponse, error) {
-		return a.client.ProcessCommonRequest(a.request)
+func (a *RpcInvoker) Call() (*legacyapi.Response, error) {
+	return a.callWithThrottlingRetry(func() (*legacyapi.Response, error) {
+		return a.client.Send(a.request)
 	})
 }
 

@@ -10,6 +10,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 )
 
 var (
@@ -219,6 +220,7 @@ func (c *Commando) delegateInstalledPluginHelp(ctx *cli.Context, args []string) 
 		// --help` reports "unknown command" for a command that runs.
 		return false, nil
 	}
+	telemetry.SetPluginRoute(local)
 	ok, err := goPluginHelpDispatch(product, pluginArgs, ctx)
 	if err != nil {
 		return true, &externalPluginError{err: err}
@@ -476,6 +478,9 @@ func (c *Commando) resolveParsedHelpTarget(ctx *cli.Context, args []string) (Hel
 }
 
 func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiMode bool) error {
+	if target.Product != "" && target.CommandStyle == CommandStyleCamel {
+		telemetry.SetOpenAPILegacyRoute()
+	}
 	if c.library == nil || c.library.helpRepo == nil {
 		return fmt.Errorf("canonical Help is unavailable: metadata repository is unavailable")
 	}
@@ -484,6 +489,9 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 	}
 	c.applyHostHelpLanguage(ctx)
 	service := newMachineHelpService(c.helpRepositoryForStyle(string(target.CommandStyle)))
+	if target.Level == HelpLevelAction || target.Level == HelpLevelParameter {
+		service.onCommandResolved = telemetry.SetResolvedMetaCommand
+	}
 	query := helpFlagValue(ctx, QueryFlagName, "")
 	jsonOutput := aiMode || target.Output == HelpOutputJSON || query != ""
 	opts := helpOptions{
@@ -571,10 +579,16 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 	if err != nil {
 		var structured *machineHelpError
 		if errors.As(err, &structured) {
+			adapted := adaptMachineHelpTargetError(target, structured, c.library)
 			if jsonOutput && !aiMode {
+				// Keep the JSON document while exposing the same typed cause as
+				// text Help to completion observers and error classifiers.
+				if adapted != structured && structured.cause == nil {
+					structured.cause = adapted
+				}
 				return structured
 			}
-			return adaptMachineHelpTargetError(target, structured, c.library)
+			return adapted
 		}
 		return err
 	}

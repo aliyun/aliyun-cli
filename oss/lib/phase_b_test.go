@@ -21,14 +21,14 @@ func TestPhaseBReturningParser(t *testing.T) {
 		{"ls", "--unknown"}, {"ls", "--marker"}, {"ls", "--marker", "--recursive"},
 		{"ls", "--limited-num=invalid"}, {"ls", "--recursive=true"}, {"hash", "--type=invalid"},
 	} {
-		_, _, err := parseOSSOptions(tokens)
+		_, _, err := parseOSSOptions(tokens, "")
 		require.Error(t, err, "%v", tokens)
 	}
 	for _, tokens := range [][]string{
 		{"cp", "--exclude", "*", "--include", "*.txt", "-r", "src", "oss://bucket"},
 		{"cp", "--exclude=*", "--include=*.txt", "src", "-r", "oss://bucket"},
 	} {
-		args, options, err := parseOSSOptions(tokens)
+		args, options, err := parseOSSOptions(tokens, "")
 		require.NoError(t, err)
 		assert.Equal(t, []string{"cp", "src", "oss://bucket"}, args)
 		recursive, err := GetBool(OptionRecursion, options)
@@ -40,15 +40,15 @@ func TestPhaseBReturningParser(t *testing.T) {
 		assert.Equal(t, "--exclude", filters[0].name)
 		assert.Equal(t, "--include", filters[1].name)
 	}
-	args, options, err := parseOSSOptions([]string{"hash", "--", "--profile", "-file"})
+	args, options, err := parseOSSOptions([]string{"hash", "--", "--profile", "-file"}, "")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"hash", "--profile", "-file"}, args)
 	assert.Equal(t, "", *options[OptionRegion].(*string))
-	_, options, err = parseOSSOptions([]string{"ls", "--marker=first", "--marker=", "--region", "cn-hangzhou", "--region=cn-beijing"})
+	_, options, err = parseOSSOptions([]string{"ls", "--marker=first", "--marker=", "--region", "cn-hangzhou", "--region=cn-beijing"}, "")
 	require.NoError(t, err)
 	assert.Equal(t, "", *options[OptionMarker].(*string))
 	assert.Equal(t, "cn-beijing", *options[OptionRegion].(*string))
-	_, options, err = parseOSSOptions([]string{"ls"})
+	_, options, err = parseOSSOptions([]string{"ls"}, "")
 	require.NoError(t, err)
 	assert.Equal(t, "", *options[OptionRegion].(*string))
 }

@@ -4,7 +4,7 @@
 
 ## MCP 代理
 
-MCP 代理通过一个本地入口暴露已发现的阿里云 API MCP Server，并负责访问上游服务所需的 OAuth 流程。
+MCP 代理通过一个本地入口暴露已发现的阿里云 API MCP Server，默认使用 MCP OAuth。添加 `--skip-mcp-oauth` 可使用 CLI 配置中的凭据进行认证。
 
 使用公开命令路径启动：
 
@@ -12,19 +12,34 @@ MCP 代理通过一个本地入口暴露已发现的阿里云 API MCP Server，�
 aliyun utils mcp-proxy --region-type CN --port 8088
 ```
 
-默认配置如下：
+MCP 代理支持本节列出的参数，默认值如下：
 
 | 参数 | 默认值 | 含义 |
 | --- | --- | --- |
 | `--host` | `127.0.0.1` | 本地监听地址 |
 | `--port` | `8088` | 本地监听端口 |
 | `--region-type` | `CN` | Endpoint 类型，可选 `CN` 或 `INTL` |
+| `--skip-mcp-oauth` | `false` | 跳过 MCP OAuth，使用 CLI 配置中的凭据认证；不带值时为 `true` |
 | `--scope` | `/acs/mcp-server` | OAuth scope |
 | `--no-browser` | 关闭 | 启用后不自动打开浏览器，改为手工输入授权码 |
 | `--oauth-app-name` | 空 | 按名称复用已有 OAuth 应用 |
 | `--upstream-url` | 空 | 覆盖配置中的上游 MCP 地址 |
 
 启动后，CLI 会输出已发现 Server 对应的本地 MCP 和 SSE 地址。MCP 客户端应使用输出的地址，不要根据 Server 名称自行拼接路径。
+
+### 使用 CLI 凭据跳过 MCP OAuth
+
+先在 CLI 中配置凭据，再添加 `--skip-mcp-oauth`：
+
+```sh
+aliyun utils mcp-proxy --skip-mcp-oauth
+```
+
+使用 `--skip-mcp-oauth` 时，暂不支持 `BearerToken` 和 `Anonymous` 凭据。
+
+使用 CLI 凭据认证时，请为对应的 RAM 身份授予 `AliyunOpenAPIMCPServerStaticCredentialAccess`，以及业务 API 和 MCP Server 发现所需权限。
+
+手动配置的 STS 过期后需更新配置。共享 CloudSSO session 过期后，执行 `aliyun configure sso login --sso-session <name>` 重新登录，详见 [CloudSSO 配置](configuration.md#cloudsso)。
 
 ### 访问控制
 

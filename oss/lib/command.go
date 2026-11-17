@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
@@ -294,7 +295,11 @@ func (cmd *Command) formatOption(option Option) string {
 // OSS common function
 // get oss client according to bucket(if bucket not empty)
 func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
+	if err := cloudendpoint.Validate(); err != nil {
+		return nil, err
+	}
 	endpoint, isCname := cmd.getEndpoint(bucket)
+	endpoint = cloudendpoint.WithSuffix(endpoint)
 	accessKeyID, _ := GetString(OptionAccessKeyID, cmd.options)
 	accessKeySecret, _ := GetString(OptionAccessKeySecret, cmd.options)
 	stsToken, _ := GetString(OptionSTSToken, cmd.options)

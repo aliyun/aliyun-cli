@@ -16,10 +16,14 @@ package config
 
 import (
 	"encoding/json"
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
+	"os"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,18 +50,116 @@ func TestConfigureSafetyPolicy_Show_Default(t *testing.T) {
 	assert.Empty(t, p.Rules)
 }
 
-func TestConfigureSafetyPolicy_Show_UsesEffectivePolicy(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, safety.SavePolicy(dir, &safety.Policy{Enabled: true,
-		Rules: []safety.Rule{{Pattern: "ecs:Delete*", Action: safety.ActionDeny}}}))
-	t.Setenv(safety.EnvSafetyPolicyEnabled, "false")
-	ctx, w := testAiModeContext(t, dir)
-	sub := enterSafetyPolicySub(t, ctx, "show")
-	require.NoError(t, sub.Run(ctx, []string{}))
-	var p safety.Policy
-	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(w.String())), &p))
-	assert.False(t, p.Enabled)
-	assert.Len(t, p.Rules, 1)
+func TestConfigureSafetyPolicy_Display_UsesEffectivePolicyWithoutSaving(t *testing.T) {
+	for _, command := range []string{"default", "show", "list"} {
+		for _, tc := range []struct {
+			name        string
+			fileEnabled bool
+			enabledEnv  string
+			rulesEnv    string
+			want        safety.Policy
+		}{
+			{
+				name:       "enable_and_replace_rules",
+				enabledEnv: "true",
+				rulesEnv:   "ecs:Update*=confirm",
+				want: safety.Policy{Enabled: true, Rules: []safety.Rule{
+					{Pattern: "ecs:Update*", Action: safety.ActionConfirm},
+				}},
+			},
+			{
+				name:        "disable_and_replace_rules",
+				fileEnabled: true,
+				enabledEnv:  "false",
+				rulesEnv:    "ecs:Update*=confirm",
+				want: safety.Policy{Enabled: false, Rules: []safety.Rule{
+					{Pattern: "ecs:Update*", Action: safety.ActionConfirm},
+				}},
+			},
+			{
+				name:        "empty_override_clears_rules",
+				fileEnabled: true,
+				enabledEnv:  "true",
+				want:        safety.Policy{Enabled: true, Rules: []safety.Rule{}},
+			},
+		} {
+			t.Run(command+"/"+tc.name, func(t *testing.T) {
+				dir := t.TempDir()
+				require.NoError(t, safety.SavePolicy(dir, &safety.Policy{Enabled: tc.fileEnabled,
+					Rules: []safety.Rule{{Pattern: "ecs:Delete*", Action: safety.ActionDeny}}}))
+				path := safety.GetPolicyFilePath(dir)
+				before, err := os.ReadFile(path)
+				require.NoError(t, err)
+				t.Setenv(safety.EnvSafetyPolicyEnabled, tc.enabledEnv)
+				t.Setenv(safety.EnvSafetyPolicyRules, tc.rulesEnv)
+
+				ctx, w := testAiModeContext(t, dir)
+				cmd := NewConfigureSafetyPolicyCommand()
+				ctx.EnterCommand(cmd)
+				if command != "default" {
+					cmd = cmd.GetSubCommand(command)
+					require.NotNil(t, cmd)
+					ctx.EnterCommand(cmd)
+				}
+				require.NoError(t, cmd.Run(ctx, nil))
+				if command == "list" {
+					assert.Contains(t, w.String(), "Safety policy: "+enabledStatus(tc.want.Enabled)+"\n")
+					assert.NotContains(t, w.String(), "ecs:Delete*")
+					for _, rule := range tc.want.Rules {
+						assert.Contains(t, w.String(), rule.Pattern+" -> "+string(rule.Action))
+					}
+				} else {
+					var got safety.Policy
+					require.NoError(t, json.Unmarshal(w.Bytes(), &got))
+					assert.Equal(t, tc.want, got)
+				}
+				after, err := os.ReadFile(path)
+				require.NoError(t, err)
+				assert.Equal(t, before, after, "displaying effective policy must not overwrite the file policy")
+			})
+		}
+	}
+}
+
+func TestConfigureSafetyPolicy_Display_RejectsInvalidEnvironment(t *testing.T) {
+	for _, command := range []string{"default", "show", "list"} {
+		for _, tc := range []struct {
+			name       string
+			enabledEnv string
+			rulesEnv   string
+			errorEnv   string
+		}{
+			{"invalid_enabled", "invalid", "ecs:Update*=confirm", safety.EnvSafetyPolicyEnabled},
+			{"invalid_rules", "true", "ecs:Update*=confirm,invalid", safety.EnvSafetyPolicyRules},
+		} {
+			t.Run(command+"/"+tc.name, func(t *testing.T) {
+				dir := t.TempDir()
+				require.NoError(t, safety.SavePolicy(dir, &safety.Policy{Enabled: true,
+					Rules: []safety.Rule{{Pattern: "ecs:Delete*", Action: safety.ActionDeny}}}))
+				path := safety.GetPolicyFilePath(dir)
+				before, err := os.ReadFile(path)
+				require.NoError(t, err)
+				t.Setenv(safety.EnvSafetyPolicyEnabled, tc.enabledEnv)
+				t.Setenv(safety.EnvSafetyPolicyRules, tc.rulesEnv)
+
+				ctx, w := testAiModeContext(t, dir)
+				cmd := NewConfigureSafetyPolicyCommand()
+				ctx.EnterCommand(cmd)
+				if command != "default" {
+					cmd = cmd.GetSubCommand(command)
+					require.NotNil(t, cmd)
+					ctx.EnterCommand(cmd)
+				}
+				err = cmd.Run(ctx, nil)
+				assert.ErrorContains(t, err, "load effective safety policy failed")
+				assert.ErrorContains(t, err, tc.errorEnv)
+				assert.Empty(t, w.String(), "an invalid effective policy must not display the file policy as a fallback")
+				after, err := os.ReadFile(path)
+				require.NoError(t, err)
+				assert.Equal(t, before, after)
+			})
+		}
+	}
 }
 
 func TestConfigureSafetyPolicy_ParentRun_DefaultShow(t *testing.T) {
@@ -235,4 +337,104 @@ func TestConfigureSafetyPolicy_List_NoRulesMessage(t *testing.T) {
 	assert.True(t,
 		strings.Contains(w.String(), "No rules") || strings.Contains(w.String(), "未配置"),
 		"output: %s", w.String())
+}
+
+func TestConfigureSafetyPolicy_AddStyleNotice(t *testing.T) {
+	originalLanguage := i18n.GetLanguage()
+	t.Cleanup(func() { i18n.SetLanguage(originalLanguage) })
+	for _, lang := range []string{"en", "zh"} {
+		i18n.SetLanguage(lang)
+		for _, pattern := range []string{"ecs:DeleteInstance", "ecs:delete-instance", "ecs:DeleteI*", "*:Delete*"} {
+			t.Run(lang+"/"+pattern, func(t *testing.T) {
+				dir := t.TempDir()
+				// Exercise both insertion and update without adding a second rule.
+				for _, action := range []string{"deny", "confirm"} {
+					ctx, stdout := testAiModeContext(t, dir)
+					cmd := enterSafetyPolicySub(t, ctx, "add")
+					ctx.Flags().Get("pattern").SetAssigned(true)
+					ctx.Flags().Get("pattern").SetValue(pattern)
+					ctx.Flags().Get("action").SetAssigned(true)
+					ctx.Flags().Get("action").SetValue(action)
+					require.NoError(t, cmd.Run(ctx, nil))
+					stderr := ctx.Stderr().(interface{ String() string }).String()
+					if strings.Contains(pattern, "*") {
+						assert.Empty(t, stderr)
+					} else {
+						alternative := "ecs:delete-instance"
+						if pattern == alternative {
+							alternative = "ecs:DeleteInstance"
+						}
+						assert.Contains(t, stderr, alternative)
+						assert.NotContains(t, stderr, "PascalCase")
+					}
+					assert.Empty(t, stdout.String())
+					policy, err := safety.LoadPolicy(dir)
+					require.NoError(t, err)
+					require.Equal(t, []safety.Rule{{Pattern: pattern, Action: safety.Action(action)}}, policy.Rules)
+				}
+			})
+		}
+	}
+}
+
+func TestConfigureSafetyPolicy_AddFailureHasNoStyleNotice(t *testing.T) {
+	ctx, stdout := testAiModeContext(t, t.TempDir())
+	cmd := enterSafetyPolicySub(t, ctx, "add")
+	ctx.Flags().Get("pattern").SetAssigned(true)
+	ctx.Flags().Get("pattern").SetValue("ecs:DeleteInstance")
+	ctx.Flags().Get("action").SetAssigned(true)
+	ctx.Flags().Get("action").SetValue("invalid")
+	require.Error(t, cmd.Run(ctx, nil))
+	assert.Empty(t, ctx.Stderr().(interface{ String() string }).String())
+	assert.Empty(t, stdout.String())
+}
+
+func TestSafetyStyleNoticeCoverage(t *testing.T) {
+	for _, tc := range []struct {
+		name, pattern string
+		rules         []safety.Rule
+		notice        bool
+	}{
+		{"missing", "ecs:DeleteInstance", nil, true},
+		{"exact coverage", "ecs:DeleteInstance", []safety.Rule{{Pattern: "ecs:delete-instance", Action: safety.ActionDeny}}, false},
+		{"wildcard coverage", "ecs:DeleteInstance", []safety.Rule{{Pattern: "ecs:Delete*", Action: safety.ActionDeny}}, false},
+		{"first allow wins", "ecs:DeleteInstance", []safety.Rule{{Pattern: "ecs:delete-instance", Action: safety.ActionAllow}, {Pattern: "ecs:*", Action: safety.ActionDeny}}, true},
+		{"different action", "ecs:DeleteInstance", []safety.Rule{{Pattern: "ecs:delete-instance", Action: safety.ActionConfirm}}, true},
+		{"unknown", "ecs:NotAnAPI", nil, false},
+		{"plugin hierarchy", "fc:function:delete", nil, false},
+		{"REST", "ecs:DELETE/instances", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			ctx, stdout := testAiModeContext(t, dir)
+			policy := &safety.Policy{Rules: append(tc.rules, safety.Rule{Pattern: tc.pattern, Action: safety.ActionDeny})}
+			require.NoError(t, saveSafetyPolicyWithStyleNotice(ctx, dir, policy, tc.pattern))
+			stderr := ctx.Stderr().(interface{ String() string }).String()
+			assert.Equal(t, tc.notice, stderr != "")
+			assert.Empty(t, stdout.String())
+			saved, err := safety.LoadPolicy(dir)
+			require.NoError(t, err)
+			assert.Equal(t, policy, saved)
+		})
+	}
+}
+
+func TestSafetyAlternativeNameMetadata(t *testing.T) {
+	for _, tc := range []struct{ name, index, pattern, want string }{
+		{"metadata name", `{"apis":{"DeleteThing":{"cmd_name":"remove-item"}}}`, "demo:DeleteThing", "demo:remove-item"},
+		{"reverse", `{"apis":{"DeleteThing":{"cmd_name":"remove-item"}}}`, "DEMO:remove-item", "DEMO:DeleteThing"},
+		{"ambiguous", `{"apis":{"DeleteThing":{"cmd_name":"remove-item"},"Other":{"cmd_name":"remove-item"}}}`, "demo:remove-item", ""},
+		{"case only", `{"apis":{"DeleteThing":{"cmd_name":"deletething"}}}`, "demo:DeleteThing", ""},
+		{"missing command", `{"apis":{"DeleteThing":{}}}`, "demo:DeleteThing", ""},
+		{"invalid metadata", `{`, "demo:DeleteThing", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := canonicalmeta.NewRepository(fstest.MapFS{
+				"metadatas/products.json":        &fstest.MapFile{Data: []byte(`{"products":[{"code":"demo","version":"v1"}]}`)},
+				"canonical/demo/v1/version.json": &fstest.MapFile{Data: []byte(tc.index)},
+			})
+			assert.Equal(t, tc.want, safetyAlternativeName(repo, tc.pattern))
+		})
+	}
+	assert.Empty(t, safetyAlternativeName(canonicalmeta.NewRepository(fstest.MapFS{}), "ecs:DeleteInstance"))
 }

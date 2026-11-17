@@ -33,16 +33,17 @@ func TestBuildBaselineEnv(t *testing.T) {
 	// Snapshot and restore envs we touch. We deliberately also clear the
 	// legacy ALIBABACLOUD_/ALICLOUD_ aliases so the "canonical-only" guarantee
 	// can be asserted below without false positives from CI host env.
-	keys := []string{"ALIBABA_CLOUD_REGION_ID", "ALIBABACLOUD_REGION_ID", "ALICLOUD_REGION_ID", "ALIBABA_CLOUD_ENDPOINT", "ALIBABA_CLOUD_LANGUAGE"}
+	keys := []string{"ALIBABA_CLOUD_REGION_ID", "ALIBABACLOUD_REGION_ID", "ALICLOUD_REGION_ID", "ALIBABA_CLOUD_ENDPOINT", "ALIBABA_CLOUD_LANGUAGE", EnvSignatureVersion}
 	saved := make(map[string]string, len(keys))
+	had := make(map[string]bool, len(keys))
 	for _, k := range keys {
-		saved[k] = os.Getenv(k)
+		saved[k], had[k] = os.LookupEnv(k)
 		os.Unsetenv(k)
 	}
 	t.Cleanup(func() {
 		for _, k := range keys {
-			if v := saved[k]; v != "" {
-				os.Setenv(k, v)
+			if had[k] {
+				os.Setenv(k, saved[k])
 			} else {
 				os.Unsetenv(k)
 			}
@@ -64,6 +65,25 @@ func TestBuildBaselineEnv(t *testing.T) {
 		assert.False(t, hasRegion)
 		assert.False(t, hasEndpoint)
 		assert.False(t, hasLang)
+		// Signature version is always forwarded (empty default) so plugins
+		// cannot inherit a parent-process v4 after an explicit clear.
+		assert.Empty(t, envs[EnvSignatureVersion])
+	})
+
+	t.Run("signature version flag wins over env on no-profile path", func(t *testing.T) {
+		os.Setenv(EnvSignatureVersion, "v4")
+		t.Cleanup(func() { os.Unsetenv(EnvSignatureVersion) })
+
+		ctx := newEmptyCtx()
+		f := CliSignVersionFlag(ctx.Flags())
+		f.SetAssigned(true)
+		f.SetValue("")
+		envs := BuildBaselineEnv(ctx)
+		assert.Empty(t, envs[EnvSignatureVersion], "assigned empty flag must not be backfilled by env")
+
+		ctx = newEmptyCtx()
+		envs = BuildBaselineEnv(ctx)
+		assert.Equal(t, SignatureVersionV4, envs[EnvSignatureVersion])
 	})
 
 	t.Run("flag values populate the env map", func(t *testing.T) {

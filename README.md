@@ -69,6 +69,18 @@ For an interactive local environment, OAuth avoids storing a long-lived AccessKe
 aliyun configure --mode OAuth --profile default
 ```
 
+For a remote machine without a browser, use:
+
+```shell
+aliyun configure --mode OAuth --profile default --no-browser
+```
+
+Open the printed authorization link on a device with a browser. After signing in,
+copy the complete callback URL from the address bar and paste it into the CLI,
+even if the browser reports a connection error. Include both `code` and `state`.
+This mode does not start a local callback server or require port forwarding.
+Press Ctrl+C to cancel.
+
 You can also use AK, StsToken, RamRoleArn, EcsRamRole, OIDC, External, CredentialsURI, ChainableRamRoleArn, CloudSSO, BearerToken, or Anonymous mode where applicable.
 
 ```sh
@@ -88,7 +100,7 @@ aliyun ecs DescribeRegions
 aliyun ecs describe-regions
 ```
 
-Safety policy matches command spelling by design: it ignores case but does not expand API aliases or equate PascalCase with kebab-case. Configure rules for each spelling your automation uses; see the [matching contract](./docs/en/usage.md#command-matching-contract).
+Safety policy matches command names case-insensitively, without expanding API aliases. Configure a rule for each command name used by your automation. See [command matching rules](./docs/en/usage.md#command-matching-rules).
 
 ### 3. Explore help
 
@@ -129,9 +141,36 @@ aliyun plugin update --name <plugin-name>
 
 See [command usage](./docs/en/usage.md) and [plugin management](./docs/en/plugins.md) for the complete workflows.
 
+## Data collection
+
+Telemetry is enabled by default to help improve Alibaba Cloud CLI's stability, usability, and performance.
+
+To disable telemetry, run:
+
+```sh
+aliyun configure telemetry disable
+```
+
+You can also disable it by setting `ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE=1`. See [Telemetry data collection](./docs/en/telemetry.md) for the collected information and available controls.
+
 ## Troubleshoot
 
 [OpenAPI Troubleshoot](https://api.aliyun.com/troubleshoot?source=github_sdk) helps diagnose OpenAPI request failures by `RequestId` or error message.
+
+Starting with Alibaba Cloud CLI 3.5.4, use `DEBUG=dara` to enable SDK HTTP diagnostics. `DEBUG=sdk` is no longer supported. Review the output for sensitive information before sharing it.
+
+```sh
+DEBUG=dara aliyun ecs DescribeRegions --region cn-hangzhou --method GET
+```
+
+Excerpt from the diagnostic output, with credentials and signing values redacted.
+
+```text
+> GET https://ecs.cn-hangzhou.aliyuncs.com/?AccessKeyId=REDACTED&Action=DescribeRegions&...&Signature=REDACTED&...
+> x-acs-action: DescribeRegions
+< HTTP/1.1 200 OK
+< Content-Type: application/json;charset=utf-8
+```
 
 ## Documentation
 
@@ -140,6 +179,7 @@ See [command usage](./docs/en/usage.md) and [plugin management](./docs/en/plugin
 | Documentation index | [English](./docs/README.md#english) | [中文](./docs/README.md#简体中文) |
 | Installation and upgrade | [Guide](./docs/en/installation.md) | [指南](./docs/zh-CN/installation.md) |
 | Configuration and credentials | [Guide](./docs/en/configuration.md) | [指南](./docs/zh-CN/configuration.md) |
+| Telemetry data collection | [Guide](./docs/en/telemetry.md) | [指南](./docs/zh-CN/telemetry.md) |
 | Commands, output, and automation | [Guide](./docs/en/usage.md) | [指南](./docs/zh-CN/usage.md) |
 | MCP, OpenTelemetry, and machine interfaces | [Guide](./docs/en/integrations.md) | [指南](./docs/zh-CN/integrations.md) |
 | Built-in OSS automation | [Guide](./docs/en/oss.md) | [指南](./docs/zh-CN/oss.md) |

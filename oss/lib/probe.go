@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
@@ -890,7 +890,7 @@ func (pc *ProbeCommand) downloadWithHttpUrl() error {
 		}
 	}
 
-	res, err := http.Get(pc.pbOption.fromUrl)
+	res, err := cloudendpoint.HTTPGet(pc.pbOption.fromUrl)
 	if err != nil {
 		return fmt.Errorf("downloadWithHttpUrl http.Get error,%s", err.Error())
 	}

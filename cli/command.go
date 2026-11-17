@@ -62,6 +62,10 @@ type Command struct {
 	// BeforeExecute configures process-level behavior before parsing begins.
 	BeforeExecute func(ctx *Context, args []string)
 
+	// AfterExecute observes the final result before an error is rendered and
+	// before processError may terminate the process.
+	AfterExecute func(ctx *Context, args []string, err error)
+
 	// BeforeParseRoute may consume an invocation before the generic flag parser
 	// runs. It is intentionally a narrow root-command seam for routes that must
 	// inspect the original argv, such as installed-plugin Help and parameter
@@ -132,6 +136,9 @@ func (c *Command) Execute(ctx *Context, args []string) {
 	if c.BeforeParseRoute != nil {
 		handled, err := c.BeforeParseRoute(ctx, append([]string(nil), args...))
 		if handled {
+			if c.AfterExecute != nil {
+				c.AfterExecute(ctx, args, err)
+			}
 			if err != nil {
 				c.processError(ctx, err)
 			}
@@ -143,6 +150,9 @@ func (c *Command) Execute(ctx *Context, args []string) {
 	}
 
 	err := c.executeInner(ctx, args)
+	if c.AfterExecute != nil {
+		c.AfterExecute(ctx, args, err)
+	}
 	if err != nil {
 		c.processError(ctx, err)
 	}
@@ -154,6 +164,19 @@ func (c *Command) getName() string {
 	}
 
 	return c.parent.getName() + " " + c.Name
+}
+
+// CommandPath returns the registered command names below the root. It excludes
+// invocation arguments, including unrecognized tokens passed to a Run callback.
+func (c *Command) CommandPath() []string {
+	var path []string
+	for command := c; command != nil && command.parent != nil; command = command.parent {
+		path = append(path, command.Name)
+	}
+	for left, right := 0, len(path)-1; left < right; left, right = left+1, right-1 {
+		path[left], path[right] = path[right], path[left]
+	}
+	return path
 }
 
 type Metadata struct {
@@ -290,8 +313,7 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 func (c *Command) executeInner(ctx *Context, args []string) error {
 	if c.RawArgs && ctx.completion == nil {
 		if (ctx.help || rawArgsRequestHelp(ctx, args)) && !c.SkipDefaultHelp {
-			c.executeHelp(ctx, args)
-			return nil
+			return c.executeHelp(ctx, args)
 		}
 		return c.Run(ctx, args)
 	}
@@ -380,12 +402,10 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 
 	if ctx.help {
 		if !c.SkipDefaultHelp {
-			c.executeHelp(ctx, callArgs)
-			return nil
+			return c.executeHelp(ctx, callArgs)
 		}
 	} else if c.Run == nil {
-		c.executeHelp(ctx, callArgs)
-		return nil
+		return c.executeHelp(ctx, callArgs)
 	}
 
 	return c.Run(ctx, callArgs)
@@ -456,13 +476,9 @@ func (c *Command) processError(ctx *Context, err error) {
 	Exit(exitCode)
 }
 
-func (c *Command) executeHelp(ctx *Context, args []string) {
+func (c *Command) executeHelp(ctx *Context, args []string) error {
 	if c.Help != nil {
-		err := c.Help(ctx, args)
-		if err != nil {
-			c.processError(ctx, err)
-		}
-		return
+		return c.Help(ctx, args)
 	}
 
 	c.PrintHead(ctx)
@@ -471,4 +487,5 @@ func (c *Command) executeHelp(ctx *Context, args []string) {
 	c.PrintSubCommands(ctx)
 	c.PrintFlags(ctx)
 	c.PrintTail(ctx)
+	return nil
 }

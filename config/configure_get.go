@@ -97,6 +97,8 @@ func doConfigureGet(c *cli.Context, args []string) error {
 			cli.Printf(c.Stdout(), "cloud-sso-sign-in-url=%s\n", profile.CloudSSOSignInUrl)
 		case CloudSSOAccessConfigFlagName:
 			cli.Printf(c.Stdout(), "cloud-sso-access-config=%s\n", profile.CloudSSOAccessConfig)
+		case SSOSessionFlagName:
+			cli.Printf(c.Stdout(), "sso-session=%s\n", profile.SSOSession)
 		case CloudSSOAccountIdFlagName:
 			cli.Printf(c.Stdout(), "cloud-sso-account-id=%s\n", profile.CloudSSOAccountId)
 		case OAuthSiteTypeName:

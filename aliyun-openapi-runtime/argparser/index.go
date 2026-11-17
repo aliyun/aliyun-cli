@@ -94,7 +94,8 @@ func (e *UnknownFlagError) Error() string {
 	return fmt.Sprintf("unknown flag --%s", e.Flag)
 }
 
-func (*UnknownFlagError) AIRecoveryEligible() {}
+func (*UnknownFlagError) AIRecoveryEligible()    {}
+func (*UnknownFlagError) LocalErrorCode() string { return "INVALID_FLAG" }
 
 func (pi *paramIndex) importanceScores(externalFlags *externalFlagIndex) (map[string]float64, map[string]bool) {
 	var scores map[string]float64

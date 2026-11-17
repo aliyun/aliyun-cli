@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -21,8 +22,10 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/bundledmeta"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/trust"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	runtimesource "github.com/aliyun/aliyun-openapi-runtime/source"
 	"golang.org/x/mod/semver"
 )
@@ -65,6 +68,25 @@ type Manager struct {
 	saveLocalManifestHook func(*LocalManifest) error
 	// archiveLimits overrides package resource boundaries in tests.
 	archiveLimits *pluginArchiveLimits
+	// expectedPackageChecksum is the caller-supplied SHA-256 for --package installs.
+	expectedPackageChecksum string
+	// httpTransport overrides the HTTP transport in tests (for example httptest TLS).
+	httpTransport http.RoundTripper
+	// trustClient is the only source for the official package index.
+	trustClient   artifactFetcher
+	trustCacheDir string
+	// skipSignatureVerify lets a configured custom source or remote package
+	// continue when signature verification is not used.
+	skipSignatureVerify    bool
+	indexTrustVerification *TrustVerification
+}
+
+type artifactFetcher interface {
+	FetchArtifact(context.Context, string, string) (*trust.VerifiedArtifact, error)
+}
+
+var newArtifactTrustClient = func(cacheDir, sourceBase string) artifactFetcher {
+	return trust.New(trust.Config{CacheDir: cacheDir, SourceBase: sourceBase})
 }
 
 func getHomePath() string {
@@ -112,7 +134,30 @@ func NewManager() (*Manager, error) {
 		settings = pluginsettings.Default()
 	}
 	base := pluginsettings.EffectiveSourceBase(settings)
-	return &Manager{rootDir: rootDir, sourceBase: base}, nil
+	trustCacheDir := filepath.Join(sysDir, "trust")
+	return &Manager{
+		rootDir:             rootDir,
+		sourceBase:          base,
+		trustCacheDir:       trustCacheDir,
+		trustClient:         newArtifactTrustClient(trustCacheDir, base),
+		skipSignatureVerify: allowUnsignedFallbackForTest,
+	}, nil
+}
+
+// allowUnsignedFallbackForTest lets tests that serve an unsigned fixture index
+// use NewManager without embedding a release trust root. Production CLI never
+// sets this; official sources still fail closed.
+var allowUnsignedFallbackForTest bool
+
+// AllowUnsignedFallbackForTest is for unsigned httptest fixtures only.
+func AllowUnsignedFallbackForTest(enable bool) {
+	allowUnsignedFallbackForTest = enable
+}
+
+// AllowUnsignedFallback lets this manager fall back to an unsigned index after
+// verification fails. Official default sources still fail closed.
+func (m *Manager) AllowUnsignedFallback() {
+	m.skipSignatureVerify = true
 }
 
 func (m *Manager) ApplySourceBaseOverride(raw string) error {
@@ -120,11 +165,15 @@ func (m *Manager) ApplySourceBaseOverride(raw string) error {
 	if v == "" {
 		return fmt.Errorf("source-base must not be empty")
 	}
-	lower := strings.ToLower(v)
-	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
-		return fmt.Errorf("source-base must start with http:// or https://")
+	u, err := url.Parse(v)
+	if err != nil || u == nil || u.Host == "" {
+		return fmt.Errorf("source-base must use https://")
+	}
+	if err := m.validatePluginTransportURL(v); err != nil {
+		return fmt.Errorf("source-base: %w", err)
 	}
 	m.sourceBase = strings.TrimRight(v, "/")
+	m.trustClient = newArtifactTrustClient(m.trustCacheDir, m.sourceBase)
 	m.skipPluginIndexCacheForCLI = true
 	return nil
 }
@@ -171,18 +220,51 @@ func (m *Manager) writeCache(cacheFile string, data []byte) {
 	_ = os.WriteFile(cacheFile, data, 0644)
 }
 
-func httpGet(url string, timeout time.Duration) (*http.Response, error) {
-	client := &http.Client{Timeout: timeout}
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+func httpGet(rawURL string, timeout time.Duration) (*http.Response, error) {
+	return (&Manager{}).httpGet(rawURL, timeout)
+}
+
+func (m *Manager) httpGet(rawURL string, timeout time.Duration) (*http.Response, error) {
+	if m == nil {
+		m = &Manager{}
+	}
+	if err := m.acceptPluginTransport(rawURL); err != nil {
+		return nil, err
+	}
+	client := &http.Client{
+		Timeout:       timeout,
+		Transport:     m.httpTransport,
+		CheckRedirect: m.checkPluginRedirect,
+	}
+	req, err := cloudendpoint.NewRequest(http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept-Encoding", "identity")
-	return client.Do(req)
+	resp, err := client.Do(req)
+	if err != nil {
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (m *Manager) downloadPluginArchive(rawURL, dest string, limit int64) error {
+	resp, err := m.httpGet(rawURL, pluginArchiveDLTimeout)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download failed: %d", resp.StatusCode)
+	}
+	return writePluginArchiveResponse(resp, dest, limit)
 }
 
 func (m *Manager) fetchRemote(url string) ([]byte, error) {
-	resp, err := httpGet(url, fetchTimeout)
+	resp, err := m.httpGet(url, fetchTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -235,6 +317,25 @@ func (m *Manager) fetchWithCache(url, cacheFile string, result interface{}) erro
 }
 
 func (m *Manager) GetIndex() (*Index, error) {
+	m.indexTrustVerification = nil
+	if m.indexURL == "" && m.trustClient != nil {
+		artifact, err := m.trustClient.FetchArtifact(context.Background(), trust.PurposePluginIndex, "plugins")
+		if err == nil {
+			var index Index
+			if err := trust.DecodeStrictJSON(artifact.Bytes, &index); err != nil {
+				return nil, fmt.Errorf("failed to decode verified plugin index: %w", err)
+			}
+			m.indexTrustVerification = &TrustVerification{
+				KeyIDs:       append([]string(nil), artifact.KeyIDs...),
+				IndexVersion: artifact.Descriptor.Version,
+				VerifiedAt:   artifact.SignedAt,
+			}
+			return &index, nil
+		}
+		if m.sourceBase == "" || !m.skipSignatureVerify {
+			return nil, fmt.Errorf("failed to verify plugin index for configured source: %w", err)
+		}
+	}
 	indexURL := m.resolvedPkgIndexURL()
 	cacheFile := filepath.Join(m.rootDir, indexCacheFile)
 	var index Index
@@ -626,7 +727,7 @@ func (m *Manager) downloadAndVerifyPlugin(ctx *cli.Context, platInfo *PlatformIn
 	}
 
 	archivePath := filepath.Join(tmpDir, "plugin.archive")
-	if err := downloadFileWithLimit(platInfo.URL, archivePath, m.effectiveArchiveLimits().archiveBytes); err != nil {
+	if err := m.downloadPluginArchive(platInfo.URL, archivePath, m.effectiveArchiveLimits().archiveBytes); err != nil {
 		os.RemoveAll(tmpDir)
 		return "", err
 	}
@@ -888,7 +989,7 @@ func (m *Manager) installFromRemotePackageURL(ctx *cli.Context, rawURL string) e
 		return fmt.Errorf("invalid package URL: %w", err)
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("package URL must use http or https")
+		return fmt.Errorf("package URL must use https")
 	}
 	if !isPluginArchivePath(u.Path) {
 		return fmt.Errorf("package URL path must end with .zip, .tar.gz, or .tgz")
@@ -897,7 +998,7 @@ func (m *Manager) installFromRemotePackageURL(ctx *cli.Context, rawURL string) e
 	displayURL := safePluginPackageURL(u)
 	cli.Printf(ctx.Stdout(), "Downloading plugin package from %s...\n", displayURL)
 
-	resp, err := httpGet(rawURL, pluginArchiveDLTimeout)
+	resp, err := m.httpGet(rawURL, pluginArchiveDLTimeout)
 	if err != nil {
 		return safePluginDownloadError(err, displayURL)
 	}
@@ -927,6 +1028,14 @@ func (m *Manager) installFromRemotePackageURL(ctx *cli.Context, rawURL string) e
 func (m *Manager) installFromPackageFile(ctx *cli.Context, absPath, userFacing string) error {
 	if !isPluginArchivePath(absPath) {
 		return fmt.Errorf("unsupported package format (use .zip, .tar.gz, or .tgz): %s", absPath)
+	}
+
+	verified := false
+	if strings.TrimSpace(m.expectedPackageChecksum) != "" {
+		if err := verifySHA256File(absPath, m.expectedPackageChecksum); err != nil {
+			return err
+		}
+		verified = true
 	}
 
 	cli.Printf(ctx.Stdout(), "Installing plugin from %s...\n", userFacing)
@@ -962,7 +1071,7 @@ func (m *Manager) installFromPackageFile(ctx *cli.Context, absPath, userFacing s
 	}
 	promotion.commit()
 
-	cli.Printf(ctx.Stdout(), "Plugin %s %s installed successfully!\n", pManifest.Name, pManifest.Version)
+	reportPackageInstall(ctx, pManifest.Name, pManifest.Version, verified)
 	return nil
 }
 
@@ -1013,21 +1122,28 @@ func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir str
 		return err
 	}
 
+	var verification *TrustVerification
+	if m.indexTrustVerification != nil {
+		copy := *m.indexTrustVerification
+		copy.KeyIDs = append([]string(nil), copy.KeyIDs...)
+		verification = &copy
+	}
 	localManifest.Plugins[actualPluginName] = LocalPlugin{
-		Name:             actualPluginName,
-		Version:          version,
-		MinCliVersion:    pManifest.MinCliVersion,
-		Path:             extractDir,
-		ProductCode:      pManifest.ProductCode,
-		Type:             pManifest.Type,
-		Metadata:         pManifest.Metadata,
-		Command:          pManifest.Command,
-		CommandAliases:   aliases,
-		ShortDescription: pManifest.ShortDescription,
-		Description:      pManifest.Description,
-		CmdNames:         pManifest.CmdNames,
-		Inner:            pManifest.Inner,
-		ProfileRequired:  pManifest.ProfileRequired,
+		Name:              actualPluginName,
+		Version:           version,
+		MinCliVersion:     pManifest.MinCliVersion,
+		Path:              extractDir,
+		ProductCode:       pManifest.ProductCode,
+		Type:              pManifest.Type,
+		Metadata:          pManifest.Metadata,
+		Command:           pManifest.Command,
+		CommandAliases:    aliases,
+		ShortDescription:  pManifest.ShortDescription,
+		Description:       pManifest.Description,
+		CmdNames:          pManifest.CmdNames,
+		Inner:             pManifest.Inner,
+		ProfileRequired:   pManifest.ProfileRequired,
+		TrustVerification: verification,
 	}
 
 	return m.saveLocalManifest(localManifest)
@@ -1061,6 +1177,9 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 	platInfo, err := m.validateVersionAndPlatform(ctx, targetPlugin, version, actualPluginName)
 	if err != nil {
 		return err
+	}
+	if m.indexTrustVerification != nil {
+		m.indexTrustVerification.Checksum = platInfo.Checksum
 	}
 
 	downloadURL := platInfo.URL
@@ -1105,7 +1224,7 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 	}
 	promotion.commit()
 
-	cli.Printf(ctx.Stdout(), "Plugin %s %s installed successfully!\n", actualPluginName, version)
+	reportPackageInstall(ctx, actualPluginName, version, true)
 	return nil
 }
 

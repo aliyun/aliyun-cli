@@ -51,6 +51,8 @@ build_linux_arm64: meta-pack
 	tar zcvf out/aliyun-cli-linux-${VERSION}-arm64.tgz -C out aliyun
 	aliyun oss cp out/aliyun-cli-linux-${VERSION}-arm64.tgz oss://aliyun-cli --force --profile oss
 
+# Legacy manual publish. Stable history is the JSON object written by tools/finish_release.sh.
+# This target still writes only the single-version pointer.
 gen_version:
 	-rm out/version
 	echo ${VERSION} >> out/version
@@ -104,7 +106,7 @@ test: deps
 	go list ./... >/dev/null
 	go vet ./...
 	ALIYUN_CLI_META_DIR="$(META_DIR)" LANG="en_US.UTF-8" go test -race -coverprofile=coverage.txt -covermode=atomic \
-		./bundledmeta ./canonicalmeta \
+		./bundledmeta ./canonicalmeta ./internal/... \
 		./util/... ./cli/... ./config/... \
 		./i18n/... ./main/... ./openapi/... ./meta/... ./export/... \
 		./sysconfig/... ./mcpproxy ./cloudsso ./cliext/... ./tools/...

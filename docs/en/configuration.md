@@ -4,6 +4,8 @@
 
 Alibaba Cloud CLI stores named profiles in `~/.aliyun/config.json` by default.
 
+For telemetry settings and the information collected, see [Telemetry data collection](./telemetry.md).
+
 ## Create and manage profiles
 
 For interactive local use, OAuth is the recommended starting point:
@@ -46,7 +48,7 @@ export ALIBABA_CLOUD_PROFILE=production
 | Mode | Intended use |
 | --- | --- |
 | `OAuth` | Interactive sign-in for a local user; avoids storing a long-lived AccessKey |
-| `CloudSSO` | Alibaba Cloud CloudSSO workforce access |
+| `CloudSSO` | CloudSSO workforce access with shared sessions across profiles |
 | `AK` | Static AccessKey ID and secret; use only when a stronger option is unavailable |
 | `StsToken` | An already-issued temporary AccessKey plus SecurityToken; does not refresh automatically |
 | `RamRoleArn` | Assume a RAM role from an AccessKey-based identity |
@@ -217,16 +219,88 @@ Saving profile[oauth-profile] ...Done.
 
 ### CloudSSO
 
-CloudSSO starts an interactive sign-in flow through the configured CloudSSO portal:
+CloudSSO supports a shared session for multiple profiles. The session stores the sign-in URL and AccessToken; each profile selects its own Alibaba Cloud account and access configuration and stores its own STS credentials.
 
-```text
-$ aliyun configure --mode CloudSSO --profile cloud-sso
-Configuring profile 'cloud-sso' in 'CloudSSO' authenticate mode...
-CloudSSO Sign In Url []: https://signin-cn-shanghai.alibabacloudsso.com/start/login
-Follow the displayed instructions to sign in and select the account/access configuration.
-Default Region Id []: cn-hangzhou
-Saving profile[cloud-sso] ...Done.
+#### Shared session
+
+Configure the session and log in in one step:
+
+```sh
+aliyun configure sso login --sso-session company \
+  --cloud-sso-sign-in-url 'https://signin-example.alibabacloudsso.com/device/login'
 ```
+
+Replace the example URL with your CloudSSO sign-in URL. The command saves the configuration and opens a browser for authorization. If you omit the URL, an existing session reuses its saved URL; a new session prompts for one. If authorization fails, the configuration remains available for retry. A failed login with an unchanged URL preserves the previous token.
+
+To save configuration without logging in, use:
+
+```sh
+aliyun configure sso set --sso-session company \
+  --cloud-sso-sign-in-url 'https://signin-example.alibabacloudsso.com/device/login'
+```
+
+After logging in, configure a profile interactively to select an account and access configuration:
+
+```sh
+aliyun configure --mode CloudSSO --profile prod-readonly --sso-session company
+```
+
+Configure another profile using the same session without interactive account selection:
+
+```sh
+aliyun configure set --mode CloudSSO --profile test-admin \
+  --sso-session company \
+  --cloud-sso-account-id '<AccountId>' \
+  --cloud-sso-access-config '<AccessConfigurationId>' \
+  --region cn-hangzhou
+```
+
+Replace the account and access configuration IDs with values assigned to your CloudSSO user. Different profiles can use different accounts and permissions while sharing the same login:
+
+```sh
+aliyun sts GetCallerIdentity --profile prod-readonly
+aliyun sts GetCallerIdentity --profile test-admin
+```
+
+While the shared session is valid, the CLI obtains or refreshes each profile's STS credentials as needed without opening a browser. When the session expires, log in once for all referencing profiles:
+
+```sh
+aliyun configure sso login --sso-session company
+# Alternatively, select the session through a profile.
+aliyun configure sso login --profile prod-readonly
+```
+
+Logging in again does not clear still-valid STS credentials. Use separate session names for different user identities. Changing a profile's session, account, or access configuration clears that profile's cached STS credentials.
+
+#### Delete a session
+
+Delete an unused session with:
+
+```sh
+aliyun configure sso delete --sso-session company
+```
+
+Deletion is refused while any profile references the session; the error lists those profiles. Reassign or explicitly delete the profiles first.
+
+#### Existing profile-based flow
+
+Existing CloudSSO profiles without `sso_session` continue to use the original flow:
+
+```sh
+aliyun configure --mode CloudSSO --profile cloud-sso
+aliyun sts GetCallerIdentity --profile cloud-sso
+```
+
+Follow the prompts to enter the sign-in URL, authorize in the browser, and select an account and access configuration. The URL, AccessToken, and STS credentials remain in that profile. When its login expires, run the same `configure` command again.
+
+Existing profiles are not migrated automatically. To attach one to a shared session, log in to the session and run:
+
+```sh
+aliyun configure --mode CloudSSO --profile cloud-sso --sso-session company
+```
+
+The profile reuses its account and access configuration if they are still available. Once saved, the profile references the shared session and no longer stores its own CloudSSO URL or AccessToken.
+
 
 ## External credential sources
 
@@ -317,6 +391,46 @@ Any non-200 response or malformed/missing credential field is treated as a crede
 
 Set `ALIBABA_CLOUD_DISABLE_EXTERNAL_PROCESS=true` to block both external process execution and CredentialsURI fetching in a restricted environment.
 
+## Request configuration
+
+### Signature version (kebab-case commands)
+
+Only kebab-case commands are supported (for example `aliyun ecs describe-instances`). `--cli-sign-version` / profile `signature_version` / `ALIBABA_CLOUD_SIGNATURE_VERSION` currently accept:
+
+| Value | Behavior |
+| --- | --- |
+| `v4` | Use signature V4 |
+| empty | Clear a configured value and restore the default signing path |
+
+Any other value is rejected. Precedence: command flag > profile > environment variable > default. Passing `--cli-sign-version ''` clears the value and restores the default; it is not backfilled by an environment `v4`.
+
+Enable it for one command:
+
+```sh
+aliyun ecs describe-instances --cli-sign-version v4
+```
+
+Save it as the profile default (same flag):
+
+```sh
+aliyun configure set --profile default --cli-sign-version v4
+```
+
+Clear the profile value and restore the default:
+
+```sh
+aliyun configure set --profile default --cli-sign-version ''
+```
+
+Or set / clear the environment variable for the current process:
+
+```sh
+export ALIBABA_CLOUD_SIGNATURE_VERSION=v4
+export ALIBABA_CLOUD_SIGNATURE_VERSION=
+```
+
+When none are set, signing behavior stays unchanged.
+
 ## Environment variables
 
 Environment variables can select a profile or fill fields not supplied by flags/profile configuration. Important variables include:
@@ -332,13 +446,24 @@ Environment variables can select a profile or fill fields not supplied by flags/
 | `ALIBABA_CLOUD_REGION_ID` | Default region |
 | `ALIBABA_CLOUD_STS_ENDPOINT` | Override the STS endpoint |
 | `ALIBABA_CLOUD_ENDPOINT` | Override the product endpoint |
+| `ALIBABA_CLOUD_SIGNATURE_VERSION` | OpenAPI signature version: only `v4`; used only when the flag is unset and the profile value is empty; set empty to clear and use default |
+| `ALIBABA_CLOUD_ENDPOINT_SUFFIX` | Set to `aliyuncs.alibaba` to replace the `.aliyuncs.com` suffix in request hostnames |
 | `ALIBABA_CLOUD_CREDENTIALS_URI` | CredentialsURI source |
 | `ALIBABA_CLOUD_OIDC_PROVIDER_ARN` | OIDC provider ARN |
 | `ALIBABA_CLOUD_OIDC_TOKEN_FILE` | OIDC token file |
 | `ALIBABA_CLOUD_ROLE_ARN` | RAM role ARN |
 | `ALIBABA_CLOUD_BEARER_TOKEN` | Bearer token |
 | `ALIBABA_CLOUD_LANGUAGE` | `en` or `zh` output language |
-| `DEBUG=sdk` | Print SDK HTTP diagnostics; review output before sharing |
+| `DEBUG=dara` | Print SDK HTTP diagnostics; review output before sharing |
+
+To switch OpenAPI (including plugin commands), SLS, STS and built-in OSS requests:
+
+```bash
+export ALIBABA_CLOUD_ENDPOINT_SUFFIX=aliyuncs.alibaba
+aliyun ecs DescribeRegions --region cn-hangzhou
+```
+
+This covers request addresses handled by the `aliyun` host, including extension downloads and version checks (such as ossutil), plugin package downloads, self-upgrades, login and credential requests, and endpoint arguments and environment variables passed to external tools. Only a terminal `.aliyuncs.com` hostname suffix is replaced; schemes, ports, paths, query parameters, other domains and IP addresses are preserved. Dry runs show the rewritten address. Unset, empty or `aliyuncs.com` values keep the original domain. Leading and trailing whitespace is trimmed; other values produce an error. Use `unset ALIBABA_CLOUD_ENDPOINT_SUFFIX` to restore the default. Addresses generated inside external tools still require support in those tools. Spark submission uses a temporary configuration to pass the effective endpoint without persisting the environment override.
 
 Command-line flags take precedence for that invocation. Avoid globally exporting secrets on shared machines.
 

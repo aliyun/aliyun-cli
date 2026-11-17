@@ -23,6 +23,7 @@ import (
 	"runtime"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
@@ -138,6 +139,7 @@ func getProfileName(ctx *cli.Context) (name string) {
 }
 
 func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
+	telemetry.SetEffectiveAuthenticationMode("")
 	if util.GetFromEnv("ALIBABA_CLOUD_IGNORE_PROFILE", "ALIBABACLOUD_IGNORE_PROFILE") == "TRUE" {
 		profile = NewProfile("default")
 		profile.RegionId = "cn-hangzhou"
@@ -155,6 +157,7 @@ func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
 		// If not in configure mode, we will not overwrite the profile with flags
 		profile.OverwriteWithFlags(ctx)
 	}
+	telemetry.SetEffectiveAuthenticationMode(string(profile.Mode))
 	err = profile.Validate()
 	return
 }

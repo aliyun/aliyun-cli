@@ -3,22 +3,31 @@ package releasever
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
+
+	"github.com/aliyun/aliyun-cli/v3/cli/publishsig"
 )
 
 // Execute runs the releasever CLI. Commands:
 //
-//	classify <version>  prints stable or prerelease
-//	plan <version>      prints the publish policy as key=value lines
+//	classify <version>                 prints stable or prerelease
+//	plan <version>                     prints the publish policy as key=value lines
+//	append-version <version> <file> <public-keys>
+//	supported-public-keys              prints the key generations embedded in this source, comma-separated
 func Execute(args []string, stdout, stderr io.Writer) int {
-	cmd, version, err := parseArgs(args)
+	filtered, err := parseArgs(args)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	switch cmd {
+	switch filtered[0] {
 	case "classify":
-		kind, err := Classify(version)
+		if len(filtered) != 2 || filtered[1] == "" {
+			fmt.Fprintln(stderr, usageText())
+			return 1
+		}
+		kind, err := Classify(filtered[1])
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -26,7 +35,11 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, kind)
 		return 0
 	case "plan":
-		plan, err := ReleasePlan(version)
+		if len(filtered) != 2 || filtered[1] == "" {
+			fmt.Fprintln(stderr, usageText())
+			return 1
+		}
+		plan, err := ReleasePlan(filtered[1])
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -36,13 +49,44 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		return 0
+	case "supported-public-keys":
+		if len(filtered) != 1 {
+			fmt.Fprintln(stderr, usageText())
+			return 1
+		}
+		fmt.Fprintln(stdout, strings.Join(publishsig.SupportedPublicKeyVersions, ","))
+		return 0
+	case "append-version":
+		if len(filtered) != 4 || filtered[1] == "" || filtered[2] == "" || filtered[3] == "" {
+			fmt.Fprintln(stderr, usageText())
+			return 1
+		}
+		existing, err := os.ReadFile(filtered[2])
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		updated, err := AppendStableVersion(existing, filtered[1], filtered[3])
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		if _, err := stdout.Write(updated); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		return 0
 	default:
-		fmt.Fprintf(stderr, "unknown command %q\n", cmd)
+		fmt.Fprintf(stderr, "unknown command %q\n", filtered[0])
 		return 1
 	}
 }
 
-func parseArgs(args []string) (string, string, error) {
+func usageText() string {
+	return "usage: releasever classify|plan <version> | append-version <version> <file> <public-keys> | supported-public-keys"
+}
+
+func parseArgs(args []string) ([]string, error) {
 	filtered := make([]string, 0, len(args))
 	for _, arg := range args {
 		if arg == "--" {
@@ -50,10 +94,10 @@ func parseArgs(args []string) (string, string, error) {
 		}
 		filtered = append(filtered, arg)
 	}
-	if len(filtered) != 2 || filtered[1] == "" {
-		return "", "", fmt.Errorf("usage: releasever classify|plan <version>")
+	if len(filtered) == 0 {
+		return nil, fmt.Errorf("%s", usageText())
 	}
-	return filtered[0], filtered[1], nil
+	return filtered, nil
 }
 
 func writePlan(w io.Writer, plan Plan) error {

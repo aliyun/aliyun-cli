@@ -18,7 +18,22 @@ type machineHelpEndpoint struct {
 	VPCEndpoint string `json:"vpcEndpoint,omitempty"`
 }
 
-func productHelpEndpoints(product canonicalmeta.ProductEntry) []machineHelpEndpoint {
+func productHelpEndpoints(product canonicalmeta.ProductEntry, index *canonicalmeta.VersionIndex) []machineHelpEndpoint {
+	if index != nil && index.Endpoints != nil {
+		result := make([]machineHelpEndpoint, 0, len(index.Endpoints))
+		for _, endpoint := range index.Endpoints {
+			name := endpoint.RegionNameEn
+			if localizedMachineHelpLanguage() == "zh" {
+				name = endpoint.RegionNameZh
+			}
+			result = append(result, machineHelpEndpoint{
+				RegionID: endpoint.RegionID, RegionName: name,
+				Endpoint: endpoint.Endpoint, VPCEndpoint: endpoint.VPCEndpoint,
+			})
+		}
+		return result
+	}
+	// Older metadata and metadata plugins do not yet provide version endpoints.
 	regions := make(map[string]bool)
 	for region := range product.RegionalEndpoints {
 		regions[region] = true

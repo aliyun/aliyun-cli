@@ -13,6 +13,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 var cdnBaseUrl = "https://aliyuncli.alicdn.com"
@@ -182,7 +183,7 @@ func DownloadGoMigrate(osType, osArch, version, configurePath string) error {
 	downloadUrl := fmt.Sprintf("%s/go-migrate/%s/%s-%s/%s", cdnBaseUrlFunc(), version, osType, osArch, execName)
 	destPath := filepath.Join(configurePath, execName)
 
-	resp, err := http.Get(downloadUrl)
+	resp, err := cloudendpoint.HTTPGet(downloadUrl)
 	if err != nil {
 		return fmt.Errorf("failed to download %s: %v", downloadUrl, err)
 	}
@@ -261,7 +262,7 @@ func fetchRemoteContent(url string) (string, error) {
 	}
 
 	// 创建HTTP请求
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := cloudendpoint.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request for %s: %v", url, err)
 	}

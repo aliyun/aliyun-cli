@@ -14,6 +14,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 type Context struct {
@@ -134,7 +135,7 @@ func (c *Context) InitBasicInfo() {
 func GetLatestKmscliVersion() (string, error) {
 	url := ossDownloadBase + "latest/version.txt"
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := cloudendpoint.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request for %s: %v", url, err)
 	}
@@ -230,7 +231,7 @@ func (c *Context) Install() error {
 }
 
 func downloadBinary(url string, destFile string) error {
-	resp, err := http.Get(url)
+	resp, err := cloudendpoint.HTTPGet(url)
 	if err != nil {
 		return fmt.Errorf("failed to download %s: %v", url, err)
 	}
@@ -325,7 +326,7 @@ func (c *Context) ExecuteKmscli(args []string) error {
 	// "connect: bad file descriptor" errors.
 	http.DefaultClient.CloseIdleConnections()
 
-	cmd := execCommandFunc(c.execFilePath, args...)
+	cmd := execCommandFunc(c.execFilePath, cloudendpoint.WithSuffixArgs(args)...)
 	envs := filterEnv(os.Environ(), c.envMap)
 	for k, v := range c.envMap {
 		envs = append(envs, k+"="+v)

@@ -69,6 +69,16 @@ PATH 配置、源码构建和升级方法见[安装指南](./docs/zh-CN/installa
 aliyun configure --mode OAuth --profile default
 ```
 
+在没有浏览器的远程机器上，可以使用：
+
+```shell
+aliyun configure --mode OAuth --profile default --no-browser
+```
+
+在有浏览器的设备上打开打印的授权链接。登录后，即使页面提示连接失败，
+也请从地址栏复制包含 `code` 和 `state` 的完整回调 URL，粘贴回 CLI。
+此模式不启动本地回调服务，也不需要端口转发。按 Ctrl+C 可取消。
+
 CLI 还支持 AK、StsToken、RamRoleArn、EcsRamRole、OIDC、External、CredentialsURI、ChainableRamRoleArn、CloudSSO、BearerToken，以及适用场景下的 Anonymous 模式。
 
 ```sh
@@ -88,7 +98,7 @@ aliyun ecs DescribeRegions
 aliyun ecs describe-regions
 ```
 
-安全策略按命令写法匹配，这是预期设计：不区分大小写，但不会展开 API 别名或将大驼峰与短横线写法视为等价。请为自动化使用的各类写法配置规则，详见[命令匹配约定](./docs/zh-CN/usage.md#命令匹配约定)。
+安全策略按输入的命令名称匹配，不区分大小写，但不会自动匹配同一 API 的其他名称。请为使用的每种命令名称分别配置规则，详见[命令匹配规则](./docs/zh-CN/usage.md#命令匹配规则)。
 
 ### 3. 查看帮助
 
@@ -129,9 +139,36 @@ aliyun plugin update --name <plugin-name>
 
 完整说明见[命令使用指南](./docs/zh-CN/usage.md)和[插件管理指南](./docs/zh-CN/plugins.md)。
 
+## 数据采集
+
+遥测默认开启，用于改进阿里云 CLI 的稳定性、易用性和性能。
+
+如需关闭遥测，请运行：
+
+```sh
+aliyun configure telemetry disable
+```
+
+也可以设置环境变量 `ALIBABA_CLOUD_CLI_TELEMETRY_DISABLE=1` 关闭遥测。采集范围与管理方式详见[遥测数据采集](./docs/zh-CN/telemetry.md)。
+
 ## 问题诊断
 
 [OpenAPI 问题诊断](https://api.aliyun.com/troubleshoot?source=github_sdk) 可通过 `RequestId` 或报错信息定位 OpenAPI 调用问题。
+
+从阿里云 CLI 3.5.4 起，请使用 `DEBUG=dara` 启用 SDK HTTP 诊断。`DEBUG=sdk` 不再支持。分享诊断输出前请检查其中的敏感信息。
+
+```sh
+DEBUG=dara aliyun ecs DescribeRegions --region cn-hangzhou --method GET
+```
+
+以下是诊断输出节选，凭证和签名信息已脱敏。
+
+```text
+> GET https://ecs.cn-hangzhou.aliyuncs.com/?AccessKeyId=REDACTED&Action=DescribeRegions&...&Signature=REDACTED&...
+> x-acs-action: DescribeRegions
+< HTTP/1.1 200 OK
+< Content-Type: application/json;charset=utf-8
+```
 
 ## 文档
 
@@ -140,6 +177,7 @@ aliyun plugin update --name <plugin-name>
 | 文档索引 | [中文](./docs/README.md#简体中文) | [English](./docs/README.md#english) |
 | 安装与升级 | [指南](./docs/zh-CN/installation.md) | [Guide](./docs/en/installation.md) |
 | 配置与凭证 | [指南](./docs/zh-CN/configuration.md) | [Guide](./docs/en/configuration.md) |
+| 遥测数据采集 | [指南](./docs/zh-CN/telemetry.md) | [Guide](./docs/en/telemetry.md) |
 | 命令、输出与自动化 | [指南](./docs/zh-CN/usage.md) | [Guide](./docs/en/usage.md) |
 | MCP、OpenTelemetry 与机器接口 | [指南](./docs/zh-CN/integrations.md) | [Guide](./docs/en/integrations.md) |
 | 内置 OSS 自动化 | [指南](./docs/zh-CN/oss.md) | [Guide](./docs/en/oss.md) |

@@ -85,7 +85,8 @@ func redactCommandLineArgs(args []string) []string {
 	sensitiveLong := map[string]struct{}{
 		"--access-key-id": {}, "--access-key-secret": {}, "--sts-token": {},
 		"--proxy-pwd": {}, "--private-key": {}, "--bearer-token": {},
-		"--oidc-token-file": {},
+		"--oidc-token-value": {},
+		"--oidc-token-file":  {},
 	}
 	sensitiveShort := map[string]struct{}{"-i": {}, "-k": {}, "-t": {}}
 	redactNext := false

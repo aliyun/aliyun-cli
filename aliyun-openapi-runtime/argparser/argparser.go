@@ -68,6 +68,14 @@ func Parse(params []meta.Parameter, args []string) (*Result, error) {
 
 // ParseWithOptions parses engine/API arguments while syntactically consuming external flags whose values are already owned by the embedding host.
 func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions) (*Result, error) {
+	var parameterNames []string
+	if opts.OnParameterNames != nil {
+		defer func() {
+			// Observing names must not change the command's parsing behavior.
+			defer func() { _ = recover() }()
+			opts.OnParameterNames(append([]string(nil), parameterNames...))
+		}()
+	}
 	apiParams := newParamIndex(params)
 	externalFlags, err := newExternalFlagIndex(opts.ExternalFlags)
 	if err != nil {
@@ -80,6 +88,10 @@ func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions)
 		tok := args[i]
 		// Runtime-owned flags, long and shorthand, have highest priority.
 		if _, spec, inlineVal, hasInline, ok := reservedFlags.match(tok); ok {
+			if opts.OnParameterNames != nil {
+				name, _, _ := strings.Cut(tok, "=")
+				parameterNames = append(parameterNames, name)
+			}
 			i++
 			i, err = consumeReservedFlag(args, i, externalFlags, apiParams, spec, inlineVal, hasInline, &res.Reserved)
 			if err != nil {
@@ -90,6 +102,10 @@ func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions)
 
 		// Host-owned external flags have priority over API metadata parameters.
 		if spec, inlineVal, hasInline, ok := externalFlags.match(tok); ok {
+			if opts.OnParameterNames != nil {
+				name, _, _ := splitExternalToken(tok)
+				parameterNames = append(parameterNames, name)
+			}
 			i++
 			i, err = consumeExternalFlag(args, i, externalFlags, apiParams, spec, inlineVal, hasInline)
 			if err != nil {
@@ -108,6 +124,10 @@ func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions)
 			scores, globals := apiParams.importanceScores(externalFlags)
 			return nil, &UnknownFlagError{Flag: name, Known: apiParams.optionNames(), ImportanceScores: scores, GlobalNames: globals}
 		}
+		if opts.OnParameterNames != nil {
+			flag, _, _ := strings.Cut(tok, "=")
+			parameterNames = append(parameterNames, flag)
+		}
 		if hasInline {
 			switch p.Type {
 			case meta.TypeArray, meta.TypeObject, meta.TypeMap:
@@ -116,10 +136,14 @@ func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions)
 			}
 		}
 
-		// Scalars consume one value; composites consume through the next registered flag.
+		// A complete JSON array in one token terminates an array occurrence.
+		// Other composites consume through the next registered flag as before.
 		var occ []string
 		if hasInline {
 			occ = []string{inlineVal}
+		} else if p.Type == meta.TypeArray && i < len(args) && isCompleteJSONArray(args[i]) {
+			occ = args[i : i+1]
+			i++
 		} else if p.IsComposite() {
 			occ, i = takeValues(args, i, externalFlags, apiParams)
 		} else {
@@ -210,11 +234,24 @@ func isScalarArrayItem(item *meta.Parameter) bool {
 	}
 }
 
+func isStringArrayItem(item *meta.Parameter) bool {
+	return item != nil && item.Type == meta.TypeString
+}
+
 func assignArray(dst map[string]any, key string, p *meta.Parameter, tokens []string) error {
 	existing, _ := dst[key].([]any)
 
+	// For array<string>, an object-looking occurrence is still one string element.
+	// Only a top-level JSON array is reserved as the bulk-input form.
+	// This lets callers pass JSON documents as strings without changing their declared type.
+	rawOccurrence := stripOuterQuotes(strings.TrimSpace(strings.Join(tokens, " ")))
+	if isStringArrayItem(p.ItemType) && strings.HasPrefix(rawOccurrence, "{") {
+		dst[key] = append(existing, rawOccurrence)
+		return nil
+	}
+
 	// JSON-first for this occurrence: a JSON array is expanded into multiple elements.
-	// A JSON object may be shorthand for one composite element, but is invalid for arrays whose declared element type is scalar.
+	// A JSON object may be shorthand for one composite element, but is invalid for other scalar arrays.
 	// For scalar arrays, accepting a JSON array is an intentional extension beyond the legacy Go plugin.
 	// Field names inside are resolved to wire RawNames.
 	if v, recognized, err := tryFlagJSON(tokens); recognized {
@@ -293,6 +330,12 @@ func assignArray(dst map[string]any, key string, p *meta.Parameter, tokens []str
 }
 
 func resolveArrayItem(item *meta.Parameter, value any) (any, error) {
+	if isStringArrayItem(item) {
+		switch value.(type) {
+		case map[string]any, []any:
+			return nil, fmt.Errorf("expected a JSON string element, got %T", value)
+		}
+	}
 	if item != nil && (item.Type == meta.TypeObject || item.Type == meta.TypeMap) {
 		if _, ok := value.(map[string]any); !ok {
 			return nil, fmt.Errorf("expected a JSON object for %s element, got %T", item.Type, value)
@@ -430,6 +473,11 @@ func tryFlagJSON(tokens []string) (value any, recognized bool, err error) {
 		return nil, true, fmt.Errorf("invalid JSON: unexpected trailing content")
 	}
 	return v, true, nil
+}
+
+func isCompleteJSONArray(token string) bool {
+	s := stripOuterQuotes(strings.TrimSpace(token))
+	return strings.HasPrefix(s, "[") && json.Valid([]byte(s))
 }
 
 // resolveNames recursively validates the keys of a decoded JSON value against the parameter schema.

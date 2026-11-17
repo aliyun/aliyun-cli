@@ -17,6 +17,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 const (
@@ -38,6 +39,7 @@ type Context struct {
 	installDir       string
 	execFilePath     string
 	confDir          string
+	runtimeConfDir   string
 	versionCachePath string
 	versionFilePath  string
 	installed        bool
@@ -51,7 +53,7 @@ var (
 	installFromZipFunc   = installFromZip
 	execCommandFunc      = exec.Command
 	lookPathFunc         = exec.LookPath
-	httpGetFunc          = http.Get
+	httpGetFunc          = cloudendpoint.HTTPGet
 	timeNowFunc          = time.Now
 	loadProfileFunc      = func(ctx *cli.Context) (config.Profile, error) {
 		return config.LoadProfileWithContext(ctx)
@@ -76,6 +78,12 @@ func (c *Context) Run(args []string) error {
 	}
 	if err := c.prepareConnectionProperties(); err != nil {
 		return err
+	}
+	if c.runtimeConfDir != "" {
+		defer func() {
+			os.RemoveAll(c.runtimeConfDir)
+			c.runtimeConfDir = ""
+		}()
 	}
 
 	childArgs := c.removeFlagsForMainCli(args)
@@ -124,7 +132,7 @@ func (c *Context) packageZipURL(version string) string {
 func GetLatestVersion(baseURL string) (string, error) {
 	url := strings.TrimRight(baseURL, "/") + "/version.txt"
 	client := &http.Client{Timeout: 30 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := cloudendpoint.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
@@ -267,6 +275,9 @@ func ensureToolBinExecutable(installDir string) error {
 }
 
 func (c *Context) prepareConnectionProperties() error {
+	if err := cloudendpoint.Validate(); err != nil {
+		return err
+	}
 	profile, err := loadProfileFunc(c.originCtx)
 	if err != nil {
 		return fmt.Errorf("load profile: %w", err)
@@ -327,7 +338,27 @@ func (c *Context) prepareConnectionProperties() error {
 	if err := os.MkdirAll(c.confDir, 0o755); err != nil {
 		return err
 	}
-	return writePropertiesFile(confPath, props, fileExists(confPath))
+	if err := writePropertiesFile(confPath, props, fileExists(confPath)); err != nil {
+		return err
+	}
+	// The suffix is process-scoped. Keep the stored connection settings intact
+	// and give this child process a copy with the effective endpoint.
+	if effective := cloudendpoint.WithSuffix(endpoint); effective != endpoint && os.Getenv("SPARK_CONF_DIR") == "" {
+		dir, err := os.MkdirTemp("", "aliyun-spark-conf-")
+		if err != nil {
+			return err
+		}
+		if err := os.CopyFS(dir, os.DirFS(c.confDir)); err != nil {
+			os.RemoveAll(dir)
+			return err
+		}
+		if err := writePropertiesFile(filepath.Join(dir, "connection.properties"), map[string]string{"endpoint": effective}, true); err != nil {
+			os.RemoveAll(dir)
+			return err
+		}
+		c.runtimeConfDir = dir
+	}
+	return nil
 }
 
 func extractCredentials(ctx *cli.Context, p config.Profile) (string, string, string, error) {
@@ -430,14 +461,18 @@ func (c *Context) removeFlagsForMainCli(args []string) []string {
 }
 
 func (c *Context) execute(childArgs []string) error {
-	cmd := execCommandFunc(c.execFilePath, childArgs...)
+	cmd := execCommandFunc(c.execFilePath, cloudendpoint.WithSuffixArgs(childArgs)...)
 	cmd.Stdout = c.originCtx.Stdout()
 	cmd.Stderr = c.originCtx.Stderr()
 	cmd.Stdin = os.Stdin
 
 	env := os.Environ()
 	if os.Getenv("SPARK_CONF_DIR") == "" && c.confDir != "" {
-		env = append(env, "SPARK_CONF_DIR="+c.confDir)
+		confDir := c.confDir
+		if c.runtimeConfDir != "" {
+			confDir = c.runtimeConfDir
+		}
+		env = append(env, "SPARK_CONF_DIR="+confDir)
 	}
 	cmd.Env = env
 
@@ -486,7 +521,7 @@ func (c *Context) readLocalVersion() string {
 }
 
 func httpGetToFile(url, dest string) error {
-	resp, err := httpGetFunc(url)
+	resp, err := httpGetFunc(cloudendpoint.WithSuffix(url))
 	if err != nil {
 		return fmt.Errorf("GET %s: %w", url, err)
 	}

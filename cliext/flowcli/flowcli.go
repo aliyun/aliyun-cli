@@ -16,6 +16,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 type Context struct {
@@ -36,7 +37,7 @@ type Context struct {
 var (
 	getConfigurePathFunc = func() string { return config.GetConfigPath() }
 	execCommandFunc      = exec.Command
-	httpGetFunc          = http.Get
+	httpGetFunc          = cloudendpoint.HTTPGet
 	timeNowFunc          = time.Now
 	runtimeGOOSFunc      = func() string { return runtime.GOOS }
 	runtimeGOARCHFunc    = func() string { return runtime.GOARCH }
@@ -243,7 +244,7 @@ func (c *Context) npmInstall(upgrade bool) error {
 		"--prefix", c.prefixPath,
 		"--no-fund", "--no-audit",
 		"--loglevel=warn",
-		"--registry", c.effectiveRegistry(),
+		"--registry", cloudendpoint.WithSuffix(c.effectiveRegistry()),
 		target,
 	}
 
@@ -274,7 +275,7 @@ func (c *Context) effectiveRegistry() string {
 
 func (c *Context) fetchOSSVersion() (string, error) {
 	base := strings.TrimRight(c.effectiveBaseURL(), "/")
-	resp, err := httpGetFunc(base + "/version.txt")
+	resp, err := httpGetFunc(cloudendpoint.WithSuffix(base + "/version.txt"))
 	if err != nil {
 		return "", err
 	}
@@ -481,7 +482,7 @@ func (c *Context) PrepareEnv() ([]string, error) {
 // ExecuteFlowcli invokes the resolved flow-cli binary with the same stdio
 // wiring as esacli/computenestutil.
 func (c *Context) ExecuteFlowcli(args []string) error {
-	cmd := execCommandFunc(c.execFilePath, args...)
+	cmd := execCommandFunc(c.execFilePath, cloudendpoint.WithSuffixArgs(args)...)
 	envs, err := c.PrepareEnv()
 	if err != nil {
 		return err

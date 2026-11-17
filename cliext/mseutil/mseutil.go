@@ -14,6 +14,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 type Context struct {
@@ -158,7 +159,7 @@ func (c *Context) downloadURL() string {
 // GetRemoteBinaryVersion returns a fingerprint for the remote binary via HEAD ETag
 // (mseutil OSS has no version.txt channel).
 func GetRemoteBinaryVersion(downloadURL string) (string, error) {
-	req, err := http.NewRequest(http.MethodHead, downloadURL, nil)
+	req, err := cloudendpoint.NewRequest(http.MethodHead, downloadURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request for %s: %v", downloadURL, err)
 	}
@@ -269,7 +270,7 @@ func (c *Context) Install() error {
 }
 
 func downloadBinary(url string, destFile string) error {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := cloudendpoint.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request for %s: %v", url, err)
 	}
@@ -360,7 +361,7 @@ func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
 func (c *Context) ExecuteMseutil(args []string) error {
 	http.DefaultClient.CloseIdleConnections()
 
-	cmd := execCommandFunc(c.execFilePath, args...)
+	cmd := execCommandFunc(c.execFilePath, cloudendpoint.WithSuffixArgs(args)...)
 	envs := filterEnv(os.Environ(), c.envMap)
 	for k, v := range c.envMap {
 		envs = append(envs, k+"="+v)

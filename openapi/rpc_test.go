@@ -17,10 +17,9 @@ import (
 	"bufio"
 	"testing"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -54,7 +53,7 @@ func TestRpcFlatArrayIndexedParameters(t *testing.T) {
 			}
 			require.NoError(t, validateLegacyDocRequired(ctx, api), "ai=%v indexed=%v", aiMode, indexed)
 			require.NoError(t, validateLegacyConstraints(ctx, api))
-			invoker := &RpcInvoker{BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()}, api: api}
+			invoker := &RpcInvoker{BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()}, api: api}
 			require.NoError(t, invoker.Prepare(ctx), "ai=%v indexed=%v", aiMode, indexed)
 			assert.Equal(t, values, invoker.request.QueryParams)
 		}
@@ -66,7 +65,7 @@ func TestRpcFlatArrayIndexedParameters(t *testing.T) {
 	ctx.Flags().Add(NewInsecureFlag())
 	ctx.Flags().Add(NewSecureFlag())
 	ctx.Flags().Add(NewMethodFlag())
-	invoker := &RpcInvoker{BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()}, api: api}
+	invoker := &RpcInvoker{BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()}, api: api}
 	require.ErrorContains(t, invoker.Prepare(ctx), "required parameters not assigned")
 	assert.Nil(t, api.FindLegacyParameter("Tag.1.Unknown"))
 	for _, name := range []string{"ResourceId.", "ResourceId.foo", "ResourceId.1.Unknown", "ResourceId.1.", "ResourceId.0", "ResourceId.-1", "Tag..Key", "Tag.foo.Key"} {
@@ -85,7 +84,7 @@ func TestRpcFlatArrayIndexedParameters(t *testing.T) {
 func TestRpcInvoker_Prepare(t *testing.T) {
 	a := &RpcInvoker{
 		BasicInvoker: &BasicInvoker{
-			request: requests.NewCommonRequest(),
+			request: legacyapi.NewRequest(),
 		},
 		api: &canonicalmeta.API{
 			Name:     "ecs",
@@ -185,7 +184,7 @@ func TestRpcInvoker_Prepare(t *testing.T) {
 func TestRpcInvoker_PrepareFormDataSubParameter(t *testing.T) {
 	a := &RpcInvoker{
 		BasicInvoker: &BasicInvoker{
-			request: requests.NewCommonRequest(),
+			request: legacyapi.NewRequest(),
 		},
 		api: &canonicalmeta.API{
 			Name:     "CreateEr",
@@ -223,16 +222,15 @@ func TestRpcInvoker_PrepareFormDataSubParameter(t *testing.T) {
 }
 
 func TestRpcInvoker_Call(t *testing.T) {
-	client, err := sdk.NewClientWithAccessKey("regionid", "accesskeyid", "accesskeysecret")
-	assert.Nil(t, err)
+	client := legacyapi.NewClient("regionid", "accesskeyid", "accesskeysecret", "")
 
 	a := &RpcInvoker{
 		BasicInvoker: &BasicInvoker{
 			client:  client,
-			request: requests.NewCommonRequest(),
+			request: legacyapi.NewRequest(),
 		},
 	}
-	_, err = a.Call()
+	_, err := a.Call()
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "[SDK.CanNotResolveEndpoint] Can not resolve endpoint")
 }

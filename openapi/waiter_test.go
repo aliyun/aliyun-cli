@@ -14,8 +14,7 @@
 package openapi
 
 import (
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -29,13 +28,12 @@ func TestWaiter_CallWith(t *testing.T) {
 	waiter = GetWaiter()
 	assert.NotNil(t, waiter)
 
-	client, err := sdk.NewClientWithAccessKey("regionid", "accesskeyid", "accesskeysecret")
-	assert.Nil(t, err)
+	client := legacyapi.NewClient("regionid", "accesskeyid", "accesskeysecret", "")
 
 	invoker := &RpcInvoker{
 		BasicInvoker: &BasicInvoker{
 			client:  client,
-			request: requests.NewCommonRequest(),
+			request: legacyapi.NewRequest(),
 		},
 	}
 
@@ -68,12 +66,11 @@ func TestWaiter_CallWith_TimeoutRange(t *testing.T) {
 	waiter := GetWaiter()
 	assert.NotNil(t, waiter)
 
-	client, err := sdk.NewClientWithAccessKey("regionid", "accesskeyid", "accesskeysecret")
-	assert.Nil(t, err)
+	client := legacyapi.NewClient("regionid", "accesskeyid", "accesskeysecret", "")
 	invoker := &RpcInvoker{
 		BasicInvoker: &BasicInvoker{
 			client:  client,
-			request: requests.NewCommonRequest(),
+			request: legacyapi.NewRequest(),
 		},
 	}
 
@@ -98,12 +95,11 @@ func TestWaiter_CallWith_IntervalRange(t *testing.T) {
 	waiter := GetWaiter()
 	assert.NotNil(t, waiter)
 
-	client, err := sdk.NewClientWithAccessKey("regionid", "accesskeyid", "accesskeysecret")
-	assert.Nil(t, err)
+	client := legacyapi.NewClient("regionid", "accesskeyid", "accesskeysecret", "")
 	invoker := &RpcInvoker{
 		BasicInvoker: &BasicInvoker{
 			client:  client,
-			request: requests.NewCommonRequest(),
+			request: legacyapi.NewRequest(),
 		},
 	}
 

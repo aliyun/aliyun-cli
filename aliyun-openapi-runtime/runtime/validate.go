@@ -40,6 +40,9 @@ func (e *MissingRequiredError) Error() string {
 }
 
 func (*MissingRequiredError) AIRecoveryEligible() {}
+func (*MissingRequiredError) LocalErrorCode() string {
+	return "MISSING_REQUIRED_PARAMETER"
+}
 
 // EndpointNotResolvedError reports that no endpoint could be resolved for the
 // product/region pair and no --endpoint override was supplied.
@@ -53,6 +56,9 @@ func (e *EndpointNotResolvedError) Error() string {
 }
 
 func (*EndpointNotResolvedError) AIRecoveryEligible() {}
+func (*EndpointNotResolvedError) LocalErrorCode() string {
+	return "ENDPOINT_NOT_RESOLVED"
+}
 
 // ValidateRequired checks that every required top-level parameter of api was supplied.
 // When rawBody is true, body and formData parameters are skipped because --body/--body-file replaces the entire request body.

@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -64,7 +65,7 @@ func (p *ListUserParameter) ListUsers(nextToken string, maxResults int) (*ListUs
 	}
 	apiUrl.RawQuery = query.Encode()
 
-	req, err := http.NewRequest("GET", apiUrl.String(), nil)
+	req, err := cloudendpoint.NewRequest("GET", apiUrl.String(), nil)
 	if err != nil {
 		return nil, err
 	}

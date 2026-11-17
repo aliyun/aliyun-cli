@@ -45,7 +45,9 @@ const (
 	ExpiredSecondsFlagName             = "expired-seconds"
 	ProcessCommandFlagName             = "process-command"
 	OIDCProviderARNFlagName            = "oidc-provider-arn"
+	OIDCTokenFlagName                  = "oidc-token-value"
 	OIDCTokenFileFlagName              = "oidc-token-file"
+	SSOSessionFlagName                 = "sso-session"
 	CloudSSOSignInUrlFlagName          = "cloud-sso-sign-in-url"
 	CloudSSOAccessConfigFlagName       = "cloud-sso-access-config"
 	CloudSSOAccountIdFlagName          = "cloud-sso-account-id"
@@ -57,6 +59,7 @@ const (
 	AutoPluginInstallEnablePreFlagName = "auto-plugin-install-enable-pre"
 	BearerTokenFlagName                = "bearer-token"
 	BearerTokenHeaderKeyFlagName       = "bearer-token-header-key"
+	CliSignVersionFlagName             = "cli-sign-version"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -85,7 +88,9 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewExpiredSecondsFlag())
 	fs.Add(NewProcessCommandFlag())
 	fs.Add(NewOIDCProviderARNFlag())
+	fs.Add(NewOIDCTokenFlag())
 	fs.Add(NewOIDCTokenFileFlag())
+	fs.Add(NewSSOSessionFlag())
 	fs.Add(NewCloudSSOSignInUrlFlag())
 	fs.Add(NewCloudSSOAccessConfigFlag())
 	fs.Add(NewCloudSSOAccountIdFlag())
@@ -97,6 +102,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewAutoPluginInstallEnablePreFlag())
 	fs.Add(NewBearerTokenFlag())
 	fs.Add(NewBearerTokenHeaderKeyFlag())
+	fs.Add(NewCliSignVersionFlag())
 }
 
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
@@ -199,8 +205,17 @@ func OIDCProviderARNFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(OIDCProviderARNFlagName)
 }
 
+func OIDCTokenFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(OIDCTokenFlagName)
+}
+
 func OIDCTokenFileFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(OIDCTokenFileFlagName)
+}
+
+// SSOSessionFlag returns the flag for the shared CloudSSO session name.
+func SSOSessionFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(SSOSessionFlagName)
 }
 
 // CloudSSOSignInUrlFlag returns the flag for cloud sso sign in url
@@ -413,6 +428,17 @@ func NewOIDCProviderARNFlag() *cli.Flag {
 	}
 }
 
+func NewOIDCTokenFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         OIDCTokenFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--oidc-token-value <OIDCToken>` to assign the OIDC token string",
+			"使用 `--oidc-token-value <OIDCToken>` 直接指定 OIDC Token 内容"),
+	}
+}
+
 func NewOIDCTokenFileFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "config",
@@ -510,6 +536,18 @@ func NewSkipSecureVerify() *cli.Flag {
 		Short: i18n.T(
 			"use `--skip-secure-verify` to skip https certification validate [Not recommended]",
 			"使用 `--skip-secure-verify` 跳过https的证书校验 [不推荐使用]"),
+	}
+}
+
+func NewSSOSessionFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         SSOSessionFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--sso-session` to specify the shared cloud sso session name",
+			"使用 `--sso-session` 指定共享云SSO会话名称"),
 	}
 }
 
@@ -668,5 +706,30 @@ func NewBearerTokenHeaderKeyFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--bearer-token-header-key <key>` to assign custom auth header key, e.g. x-custom-token",
 			"使用 `--bearer-token-header-key <key>` 指定自定义认证 Header 名称，例如 x-custom-token"),
+	}
+}
+
+func CliSignVersionFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(CliSignVersionFlagName)
+}
+
+// NewCliSignVersionFlag selects the OpenAPI signature version.
+// Currently only "v4" is supported; an assigned empty value clears the setting
+// and restores the default signing path. Reused by invoke and
+// `aliyun configure set` (persists profile.signature_version).
+func NewCliSignVersionFlag() *cli.Flag {
+	return &cli.Flag{
+		Category: "caller",
+		Name:     CliSignVersionFlagName,
+		// AssignedDefault allows `--cli-sign-version` / `--cli-sign-version=` to
+		// clear the effective version (AssignedOnce rejects empty values).
+		AssignedMode: cli.AssignedDefault,
+		Persistent:   true,
+		Short: i18n.T(
+			"OpenAPI signature version for kebab-case commands: only v4; set empty to clear and use default (also persists via `aliyun configure set`)",
+			"短横线命令的 OpenAPI 签名版本：当前仅支持 v4；设为空值可清空并恢复默认签名（`aliyun configure set` 可写入 Profile）"),
+		Long: i18n.T(
+			"Select the OpenAPI signature version for kebab-case commands. Currently only `v4` is supported. Set an empty value (`--cli-sign-version ''`, `aliyun configure set --cli-sign-version ''`, or `ALIBABA_CLOUD_SIGNATURE_VERSION=`) to clear a previously configured value and fall back to the default signing path. Any other value is rejected.",
+			"选择短横线命令的 OpenAPI 签名版本。当前仅支持 `v4`。设置空值（`--cli-sign-version ''`、`aliyun configure set --cli-sign-version ''`，或 `ALIBABA_CLOUD_SIGNATURE_VERSION=`）可清空已配置的值并恢复默认签名。其他值会报错不支持。"),
 	}
 }

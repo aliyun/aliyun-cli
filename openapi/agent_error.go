@@ -25,10 +25,11 @@ import (
 	"unicode"
 
 	"github.com/alibabacloud-go/tea/tea"
-	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
+	"github.com/aliyun/aliyun-cli/v3/mcpproxy"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
@@ -252,6 +253,21 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 	if errors.As(err, &oauthErr) {
 		return oauthAgentError(err, oauthErr)
 	}
+	var mcpAuthErr *mcpproxy.AuthenticationError
+	if errors.As(err, &mcpAuthErr) {
+		return mcpAuthenticationAgentError(err, mcpAuthErr)
+	}
+
+	var configurationErr *credentialConfigurationError
+	var runtimeCredentialErr *engine.CredentialError
+	if errors.As(err, &configurationErr) || errors.As(err, &runtimeCredentialErr) {
+		return profileConfigurationAgentError(err)
+	}
+	configurePath := rawHelpPositionals(args)
+	if len(configurePath) > 0 && configurePath[0] == "configure" &&
+		(len(configurePath) == 1 || containsString([]string{"get", "set", "list", "delete", "switch"}, configurePath[1])) {
+		return profileConfigurationAgentError(err)
+	}
 
 	if normalized := normalizeServerAgentError(err, context); normalized != nil {
 		return normalized
@@ -281,6 +297,37 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 	// UsageError, and untyped errors all retain their original rendering and
 	// identity.
 	return err
+}
+
+func mcpAuthenticationAgentError(cause error, mcpErr *mcpproxy.AuthenticationError) error {
+	agentErr := cli.NewAgentError(cli.AgentErrorEnvelope{
+		Message: mcpErr.Error(),
+		Recovery: cli.AgentErrorRecovery{
+			Action: mcpErr.Action,
+			Hint:   mcpErr.Hint,
+		},
+	}, cause)
+	if agentErr == nil {
+		return cause
+	}
+	return agentErr.WithExitCode(1)
+}
+
+func profileConfigurationAgentError(cause error) error {
+	exitCode := 1
+	var withTip cli.ErrorWithTip
+	if errors.As(cause, &withTip) {
+		exitCode = 3
+	}
+	// Configuration and credential-provider errors may contain secret values.
+	return cli.NewAgentError(cli.AgentErrorEnvelope{
+		Message: "profile configuration failed",
+		Recovery: cli.AgentErrorRecovery{
+			Action:  "check_configuration",
+			Command: "aliyun configure",
+			Hint:    "Check that the selected profile exists and its configuration is valid. Use `aliyun configure list` to inspect profiles, then configure the profile before retrying.",
+		},
+	}, cause).WithExitCode(exitCode)
 }
 
 // oauthAgentError renders an OAuth credential failure (expired or revoked
@@ -343,7 +390,7 @@ func normalizeServerAgentError(err error, context recoveryContext) error {
 		}
 		return serverAgentError(err, facts, context)
 	}
-	var serverErr *sdkerrors.ServerError
+	var serverErr *legacyapi.ServerError
 	if errors.As(err, &serverErr) {
 		facts := serverErrorFacts{
 			code:       serverErr.ErrorCode(),
@@ -561,7 +608,7 @@ func sanitizeNetworkTransportError(err error) error {
 	}
 	// With --retry-count the old SDK wraps the transport error in a ClientError
 	// that has no Unwrap; recover the inner url.Error via OriginError.
-	var clientErr *sdkerrors.ClientError
+	var clientErr *legacyapi.ClientError
 	if errors.As(err, &clientErr) {
 		if inner, ok := clientErr.OriginError().(*url.Error); ok {
 			return newTransportError(inner)

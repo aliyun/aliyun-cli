@@ -47,7 +47,7 @@ func TestEveryExtensionDeniedBeforeDispatch(t *testing.T) {
 	extensionPolicyHome(t, "*restore*", safety.ActionDeny)
 	// Explicit inventory includes hidden extensions and providers with nested
 	// commands or DisablePersistentFlags. All go through the real root router.
-	names := []string{"ossutil", "agentbay", "otsutil", "spark-submit", "kmscli", "lindorm", "mseutil", "acrutil", "codeup-cli", "saectl", "appmanager", "computenest-cli", "ecctl", "esa-cli", "flow-cli", "cms2", "maxc", "iact3", "rostran"}
+	names := []string{"ossutil", "agentbay", "bl", "otsutil", "spark-submit", "kmscli", "lindorm", "mseutil", "acrutil", "codeup-cli", "saectl", "appmanager", "computenest-cli", "ecctl", "esa-cli", "flow-cli", "cms2", "maxc", "iact3", "rostran"}
 	cli.DisableExitCode()
 	t.Cleanup(cli.EnableExitCode)
 	for _, name := range names {

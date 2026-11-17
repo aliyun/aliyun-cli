@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -286,6 +287,16 @@ func TestDownloadBinary_ContextCancel(t *testing.T) {
 	err := DownloadBinary(ctx, server.URL, filepath.Join(tmp, "test-bin"))
 	if err == nil {
 		t.Fatal("expected error from cancelled context")
+	}
+}
+
+func TestBaseStripFlagsIncludesOIDCToken(t *testing.T) {
+	flags := BaseStripFlags()
+	if !flags["oidc-token-value"] {
+		t.Fatal("oidc-token-value should be stripped from child commands")
+	}
+	if !flags["oidc-token-file"] {
+		t.Fatal("oidc-token-file should be stripped from child commands")
 	}
 }
 
@@ -1205,6 +1216,23 @@ func TestNeedsUpdate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := needsUpdate(tt.local, tt.remote)
 			assert.Equal(t, tt.expect, result)
+		})
+	}
+}
+
+func TestRemoveFlagsForMainCli_StripsSSOSession(t *testing.T) {
+	for _, selector := range [][]string{{"--sso-session", "company"}, {"--sso-session=company"}} {
+		t.Run(selector[0], func(t *testing.T) {
+			args := append([]string{"list", "--profile", "prod"}, selector...)
+			args = append(args, "--region", "cn-hangzhou", "--child-option", "value")
+			got, err := New(Config{StripFlags: BaseStripFlags()}, nil).RemoveFlagsForMainCli(args)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []string{"list", "--region", "cn-hangzhou", "--child-option", "value"}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("got %v, want %v", got, want)
+			}
 		})
 	}
 }

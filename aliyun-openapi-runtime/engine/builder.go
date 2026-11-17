@@ -118,10 +118,32 @@ type Request struct {
 	Out  io.Writer
 	// AIMode enables metadata constraint validation for agent-driven calls.
 	AIMode bool
-	// Lang selects help/description locale ("zh" / "en"). Empty => en.
+	// Lang selects help and local-message locale ("zh" / "en"). Calls fall
+	// back to Host.Settings().Language when empty, then to English.
 	Lang string
 	// Host supplies region + credentials. May be nil for help or dry-run that needs neither (endpoint then resolves region-less).
 	Host runtime.Host
+	// OnCommandResolved observes the original product and command spelling after
+	// loading the API selected by its version or recognizing a built-in command.
+	// Dispatch and APIHelp notify before parameter validation.
+	// It receives no parameter tokens and is called at most once per entry point.
+	// Product Help and unresolved commands do not invoke it.
+	OnCommandResolved func(product, command string)
+	// OnParameterNames observes only option names confirmed by the parser for
+	// this call, including on parsing failure. Original spelling, order, and
+	// repetitions are preserved; option values are never included.
+	OnParameterNames func([]string)
+}
+
+func (req *Request) notifyCommandResolved() {
+	if req.OnCommandResolved == nil {
+		return
+	}
+	observer := req.OnCommandResolved
+	// Requests are passed by value. Clear only this call's copy so a subsequent
+	// Help builder does not notify again and callers can safely reuse a request.
+	req.OnCommandResolved = nil
+	observer(req.Args[0], req.Args[1])
 }
 
 func (e *Engine) HasProduct(product string) bool {
@@ -208,7 +230,8 @@ func (e *Engine) ProductHelp(req Request) error {
 		return errors.New("product is required")
 	}
 	parsed, err := argparser.ParseWithOptions(nil, req.Args[1:], argparser.ParseOptions{
-		ExternalFlags: e.externalFlags,
+		ExternalFlags:    e.externalFlags,
+		OnParameterNames: req.OnParameterNames,
 	})
 	if err != nil {
 		return &UsageError{Code: "INVALID_ARGUMENT", Err: err}
@@ -239,6 +262,7 @@ func (e *Engine) APIHelp(req Request) error {
 	if command == listAPIVersionsCommand {
 		productMeta := ldr.LookupProduct(product)
 		if productMeta != nil && len(productMeta.Versions) > 1 {
+			req.notifyCommandResolved()
 			return printAPIVersionsHelp(req.Out, productMeta, req.Lang)
 		}
 	}
@@ -246,11 +270,13 @@ func (e *Engine) APIHelp(req Request) error {
 	if err != nil {
 		return err
 	}
+	req.notifyCommandResolved()
 	if handled, parameterErr := e.tryParameterHelp(req, api.Parameters, req.Args[2:]); handled {
 		return parameterErr
 	}
 	parsed, err := argparser.ParseWithOptions(api.Parameters, req.Args[2:], argparser.ParseOptions{
-		ExternalFlags: e.externalFlags,
+		ExternalFlags:    e.externalFlags,
+		OnParameterNames: req.OnParameterNames,
 	})
 	if err != nil {
 		return &UsageError{Code: "INVALID_ARGUMENT", Err: err}
@@ -290,12 +316,14 @@ func (e *Engine) Dispatch(req Request) error {
 	if err != nil {
 		return err
 	}
+	req.notifyCommandResolved()
 
 	if handled, parameterErr := e.tryParameterHelp(req, api.Parameters, args[2:]); handled {
 		return parameterErr
 	}
 	res, err := argparser.ParseWithOptions(api.Parameters, args[2:], argparser.ParseOptions{
-		ExternalFlags: e.externalFlags,
+		ExternalFlags:    e.externalFlags,
+		OnParameterNames: req.OnParameterNames,
 	})
 	if err != nil {
 		var ufe *argparser.UnknownFlagError
@@ -369,8 +397,10 @@ func (e *Engine) dispatchBuiltin(req Request, ldr loader.Loader, product, comman
 	if command != listAPIVersionsCommand || productMeta == nil || len(productMeta.Versions) <= 1 {
 		return false, nil
 	}
+	req.notifyCommandResolved()
 	res, err := argparser.ParseWithOptions(nil, req.Args[2:], argparser.ParseOptions{
-		ExternalFlags: e.externalFlags,
+		ExternalFlags:    e.externalFlags,
+		OnParameterNames: req.OnParameterNames,
 	})
 	if err != nil {
 		return true, &UsageError{Code: "INVALID_ARGUMENT", Err: err}
@@ -411,6 +441,7 @@ func resolveDispatchAPI(ldr loader.Loader, product, command string, tail []strin
 func buildExecContext(req Request, api *meta.API, res *argparser.Result) (*runtime.ExecContext, error) {
 	ec := &runtime.ExecContext{
 		API:        api,
+		Language:   req.Lang,
 		Args:       res.Args,
 		Region:     res.Reserved.Region,
 		Endpoint:   res.Reserved.Endpoint,
@@ -460,6 +491,9 @@ func buildExecContext(req Request, api *meta.API, res *argparser.Result) (*runti
 			ec.Region = req.Host.Region()
 		}
 		settings := req.Host.Settings()
+		if ec.Language == "" {
+			ec.Language = settings.Language
+		}
 		ec.ReadTimeout = settings.ReadTimeout
 		ec.ConnectTimeout = settings.ConnectTimeout
 		ec.RetryCount = settings.RetryCount
@@ -467,6 +501,7 @@ func buildExecContext(req Request, api *meta.API, res *argparser.Result) (*runti
 		ec.SkipSecureVerify = settings.SkipSecureVerify
 		ec.CLIVersion = settings.CLIVersion
 		ec.UserAgent = settings.UserAgent
+		ec.SignatureVersion = settings.SignatureVersion
 		ec.Transport = req.Host.TransportOptions()
 	}
 	if !ec.DryRun || res.Reserved.EstimateCost {
@@ -554,9 +589,23 @@ func (e *Engine) executeEstimateCost(out io.Writer, ec *runtime.ExecContext, res
 	if err != nil {
 		return err
 	}
-	// The quote is the result, so --quiet intentionally does not suppress it.
-	_, err = fmt.Fprintln(out, quote)
-	return err
+	resultErr := runtime.PricingResponseError(quote)
+	var business *runtime.PricingBusinessError
+	if resultErr != nil && !errors.As(resultErr, &business) {
+		return resultErr
+	}
+	if !res.Reserved.Quiet {
+		response := &runtime.Response{Raw: []byte(quote)}
+		if res.Reserved.OutputTable != nil {
+			err = renderOutputTable(out, nil, response.Raw, res.Reserved.OutputTable)
+		} else {
+			err = renderResponse(out, response, res.Reserved.CliQuery, false)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return resultErr
 }
 
 func (e *Engine) executeSSE(out io.Writer, ec *runtime.ExecContext, res *argparser.Result, compact bool) error {

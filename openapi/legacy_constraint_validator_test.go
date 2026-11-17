@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 )
 
 func legacyConstraintContext(t *testing.T, forceOn, forceOff bool) *cli.Context {
@@ -323,7 +323,7 @@ func TestLegacyRepeatListAndInvokerHelpers(t *testing.T) {
 	if got := legacyImplicitDocRequiredArgs(&RpcInvoker{BasicInvoker: &BasicInvoker{}}); got != nil {
 		t.Fatalf("nil request implicit args = %#v", got)
 	}
-	invoker := &RpcInvoker{BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()}}
+	invoker := &RpcInvoker{BasicInvoker: &BasicInvoker{request: legacyapi.NewRequest()}}
 	if got := legacyImplicitDocRequiredArgs(invoker); got != nil {
 		t.Fatalf("empty RegionId should not satisfy doc_required: %#v", got)
 	}
@@ -363,5 +363,44 @@ func assertStringSliceEqual(t *testing.T, want, got []string) {
 	t.Helper()
 	if !reflect.DeepEqual(want, got) {
 		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestValidateLegacyDocRequiredJSONObjectArray(t *testing.T) {
+	api := &canonicalmeta.API{Parameters: []canonicalmeta.Parameter{{
+		Name: "tag", RawName: "Tag", Type: "array", Location: "query",
+		ParamStyle: "json", DocRequired: true,
+		Element: &canonicalmeta.TypeShape{Type: "object", Fields: []canonicalmeta.Field{
+			{Name: "key", RawName: "Key", Type: "string", DocRequired: true},
+		}},
+	}}}
+	for _, tc := range []struct {
+		name, value          string
+		indexed, wantMissing bool
+	}{
+		{name: "JSON parent", value: `[{"Key":"k1","Value":"v1"}]`},
+		{name: "missing", wantMissing: true},
+		{name: "empty parent", value: "", wantMissing: true},
+		{name: "indexed flags cannot replace JSON parent", value: "k1", indexed: true, wantMissing: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := legacyConstraintContext(t, true, false)
+			if tc.name != "missing" {
+				flag := "Tag"
+				if tc.indexed {
+					flag = "Tag.1.Key"
+				}
+				assignLegacyUnknown(t, ctx, flag, tc.value)
+			}
+			err := validateLegacyDocRequired(ctx, api)
+			if tc.wantMissing {
+				var missing *LegacyDocRequiredError
+				if !errors.As(err, &missing) || !reflect.DeepEqual(missing.Flags, []string{"--Tag"}) {
+					t.Fatalf("error = %v, want missing --Tag", err)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }

@@ -20,6 +20,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 )
 
@@ -168,6 +169,33 @@ func TestRun_NotInstalled_FreshInstallAndExecute(t *testing.T) {
 	}
 	if strings.TrimSpace(string(data)) != fmt.Sprintf("%d", fixedNow.Unix()) {
 		t.Fatalf("cache timestamp mismatch: %s", string(data))
+	}
+}
+
+func TestRun_ManagedBinaryUnsupportedPlatform(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_OSSUTIL_EXEC_PATH", "")
+	configDir := t.TempDir()
+	oldPath, oldOS, oldLatest, oldDownload := getConfigurePathFunc, runtimeGOOSFunc, getLatestOssUtilVersionFunc, downloadAndUnzipFunc
+	t.Cleanup(func() {
+		getConfigurePathFunc, runtimeGOOSFunc, getLatestOssUtilVersionFunc, downloadAndUnzipFunc = oldPath, oldOS, oldLatest, oldDownload
+	})
+	getConfigurePathFunc = func() string { return configDir }
+	runtimeGOOSFunc = func() string { return "unsupported" }
+	getLatestOssUtilVersionFunc = func() (string, error) {
+		t.Fatal("unsupported platform must fail before querying versions")
+		return "", nil
+	}
+	downloadAndUnzipFunc = func(string, string, string, string) error {
+		t.Fatal("unsupported platform must not download a binary")
+		return nil
+	}
+	ctx, _, _ := newOriginCtx()
+	if err := NewContext(ctx).Run([]string{"ls"}); err == nil || !strings.Contains(err.Error(), "os type unsupported") {
+		t.Fatalf("expected unsupported platform error, got %v", err)
+	}
+	entries, err := os.ReadDir(configDir)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("unsupported platform wrote managed files: %v, %v", entries, err)
 	}
 }
 
@@ -538,6 +566,53 @@ func TestPrepareEnv(t *testing.T) {
 	// ai-mode off by default: no cli_ai_* inside payload
 	if _, ok := config[aimode.OssutilConfigKeyAIMode]; ok {
 		t.Fatalf("unexpected %s when ai-mode off", aimode.OssutilConfigKeyAIMode)
+	}
+}
+
+func TestPrepareEnv_OriginalCallContext(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	prepareConfig(t, home, "en")
+
+	for _, mapping := range []struct {
+		source, target, value, override string
+	}{
+		{sysconfig.EnvSourceIP, "OSSUTIL_ORIGINAL_SOURCE_IP", "2001:db8::1", "192.0.2.2"},
+		{sysconfig.EnvSecureTransport, "OSSUTIL_ORIGINAL_SECURE_TRANSPORT", "false", "true"},
+	} {
+		t.Run(mapping.target, func(t *testing.T) {
+			for _, tc := range []struct {
+				name, source, target, want string
+				targetSet, wantSet         bool
+			}{
+				{name: "maps common value", source: mapping.value, want: mapping.value, wantSet: true},
+				{name: "preserves common whitespace", source: " \t" + mapping.value + "\n", want: " \t" + mapping.value + "\n", wantSet: true},
+				{name: "ignores empty common value"},
+				{name: "preserves blank common value", source: " \t\n", want: " \t\n", wantSet: true},
+				{name: "preserves dedicated value", source: mapping.value, target: mapping.override, targetSet: true, want: mapping.override, wantSet: true},
+				{name: "preserves dedicated empty value", source: mapping.value, targetSet: true, wantSet: true},
+				{name: "preserves dedicated whitespace", source: mapping.value, target: " \t", targetSet: true, want: " \t", wantSet: true},
+				{name: "preserves dedicated value without common value", target: mapping.override, targetSet: true, want: mapping.override, wantSet: true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					t.Setenv(mapping.source, tc.source)
+					t.Setenv(mapping.target, tc.target)
+					if !tc.targetSet {
+						if err := os.Unsetenv(mapping.target); err != nil {
+							t.Fatal(err)
+						}
+					}
+					ctx, _, _ := newOriginCtx()
+					c := NewContext(ctx)
+					if err := c.PrepareEnv(); err != nil {
+						t.Fatalf("PrepareEnv: %v", err)
+					}
+					if got, ok := c.envMap[mapping.target]; got != tc.want || ok != tc.wantSet {
+						t.Fatalf("%s = (%q, %v), want (%q, %v)", mapping.target, got, ok, tc.want, tc.wantSet)
+					}
+				})
+			}
+		})
 	}
 }
 

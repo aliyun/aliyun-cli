@@ -448,10 +448,18 @@ func isFlatObjectParameter(parameter Parameter) bool {
 func sortedParameterFieldNames(parameter Parameter) []string {
 	names := make([]string, 0, len(parameter.Fields))
 	for _, field := range parameter.Fields {
-		names = append(names, strings.TrimLeft(field.Name, "-"))
+		names = append(names, parameterInputFieldName(field))
 	}
 	sort.Strings(names)
 	return names
+}
+
+// Composite values use API field names; only the outer option is kebab-case.
+func parameterInputFieldName(field Parameter) string {
+	if field.RawName != "" {
+		return field.RawName
+	}
+	return strings.TrimLeft(field.Name, "-")
 }
 
 func parameterKVExample(keys, values []string) string {
@@ -474,7 +482,7 @@ func parameterStructure(parameter Parameter) string {
 		}
 		parts := make([]string, 0, len(parameter.Fields))
 		for _, field := range parameter.Fields {
-			parts = append(parts, strings.TrimLeft(field.Name, "-")+": "+parameterShape(field))
+			parts = append(parts, parameterInputFieldName(field)+": "+parameterShape(field))
 		}
 		return "{" + strings.Join(parts, ", ") + "}"
 	case "array":

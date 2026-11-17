@@ -22,7 +22,7 @@ func TestProductHelpEndpointModesAndText(t *testing.T) {
 		RegionalEndpoints:    map[string]string{"cn-beijing": "public.example.com"},
 		RegionalVPCEndpoints: map[string]string{"cn-beijing": "vpc.example.com", "cn-hangzhou": "vpc-hz.example.com"},
 	}
-	assert.Equal(t, []machineHelpEndpoint{{RegionID: "cn-beijing", Endpoint: "public.example.com", VPCEndpoint: "vpc.example.com"}, {RegionID: "cn-hangzhou", VPCEndpoint: "vpc-hz.example.com"}}, productHelpEndpoints(product))
+	assert.Equal(t, []machineHelpEndpoint{{RegionID: "cn-beijing", Endpoint: "public.example.com", VPCEndpoint: "vpc.example.com"}, {RegionID: "cn-hangzhou", VPCEndpoint: "vpc-hz.example.com"}}, productHelpEndpoints(product, nil))
 
 	service := newMachineHelpService(&stubMachineHelpRepository{products: &canonicalmeta.ProductsIndex{Products: []canonicalmeta.ProductEntry{product}}})
 	doc, err := service.buildProductForStyle("demo", "", "camel")
@@ -38,12 +38,12 @@ func TestProductHelpEndpointModesAndText(t *testing.T) {
 	assert.NotContains(t, output.String(), "ENDPOINTS")
 
 	product.GlobalEndpoint = "global.example.com"
-	doc.Endpoints = productHelpEndpoints(product)
+	doc.Endpoints = productHelpEndpoints(product, nil)
 	doc.unsupportedRegion = ""
 	doc.setCurrentRegion("cn-shanghai")
 	assert.Empty(t, doc.unsupportedRegion)
 	assert.Equal(t, machineHelpEndpoint{Endpoint: "global.example.com"}, doc.Endpoints[2])
-	assert.Empty(t, productHelpEndpoints(canonicalmeta.ProductEntry{}))
+	assert.Empty(t, productHelpEndpoints(canonicalmeta.ProductEntry{}, nil))
 	applyProductHelpOptions(doc, helpOptions{Search: "memory"}, true)
 	output.Reset()
 	require.NoError(t, encodeMachineHelpJSON(&output, doc, true))

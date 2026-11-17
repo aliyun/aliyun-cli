@@ -41,19 +41,21 @@ func NewHelpFlag() *Flag {
 
 // CLI Command Context
 type Context struct {
-	help               bool
-	flags              *FlagSet
-	unknownFlags       *FlagSet
-	command            *Command
-	completion         *Completion
-	stdout             io.Writer
-	stderr             io.Writer
-	errorNormalizer    func(error) error
-	errorNormalizeArgs []string
-	invocationArgs     []string
-	inConfigureMode    bool
-	hasPluginSubCmd    bool
-	hasPluginSubCmdSet bool
+	help                bool
+	flags               *FlagSet
+	unknownFlags        *FlagSet
+	command             *Command
+	completion          *Completion
+	stdout              io.Writer
+	stderr              io.Writer
+	errorNormalizer     func(error) error
+	errorNormalizeArgs  []string
+	invocationArgs      []string
+	parsedFlags         []parsedFlagName
+	parsedFlagValidator func(string) bool
+	inConfigureMode     bool
+	hasPluginSubCmd     bool
+	hasPluginSubCmdSet  bool
 	// agentName is detected once at process startup and propagated through the
 	// command context. An empty value means the current environment was not
 	// recognized as an agent environment.
@@ -71,6 +73,48 @@ func (ctx *Context) SetInvocationArgs(args []string) {
 		return
 	}
 	ctx.invocationArgs = append(ctx.invocationArgs[:0], args...)
+	ctx.parsedFlags = nil
+	ctx.parsedFlagValidator = nil
+}
+
+type parsedFlagName struct {
+	name       string
+	index      int
+	registered bool
+}
+
+// ParsedFlagNames returns names matched to registered flags by the real parser,
+// plus dynamic flags confirmed by the current command's parameter schema.
+// A negative limit includes the entire invocation; otherwise only argv positions
+// before limit are returned. Spelling, order, and repetitions are preserved.
+func (ctx *Context) ParsedFlagNames(limit int) []string {
+	if ctx == nil {
+		return nil
+	}
+	var names []string
+	for _, flag := range ctx.parsedFlags {
+		if (limit < 0 || flag.index < limit) && (flag.registered ||
+			ctx.parsedFlagValidator != nil && ctx.parsedFlagValidator(flag.name)) {
+			names = append(names, flag.name)
+		}
+	}
+	return names
+}
+
+// SetParsedFlagValidator binds the already loaded command parameter schema to
+// dynamic flag occurrences. It affects observation only, never flag parsing.
+// SetInvocationArgs clears the validator before the next invocation.
+func (ctx *Context) SetParsedFlagValidator(validator func(string) bool) {
+	if ctx != nil {
+		ctx.parsedFlagValidator = validator
+	}
+}
+
+func (ctx *Context) recordParsedFlag(name string, index, tailLength int, registered bool) {
+	// Command parsers consume suffixes of the invocation as they enter children.
+	ctx.parsedFlags = append(ctx.parsedFlags, parsedFlagName{
+		name: name, index: len(ctx.invocationArgs) - tailLength + index, registered: registered,
+	})
 }
 
 // InvocationArgs returns a defensive copy of the root invocation argv.
