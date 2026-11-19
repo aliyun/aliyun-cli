@@ -127,7 +127,13 @@ func TestLoadProfile(t *testing.T) {
 
 	//testcase 2
 	_, err = LoadProfile(GetConfigPath()+"/"+configFile, "hello")
-	assert.EqualError(t, err, "unknown profile hello, run configure to check")
+	if assert.Error(t, err) {
+		msg := err.Error()
+		assert.Contains(t, msg, "unknown profile hello")
+		assert.Contains(t, msg, "available profiles: default, aaa")
+		assert.Contains(t, msg, "aliyun configure switch")
+		assert.Contains(t, msg, GetConfigPath()+"/"+configFile)
+	}
 
 	//LoadCurrentProfile testcase
 	w.Reset()
@@ -145,7 +151,22 @@ func TestLoadProfile(t *testing.T) {
 	w.Reset()
 	p, err = LoadProfile(GetConfigPath()+"/"+configFile, "")
 	assert.Empty(t, p)
-	assert.EqualError(t, err, "init config failed error")
+	assert.EqualError(t, err, "init config failed error; repair or remove the file, then run 'aliyun configure'")
+}
+
+func TestProfileNamesDiagnostics(t *testing.T) {
+	assert.Equal(t, "none", profileNames(nil))
+	assert.Equal(t, "none", profileNames(&Configuration{Profiles: []Profile{{}, {Name: ""}}}))
+	assert.Equal(t, "default, work", profileNames(&Configuration{Profiles: []Profile{{Name: "default"}, {}, {Name: "work"}}}))
+}
+
+func TestLoadOrCreateConfigurationReportsParseErrorWithPath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	assert.NoError(t, os.WriteFile(path, []byte("{invalid JSON"), 0600))
+	_, err := LoadOrCreateConfiguration(path)
+	if assert.Error(t, err) {
+		assert.Contains(t, err.Error(), "parsing config file '"+path+"' failed")
+	}
 }
 
 func TestLoadProfileForDryRunWithContext(t *testing.T) {
@@ -230,7 +251,12 @@ func TestLoadProfileForDryRunWithContext(t *testing.T) {
 		assign(ProfileFlag(ctx.Flags()), "missing")
 
 		_, err := LoadProfileForDryRunWithContext(ctx)
-		assert.EqualError(t, err, "unknown profile missing, run configure to check")
+		if assert.Error(t, err) {
+			msg := err.Error()
+			assert.Contains(t, msg, "unknown profile missing")
+			assert.Contains(t, msg, "available profiles: default")
+			assert.Contains(t, msg, path)
+		}
 	})
 }
 

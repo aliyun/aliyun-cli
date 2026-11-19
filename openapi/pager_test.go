@@ -137,7 +137,7 @@ func TestPager_NextToken(t *testing.T) {
 	assert.True(t, pager.HasMore())
 	request := legacyapi.NewRequest()
 	pager.MoveNextPage(request)
-	assert.Equal(t, "7a758b45874db76a0147eb118b6f597f2df87e458f7fbf48e0b5e8707e68181f", request.QueryParams["NextToken"])
+	assert.Equal(t, "page-2", request.QueryParams["NextToken"])
 	assert.Nil(t, pager.FeedResponse(pagerTestJsonNextToken2))
 	assert.False(t, pager.HasMore())
 	responseStr := pager.GetResponseCollection()
@@ -571,7 +571,7 @@ var pagerTestJson2 = []byte(`{
 }`)
 
 const pagerTestJsonNextToken1 = `{
-    "NextToken": "7a758b45874db76a0147eb118b6f597f2df87e458f7fbf48e0b5e8707e68181f",
+    "NextToken": "page-2",
     "RequestId": "EAB4BE0E-8CB2-4445-B671-40C8648308D0",
     "TagResources": {
         "TagResource": [

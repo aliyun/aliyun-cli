@@ -2,11 +2,14 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"embed"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -56,71 +59,238 @@ func TestMainWithNoArgs(t *testing.T) {
 	Main([]string{})
 }
 
-func TestMainConfigLoadFailureExitsNonzero(t *testing.T) {
-	for _, failure := range []string{"invalid JSON", "config is directory", "missing current profile"} {
-		for _, aiMode := range []string{"0", "1"} {
-			t.Run(failure+"/ai="+aiMode, func(t *testing.T) {
-				clearAgentDetectionEnv(t)
-				t.Setenv(sysmock.EnvMockEnabled, "false")
-				t.Setenv("ALIBABA_CLOUD_CLI_AI_MODE", aiMode)
-				home := t.TempDir()
-				t.Setenv("HOME", home)
-				t.Setenv("HOMEDRIVE", "")
-				t.Setenv("HOMEPATH", "")
-				t.Setenv("USERPROFILE", home)
-				configDir := filepath.Join(home, ".aliyun")
-				if err := os.MkdirAll(configDir, 0o755); err != nil {
-					t.Fatal(err)
-				}
-				configPath := filepath.Join(configDir, "config.json")
-				if failure == "config is directory" {
-					if err := os.Mkdir(configPath, 0o755); err != nil {
-						t.Fatal(err)
-					}
-				} else {
-					data := `{invalid JSON`
-					if failure == "missing current profile" {
-						data = `{"current":"missing","profiles":[]}`
-					}
-					if err := os.WriteFile(configPath, []byte(data), 0o600); err != nil {
-						t.Fatal(err)
-					}
-				}
-
-				var stdout, stderr bytes.Buffer
-				var exitCodes []int
-				resetMainHooks(t, &stdout, &stderr, func(code int) {
-					exitCodes = append(exitCodes, code)
-				})
-				Main([]string{"ecs", "--help", "--cli-output", "json"})
-
-				if len(exitCodes) != 1 || exitCodes[0] != 1 {
-					t.Fatalf("exit codes = %v, want [1]", exitCodes)
-				}
-				if stdout.Len() != 0 {
-					t.Fatalf("stdout = %q, want no command output after configuration failure", stdout.String())
-				}
-				if aiMode == "1" {
-					var envelope cli.AgentErrorEnvelope
-					if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
-						t.Fatal(err)
-					}
-					if envelope.SchemaVersion != "v1" || envelope.ErrorCode != "ConfigurationError" || envelope.Recovery.Action != "check_configuration" {
-						t.Fatalf("unexpected envelope: %+v", envelope)
-					}
-				} else {
-					_, cause := config.LoadOrCreateDefaultProfile()
-					var expected bytes.Buffer
-					cli.Errorf(&expected, "ERROR: load current configuration failed %s", cause)
-					if stderr.String() != expected.String() {
-						t.Fatalf("non-AI output changed: %q != %q", stderr.String(), expected.String())
-					}
-				}
-				if !bytes.Contains(stderr.Bytes(), []byte("load current configuration failed")) {
-					t.Fatalf("stderr = %q, want configuration error", stderr.String())
-				}
-			})
+// setupBrokenConfig materializes one of the broken configuration states and
+// returns the config file path. A6 (no rewrite of a corrupt file) is asserted by
+// callers that compare digests before/after.
+func setupBrokenConfig(t *testing.T, failure string) (configPath string) {
+	t.Helper()
+	clearAgentDetectionEnv(t)
+	t.Setenv(sysmock.EnvMockEnabled, "false")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	t.Setenv("USERPROFILE", home)
+	configDir := filepath.Join(home, ".aliyun")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configPath = filepath.Join(configDir, "config.json")
+	switch failure {
+	case "config is directory":
+		if err := os.Mkdir(configPath, 0o755); err != nil {
+			t.Fatal(err)
 		}
+	case "missing current profile":
+		data := `{"current":"missing","profiles":[{"name":"work","mode":"AK","access_key_id":"ak","access_key_secret":"TOPSECRET_SHOULD_NOT_LEAK","region_id":"cn-hangzhou"}]}`
+		if err := os.WriteFile(configPath, []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	default: // invalid JSON
+		if err := os.WriteFile(configPath, []byte(`{invalid JSON`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return configPath
+}
+
+func runMain(t *testing.T, args ...string) (stdout, stderr bytes.Buffer, exitCodes []int) {
+	t.Helper()
+	resetMainHooks(t, &stdout, &stderr, func(code int) { exitCodes = append(exitCodes, code) })
+	Main(args)
+	return stdout, stderr, exitCodes
+}
+
+// disableExitCode keeps cli.Exit (used by Command.processError) from terminating
+// the test binary; the rendered error output is asserted instead, and real exit
+// codes are covered by the built-binary smoke test.
+func disableExitCode(t *testing.T) {
+	t.Helper()
+	cli.DisableExitCode()
+	t.Cleanup(cli.EnableExitCode)
+}
+
+func hasNonZero(codes []int) bool {
+	for _, code := range codes {
+		if code != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func fileDigest(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fmt.Sprintf("%x", sha256.Sum256(data))
+}
+
+// Basic commands must remain usable even when the configuration cannot be
+// parsed or does not select an existing profile (A1).
+func TestMainConfigLoadFailureKeepsBasicCommandsUsable(t *testing.T) {
+	for _, failure := range []string{"invalid JSON", "config is directory", "missing current profile"} {
+		t.Run(failure, func(t *testing.T) {
+			setupBrokenConfig(t, failure)
+			for _, args := range [][]string{
+				{"version"},
+				{"--help"},
+				{"help"},
+				{"ecs", "--help"},
+			} {
+				stdout, stderr, exitCodes := runMain(t, args...)
+				if hasNonZero(exitCodes) {
+					t.Fatalf("%v: exit codes = %v, want success (stderr=%q)", args, exitCodes, stderr.String())
+				}
+				if stderr.Len() != 0 {
+					t.Fatalf("%v: stderr = %q, want empty", args, stderr.String())
+				}
+				if stdout.Len() == 0 {
+					t.Fatalf("%v: stdout is empty, want version/help output", args)
+				}
+			}
+		})
+	}
+}
+
+// In the "current points to a missing profile" state (S3) configure must be able
+// to repair the selection instead of being blocked at startup (A2).
+func TestMainConfigLoadFailureAllowsConfigureRepair(t *testing.T) {
+	configPath := setupBrokenConfig(t, "missing current profile")
+
+	stdout, stderr, exitCodes := runMain(t, "configure", "switch", "--profile", "work")
+	if hasNonZero(exitCodes) {
+		t.Fatalf("configure switch failed: exit codes = %v, stderr = %q", exitCodes, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "work") {
+		t.Fatalf("stdout = %q, want confirmation mentioning work", stdout.String())
+	}
+
+	repaired, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(repaired), `"current": "work"`) && !strings.Contains(string(repaired), `"current":"work"`) {
+		t.Fatalf("config current not repaired to work:\n%s", repaired)
+	}
+
+	stdout, stderr, exitCodes = runMain(t, "configure", "list")
+	if hasNonZero(exitCodes) {
+		t.Fatalf("configure list after repair failed: %v, stderr = %q", exitCodes, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "work") {
+		t.Fatalf("configure list = %q, want work profile", stdout.String())
+	}
+}
+
+// When the file is unparseable (S4) configure and its subcommands must still
+// execute and report an actionable, path-bearing error (A2/A4) instead of being
+// blocked before routing.
+func TestMainConfigLoadFailureConfigureReportsActionableError(t *testing.T) {
+	for _, failure := range []string{"invalid JSON", "config is directory"} {
+		t.Run(failure, func(t *testing.T) {
+			configPath := setupBrokenConfig(t, failure)
+			disableExitCode(t)
+			before := ""
+			if failure != "config is directory" {
+				before = fileDigest(t, configPath)
+			}
+
+			for _, args := range [][]string{
+				{"configure", "list"},
+				{"configure"},
+			} {
+				stdout, stderr, _ := runMain(t, args...)
+				if stdout.Len() != 0 {
+					t.Fatalf("%v: stdout = %q, want empty", args, stdout.String())
+				}
+				msg := stderr.String()
+				if !strings.Contains(msg, "load configure failed") &&
+					!strings.Contains(msg, "init config failed") &&
+					!strings.Contains(msg, "parsing config file") &&
+					!strings.Contains(msg, "reading config from") {
+					t.Fatalf("%v: stderr = %q, want actionable config error", args, msg)
+				}
+			}
+
+			// A6: a corrupt/unreadable config must not be rewritten.
+			if failure != "config is directory" {
+				if after := fileDigest(t, configPath); after != before {
+					t.Fatalf("config.json mutated by configure: %s -> %s", before, after)
+				}
+			}
+		})
+	}
+}
+
+// Real API calls must still fail with a configuration error (never silently run
+// unauthenticated) and must leave a corrupt file untouched (A5/A6).
+func TestMainConfigLoadFailureStillBlocksAPICalls(t *testing.T) {
+	for _, failure := range []string{"invalid JSON", "config is directory", "missing current profile"} {
+		t.Run(failure, func(t *testing.T) {
+			configPath := setupBrokenConfig(t, failure)
+			disableExitCode(t)
+			before := ""
+			if failure != "config is directory" {
+				before = fileDigest(t, configPath)
+			}
+
+			stdout, stderr, _ := runMain(t, "ecs", "DescribeInstances", "--version", "2014-05-26")
+			if stdout.Len() != 0 {
+				t.Fatalf("stdout = %q, want empty for config failure", stdout.String())
+			}
+			msg := stderr.String()
+			if failure == "missing current profile" {
+				if !strings.Contains(msg, "unknown profile missing") {
+					t.Fatalf("stderr = %q, want unknown profile error", msg)
+				}
+			} else if !strings.Contains(msg, "init config failed") && !strings.Contains(msg, "parsing config file") && !strings.Contains(msg, "reading config from") {
+				t.Fatalf("stderr = %q, want config load error", msg)
+			}
+
+			if failure != "config is directory" {
+				if after := fileDigest(t, configPath); after != before {
+					t.Fatalf("config.json mutated by API call: %s -> %s", before, after)
+				}
+			}
+		})
+	}
+}
+
+// AI mode must still return the established structured profile-configuration
+// error for config failures without echoing configuration values.
+func TestMainConfigLoadFailureAIModeStructuredError(t *testing.T) {
+	setupBrokenConfig(t, "missing current profile")
+	t.Setenv("ALIBABA_CLOUD_CLI_AI_MODE", "1")
+	disableExitCode(t)
+
+	stdout, stderr, _ := runMain(t, "ecs", "DescribeInstances", "--version", "2014-05-26")
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+	var envelope cli.AgentErrorEnvelope
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("AI error is not JSON: %v\nstderr = %q", err, stderr.String())
+	}
+	if envelope.SchemaVersion != "v1" {
+		t.Fatalf("schemaVersion = %q, want v1 (%+v)", envelope.SchemaVersion, envelope)
+	}
+	if envelope.Message != "profile configuration failed" {
+		t.Fatalf("message = %q, want profile configuration failed (%+v)", envelope.Message, envelope)
+	}
+	if envelope.ErrorCode != "ConfigurationError" {
+		t.Fatalf("error_code = %q, want ConfigurationError (%+v)", envelope.ErrorCode, envelope)
+	}
+	if envelope.Recovery.Action != "check_configuration" {
+		t.Fatalf("recovery.action = %q, want check_configuration (%+v)", envelope.Recovery.Action, envelope)
+	}
+	if envelope.Recovery.Command != "aliyun configure" {
+		t.Fatalf("recovery.command = %q, want 'aliyun configure' (%+v)", envelope.Recovery.Command, envelope)
+	}
+	if strings.Contains(stderr.String(), "TOPSECRET_SHOULD_NOT_LEAK") {
+		t.Fatalf("AI error leaked credential value: %q", stderr.String())
 	}
 }
 

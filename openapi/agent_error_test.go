@@ -798,7 +798,7 @@ func TestNormalizeAgentErrorProfileConfiguration(t *testing.T) {
 			assert.ErrorIs(t, got, test.err)
 			assert.Equal(t, test.code, agentErr.ExitCode())
 			assert.Equal(t, test.code, agentErr.WithSchemaVersion().ExitCode())
-			assert.Empty(t, agentErr.Envelope().ErrorCode)
+			assert.Equal(t, "ConfigurationError", agentErr.Envelope().ErrorCode)
 			assert.Equal(t, "check_configuration", agentErr.Envelope().Recovery.Action)
 			assert.Equal(t, "aliyun configure", agentErr.Envelope().Recovery.Command)
 			assert.NotContains(t, agentErr.Error(), "credential-secret")
@@ -850,10 +850,12 @@ func TestProfileConfigurationErrorOutput(t *testing.T) {
 				var envelope cli.AgentErrorEnvelope
 				require.NoError(t, json.Unmarshal(stderr.Bytes(), &envelope))
 				assert.Equal(t, "v1", envelope.SchemaVersion)
-				assert.Empty(t, envelope.ErrorCode)
+				assert.Equal(t, "ConfigurationError", envelope.ErrorCode)
 				var fields map[string]json.RawMessage
 				require.NoError(t, json.Unmarshal(stderr.Bytes(), &fields))
-				assert.NotContains(t, fields, "error_code")
+				rawCode, ok := fields["error_code"]
+				require.True(t, ok, "error_code must be present so callers can match configuration errors")
+				assert.JSONEq(t, `"ConfigurationError"`, string(rawCode))
 				assert.Equal(t, "aliyun configure", envelope.Recovery.Command)
 				assert.Equal(t, 1, strings.Count(stderr.String(), "\n"))
 				assert.NotContains(t, stderr.String(), "\x1b[")

@@ -70,9 +70,40 @@ func TestDetectCommandType(t *testing.T) {
 	}
 }
 
-func TestDetectCommandTypeForScopeReusesResolvedPluginType(t *testing.T) {
+// Telemetry-only classification must not leak into the host extension set:
+// safety policy and parameter collection keep keying off cliExtensions.
+func TestTelemetryOnlyCLIExtClassificationKeepsHostSetsSeparate(t *testing.T) {
+	previousExtensions := cliExtensions
+	previousTelemetry := telemetryCLIExtCommands
+	RegisterCLIExtensions(map[string]bool{"host-ext-type-test": true})
+	RegisterTelemetryCLIExtCommands([]string{" Telemetry-Only-Type-Test "})
+	t.Cleanup(func() {
+		cliExtensions = previousExtensions
+		telemetryCLIExtCommands = previousTelemetry
+	})
 	t.Setenv(plugin.EnvPluginsDir, t.TempDir())
 
+	for _, args := range [][]string{
+		{"telemetry-only-type-test", "ls"},
+		{"host-ext-type-test", "ls"},
+	} {
+		if got := DetectCommandType(args); got != CommandTypeCLIExt {
+			t.Fatalf("DetectCommandType(%v) = %q, want %q", args, got, CommandTypeCLIExt)
+		}
+	}
+	if isCLIExtension("telemetry-only-type-test") {
+		t.Fatal("telemetry-only command must not enter cliExtensions")
+	}
+	if !isTelemetryCLIExtension("telemetry-only-type-test") {
+		t.Fatal("telemetry-only command must be registered for classification")
+	}
+	if got := DetectCommandType([]string{"configure", "show"}); got != CommandTypeCore {
+		t.Fatalf("core command classification changed: %q", got)
+	}
+}
+
+func TestDetectCommandTypeForScopeReusesResolvedPluginType(t *testing.T) {
+	t.Setenv(plugin.EnvPluginsDir, t.TempDir())
 	tests := []struct {
 		name       string
 		pluginType string

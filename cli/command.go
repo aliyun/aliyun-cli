@@ -448,7 +448,11 @@ func (c *Command) processError(ctx *Context, err error) {
 
 	var agentErr *AgentError
 	if errors.As(err, &agentErr) {
-		_ = json.NewEncoder(ctx.Stderr()).Encode(agentErr.Envelope())
+		notices, complete := ctx.takeUpdateNotices()
+		envelope := agentErr.Envelope()
+		envelope.UpdateNotices = notices
+		encodeErr := json.NewEncoder(ctx.Stderr()).Encode(envelope)
+		complete(encodeErr == nil)
 		Exit(agentErr.ExitCode())
 		return
 	}
@@ -473,6 +477,18 @@ func (c *Command) processError(ctx *Context, err error) {
 	if IsAIRecoveryEligible(err) {
 		Printf(ctx.Stderr(), "\n%s\n", AIModeEnableTextHint)
 	}
+	notices, complete := ctx.takeUpdateNotices()
+	rendered := true
+	for _, notice := range notices {
+		label := i18n.T("Update available", "更新提示").Text()
+		if notice.Severity == "compatibility" {
+			label = i18n.T("Compatibility warning", "兼容性警告").Text()
+		}
+		if _, err := fmt.Fprintf(ctx.Stderr(), "\n[%s] %s\n", label, notice.Message); err != nil {
+			rendered = false
+		}
+	}
+	complete(rendered)
 	Exit(exitCode)
 }
 

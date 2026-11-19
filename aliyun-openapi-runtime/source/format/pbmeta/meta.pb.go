@@ -310,32 +310,33 @@ func (x *Operation) GetHasWildcardPath() bool {
 }
 
 type Argument struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	RawName       string                 `protobuf:"bytes,2,opt,name=raw_name,json=rawName,proto3" json:"raw_name,omitempty"`
-	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	Options       []string               `protobuf:"bytes,4,rep,name=options,proto3" json:"options,omitempty"`
-	HelpZh        string                 `protobuf:"bytes,5,opt,name=help_zh,json=helpZh,proto3" json:"help_zh,omitempty"`
-	HelpEn        string                 `protobuf:"bytes,6,opt,name=help_en,json=helpEn,proto3" json:"help_en,omitempty"`
-	Required      bool                   `protobuf:"varint,7,opt,name=required,proto3" json:"required,omitempty"`
-	Location      string                 `protobuf:"bytes,8,opt,name=location,proto3" json:"location,omitempty"`
-	ParamStyle    string                 `protobuf:"bytes,9,opt,name=param_style,json=paramStyle,proto3" json:"param_style,omitempty"`
-	Fields        []*Argument            `protobuf:"bytes,10,rep,name=fields,proto3" json:"fields,omitempty"`
-	Element       *TypeShape             `protobuf:"bytes,11,opt,name=element,proto3" json:"element,omitempty"`
-	Value         *TypeShape             `protobuf:"bytes,12,opt,name=value,proto3" json:"value,omitempty"`
-	Example       string                 `protobuf:"bytes,13,opt,name=example,proto3" json:"example,omitempty"`
-	IsWildcard    bool                   `protobuf:"varint,14,opt,name=is_wildcard,json=isWildcard,proto3" json:"is_wildcard,omitempty"`
-	Enum          []string               `protobuf:"bytes,15,rep,name=enum,proto3" json:"enum,omitempty"`
-	Minimum       string                 `protobuf:"bytes,16,opt,name=minimum,proto3" json:"minimum,omitempty"`
-	Maximum       string                 `protobuf:"bytes,17,opt,name=maximum,proto3" json:"maximum,omitempty"`
-	Pattern       string                 `protobuf:"bytes,18,opt,name=pattern,proto3" json:"pattern,omitempty"`
-	Format        string                 `protobuf:"bytes,19,opt,name=format,proto3" json:"format,omitempty"`
-	MinLength     string                 `protobuf:"bytes,20,opt,name=min_length,json=minLength,proto3" json:"min_length,omitempty"`
-	MaxLength     string                 `protobuf:"bytes,21,opt,name=max_length,json=maxLength,proto3" json:"max_length,omitempty"`
-	DocRequired   bool                   `protobuf:"varint,22,opt,name=doc_required,json=docRequired,proto3" json:"doc_required,omitempty"`
-	DirectBody    bool                   `protobuf:"varint,23,opt,name=direct_body,json=directBody,proto3" json:"direct_body,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	RawName         string                 `protobuf:"bytes,2,opt,name=raw_name,json=rawName,proto3" json:"raw_name,omitempty"`
+	Type            string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	Options         []string               `protobuf:"bytes,4,rep,name=options,proto3" json:"options,omitempty"`
+	HelpZh          string                 `protobuf:"bytes,5,opt,name=help_zh,json=helpZh,proto3" json:"help_zh,omitempty"`
+	HelpEn          string                 `protobuf:"bytes,6,opt,name=help_en,json=helpEn,proto3" json:"help_en,omitempty"`
+	Required        bool                   `protobuf:"varint,7,opt,name=required,proto3" json:"required,omitempty"`
+	Location        string                 `protobuf:"bytes,8,opt,name=location,proto3" json:"location,omitempty"`
+	ParamStyle      string                 `protobuf:"bytes,9,opt,name=param_style,json=paramStyle,proto3" json:"param_style,omitempty"`
+	Fields          []*Argument            `protobuf:"bytes,10,rep,name=fields,proto3" json:"fields,omitempty"`
+	Element         *TypeShape             `protobuf:"bytes,11,opt,name=element,proto3" json:"element,omitempty"`
+	Value           *TypeShape             `protobuf:"bytes,12,opt,name=value,proto3" json:"value,omitempty"`
+	Example         string                 `protobuf:"bytes,13,opt,name=example,proto3" json:"example,omitempty"`
+	IsWildcard      bool                   `protobuf:"varint,14,opt,name=is_wildcard,json=isWildcard,proto3" json:"is_wildcard,omitempty"`
+	Enum            []string               `protobuf:"bytes,15,rep,name=enum,proto3" json:"enum,omitempty"`
+	Minimum         string                 `protobuf:"bytes,16,opt,name=minimum,proto3" json:"minimum,omitempty"`
+	Maximum         string                 `protobuf:"bytes,17,opt,name=maximum,proto3" json:"maximum,omitempty"`
+	Pattern         string                 `protobuf:"bytes,18,opt,name=pattern,proto3" json:"pattern,omitempty"`
+	Format          string                 `protobuf:"bytes,19,opt,name=format,proto3" json:"format,omitempty"`
+	MinLength       string                 `protobuf:"bytes,20,opt,name=min_length,json=minLength,proto3" json:"min_length,omitempty"`
+	MaxLength       string                 `protobuf:"bytes,21,opt,name=max_length,json=maxLength,proto3" json:"max_length,omitempty"`
+	DocRequired     bool                   `protobuf:"varint,22,opt,name=doc_required,json=docRequired,proto3" json:"doc_required,omitempty"`
+	DirectBody      bool                   `protobuf:"varint,23,opt,name=direct_body,json=directBody,proto3" json:"direct_body,omitempty"`
+	ImportanceScore *float64               `protobuf:"fixed64,24,opt,name=importance_score,json=importanceScore,proto3,oneof" json:"importance_score,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Argument) Reset() {
@@ -529,6 +530,13 @@ func (x *Argument) GetDirectBody() bool {
 	return false
 }
 
+func (x *Argument) GetImportanceScore() float64 {
+	if x != nil && x.ImportanceScore != nil {
+		return *x.ImportanceScore
+	}
+	return 0
+}
+
 // TypeShape is a depth-independent recursive description of a container
 // child. Arrays use element and maps use value at every level.
 type TypeShape struct {
@@ -697,7 +705,7 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\rreq_body_type\x18\b \x01(\tR\vreqBodyType\x12!\n" +
 	"\fcontent_type\x18\t \x01(\tR\vcontentType\x12*\n" +
 	"\x11has_wildcard_path\x18\n" +
-	" \x01(\bR\x0fhasWildcardPath\"\xd9\x05\n" +
+	" \x01(\bR\x0fhasWildcardPath\"\x9e\x06\n" +
 	"\bArgument\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\braw_name\x18\x02 \x01(\tR\arawName\x12\x12\n" +
@@ -727,7 +735,9 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"max_length\x18\x15 \x01(\tR\tmaxLength\x12!\n" +
 	"\fdoc_required\x18\x16 \x01(\bR\vdocRequired\x12\x1f\n" +
 	"\vdirect_body\x18\x17 \x01(\bR\n" +
-	"directBody\"\x87\x03\n" +
+	"directBody\x12.\n" +
+	"\x10importance_score\x18\x18 \x01(\x01H\x00R\x0fimportanceScore\x88\x01\x01B\x13\n" +
+	"\x11_importance_score\"\x87\x03\n" +
 	"\tTypeShape\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x128\n" +
 	"\x06fields\x18\x02 \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\x06fields\x12;\n" +
@@ -784,6 +794,7 @@ func file_aliyun_openapi_meta_proto_init() {
 	if File_aliyun_openapi_meta_proto != nil {
 		return
 	}
+	file_aliyun_openapi_meta_proto_msgTypes[2].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

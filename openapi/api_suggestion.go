@@ -52,12 +52,26 @@ type apiSuggestionScore struct {
 // It is intentionally a fallback after edit-distance and prefix matching: a
 // close typo remains more precise than a shared resource word.
 func apiTokenSuggestions(input string, candidates []string, limit int) []string {
+	return apiTokenSuggestionsWithImportance(input, candidates, limit, nil)
+}
+
+func apiTokenSuggestionsWithImportance(input string, candidates []string, limit int, importance map[string]float64) []string {
+	result, _ := apiTokenSuggestionsRanked(input, candidates, limit, importance)
+	return result
+}
+
+func sameAPISuggestionQuality(left, right apiSuggestionScore) bool {
+	return left.overlap == right.overlap && left.overlapWeight == right.overlapWeight &&
+		left.inputMissing == right.inputMissing && left.candidateExtra == right.candidateExtra && left.distance == right.distance
+}
+
+func apiTokenSuggestionsRanked(input string, candidates []string, limit int, importance map[string]float64) ([]string, bool) {
 	if limit <= 0 {
 		limit = cli.DefaultSuggestLimit
 	}
 	inputTokens := meaningfulAPITokenSet(input)
 	if len(inputTokens) == 0 {
-		return nil
+		return nil, false
 	}
 
 	seen := make(map[string]struct{}, len(candidates))
@@ -115,11 +129,27 @@ func apiTokenSuggestions(input string, candidates []string, limit int) []string 
 		if left.distance != right.distance {
 			return left.distance < right.distance
 		}
+		if order := compareImportance(left.name, right.name, importance); order != 0 {
+			return order < 0
+		}
 		return strings.ToLower(left.name) < strings.ToLower(right.name)
 	})
 
 	if len(scores) == 0 {
-		return nil
+		return nil, false
+	}
+	active := false
+	for first := 0; first < len(scores) && first < limit; {
+		last := first + 1
+		for last < len(scores) && sameAPISuggestionQuality(scores[first], scores[last]) {
+			last++
+		}
+		names := make([]string, 0, last-first)
+		for _, score := range scores[first:last] {
+			names = append(names, score.name)
+		}
+		active = active || hasVaryingImportance(names, importance)
+		first = last
 	}
 	if len(scores) > limit {
 		scores = scores[:limit]
@@ -128,7 +158,7 @@ func apiTokenSuggestions(input string, candidates []string, limit int) []string 
 	for index := range scores {
 		result[index] = scores[index].name
 	}
-	return result
+	return result, active
 }
 
 func meaningfulAPITokenSet(value string) map[string]struct{} {

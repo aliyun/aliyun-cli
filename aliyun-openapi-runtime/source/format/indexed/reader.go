@@ -67,17 +67,18 @@ func (p Product) Endpoints() meta.Endpoints {
 // Record identifies one payload range and carries enough presentation
 // metadata to build command stubs without reading the full record.
 type Record struct {
-	APIVersion    string `json:"apiVersion"`
-	APIName       string `json:"apiName"`
-	CommandName   string `json:"commandName"`
-	CmdFullName   string `json:"cmdFullName,omitempty"`
-	TitleZH       string `json:"titleZh,omitempty"`
-	TitleEN       string `json:"titleEn,omitempty"`
-	DescriptionZH string `json:"descriptionZh,omitempty"`
-	DescriptionEN string `json:"descriptionEn,omitempty"`
-	Deprecated    bool   `json:"deprecated,omitempty"`
-	Offset        int64  `json:"offset"`
-	Length        int64  `json:"length"`
+	APIVersion      string                `json:"apiVersion"`
+	APIName         string                `json:"apiName"`
+	CommandName     string                `json:"commandName"`
+	CmdFullName     string                `json:"cmdFullName,omitempty"`
+	TitleZH         string                `json:"titleZh,omitempty"`
+	TitleEN         string                `json:"titleEn,omitempty"`
+	DescriptionZH   string                `json:"descriptionZh,omitempty"`
+	DescriptionEN   string                `json:"descriptionEn,omitempty"`
+	Deprecated      bool                  `json:"deprecated,omitempty"`
+	Offset          int64                 `json:"offset"`
+	Length          int64                 `json:"length"`
+	ImportanceScore *meta.ImportanceScore `json:"importanceScore,omitempty"`
 }
 
 // Reader is an immutable random-access view over a validated index and data
@@ -208,6 +209,7 @@ func (r *Reader) APIIndex(product, version string) (*meta.APIIndex, error) {
 			APIName: rec.APIName, CmdName: rec.CommandName, CmdFullName: rec.CmdFullName,
 			Title:       meta.Description{ZH: rec.TitleZH, EN: rec.TitleEN},
 			Description: meta.Description{ZH: rec.DescriptionZH, EN: rec.DescriptionEN}, Deprecated: rec.Deprecated,
+			ImportanceScore: rec.ImportanceScore.Value(),
 		}
 	}
 	if len(idx.Entries) == 0 {

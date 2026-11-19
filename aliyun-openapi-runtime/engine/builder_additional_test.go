@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -438,6 +439,34 @@ func TestBuildExecContextHeadersBodyFileAndHost(t *testing.T) {
 	}
 }
 
+func TestBuildExecContextEndpointPrecedence(t *testing.T) {
+	host := runtime.StaticHost{SettingsVal: runtime.Settings{Endpoint: "settings.example.com"}}
+
+	ec, err := buildExecContext(Request{Host: host}, &meta.API{}, &argparser.Result{Reserved: argparser.Reserved{DryRun: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ec.Endpoint != "settings.example.com" {
+		t.Fatalf("host endpoint not applied: %q", ec.Endpoint)
+	}
+
+	ec, err = buildExecContext(Request{Host: host}, &meta.API{}, &argparser.Result{Reserved: argparser.Reserved{DryRun: true, Endpoint: "explicit.example.com"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ec.Endpoint != "explicit.example.com" {
+		t.Fatalf("explicit --endpoint should win: %q", ec.Endpoint)
+	}
+
+	ec, err = buildExecContext(Request{Host: runtime.StaticHost{}}, &meta.API{}, &argparser.Result{Reserved: argparser.Reserved{DryRun: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ec.Endpoint != "" {
+		t.Fatalf("unset endpoint should stay empty for metadata resolution: %q", ec.Endpoint)
+	}
+}
+
 func TestBuilderOptionAndRenderingHelpers(t *testing.T) {
 	conflicts := []argparser.Reserved{
 		{DryRunJSON: true, Pager: &argparser.PagerConfig{}},
@@ -505,6 +534,11 @@ func TestBuilderOptionAndRenderingHelpers(t *testing.T) {
 func TestDryRunPreservesLongBodyAndRedaction(t *testing.T) {
 	const secret = "FAKE_SECRET_123"
 	text := strings.Repeat("流水线", 450) + "正文末尾"
+	omitted := func(body string) string {
+		return fmt.Sprintf("(body omitted: %d bytes of unparseable content)", len(body))
+	}
+	xmlBody := "<Name>" + text + "</Name><Password>" + secret + "</Password>"
+	rawBody := "name: " + text + "\npassword: " + secret
 	for _, tc := range []struct {
 		name string
 		body string
@@ -517,10 +551,10 @@ func TestDryRunPreservesLongBodyAndRedaction(t *testing.T) {
 		},
 		{
 			"xml",
-			"<Name>" + text + "</Name><Password>" + secret + "</Password>",
-			"<Name>" + text + "</Name><Password>" + secret + "</Password>",
+			xmlBody,
+			omitted(xmlBody),
 		},
-		{"raw", "name: " + text + "\npassword: " + secret, "name: " + text + "\npassword: " + secret},
+		{"raw", rawBody, omitted(rawBody)},
 		{
 			"json",
 			`{"content":"` + text + `","password":"` + secret + `"}`,
@@ -538,7 +572,7 @@ func TestDryRunPreservesLongBodyAndRedaction(t *testing.T) {
 					if err := renderDryRun(&out, "demo", &runtime.AssembledRequest{Body: body, ReqBodyType: tc.name}, jsonOutput, false); err != nil {
 						t.Fatal(err)
 					}
-					if !strings.Contains(tc.want, secret) && strings.Contains(out.String(), secret) {
+					if strings.Contains(out.String(), secret) {
 						t.Fatalf("secret leaked from %T dry-run output: %s", body, out.String())
 					}
 					if jsonOutput {
@@ -735,15 +769,16 @@ func TestBuilderErrorAndRenderBranches(t *testing.T) {
 
 func TestDryRunExplicitBodyFormats(t *testing.T) {
 	const body = `<Request><Name>visible</Name><Password>FAKE_SECRET_123</Password></Request>`
+	want := fmt.Sprintf("(body omitted: %d bytes of unparseable content)", len(body))
 	for _, tc := range []struct {
 		name string
 		req  runtime.AssembledRequest
 		want string
 	}{
-		{"XML", runtime.AssembledRequest{Headers: map[string]string{"Content-Type": "application/xml"}}, body},
-		{"binary", runtime.AssembledRequest{ReqBodyType: "binary"}, body},
-		{"declared binary", runtime.AssembledRequest{ReqBodyType: "json", DeclaredReqBodyType: "byte"}, body},
-		{"header", runtime.AssembledRequest{Headers: map[string]string{"cOnTeNt-TyPe": "application/octet-stream"}}, body},
+		{"XML", runtime.AssembledRequest{Headers: map[string]string{"Content-Type": "application/xml"}}, want},
+		{"binary", runtime.AssembledRequest{ReqBodyType: "binary"}, want},
+		{"declared binary", runtime.AssembledRequest{ReqBodyType: "json", DeclaredReqBodyType: "byte"}, want},
+		{"header", runtime.AssembledRequest{Headers: map[string]string{"cOnTeNt-TyPe": "application/octet-stream"}}, want},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.req.Body = []byte(body)
@@ -751,6 +786,9 @@ func TestDryRunExplicitBodyFormats(t *testing.T) {
 				var out bytes.Buffer
 				if err := renderDryRun(&out, "demo", &tc.req, jsonOutput, false); err != nil {
 					t.Fatal(err)
+				}
+				if strings.Contains(out.String(), "FAKE_SECRET_123") {
+					t.Fatalf("unparseable body leaked into dry-run output: %s", &out)
 				}
 				if jsonOutput {
 					var decoded cliDryRunOutput

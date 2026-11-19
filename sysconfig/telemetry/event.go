@@ -27,6 +27,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
 const (
@@ -146,6 +147,25 @@ func apiErrorDetails(err error) (string, int) {
 	var serverErr *legacyapi.ServerError
 	if errors.As(err, &serverErr) {
 		return safeAPIErrorCode(serverErr.ErrorCode()), safeHTTPStatus(serverErr.HttpStatus())
+	}
+	// OSS returns ServiceError as a value, and wrappers may hold a pointer. A
+	// HEAD failure can carry only the status code, so an empty code stays empty.
+	var ossServiceErr oss.ServiceError
+	if errors.As(err, &ossServiceErr) {
+		return safeAPIErrorCode(ossServiceErr.Code), safeHTTPStatus(ossServiceErr.StatusCode)
+	}
+	var ossServiceErrPtr *oss.ServiceError
+	if errors.As(err, &ossServiceErrPtr) && ossServiceErrPtr != nil {
+		return safeAPIErrorCode(ossServiceErrPtr.Code), safeHTTPStatus(ossServiceErrPtr.StatusCode)
+	}
+	// UnexpectedStatusCodeError reports a mismatch without an API error code.
+	var ossStatusErr oss.UnexpectedStatusCodeError
+	if errors.As(err, &ossStatusErr) {
+		return "", safeHTTPStatus(ossStatusErr.Got())
+	}
+	var ossStatusErrPtr *oss.UnexpectedStatusCodeError
+	if errors.As(err, &ossStatusErrPtr) && ossStatusErrPtr != nil {
+		return "", safeHTTPStatus(ossStatusErrPtr.Got())
 	}
 	return "", 0
 }

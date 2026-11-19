@@ -5,6 +5,7 @@
 ## English
 
 - [Installation and upgrade](./en/installation.md)
+- [Automatic and explicit update checks](./en/update-check.md)
 - [Configuration and credentials](./en/configuration.md)
 - [Telemetry data collection](./en/telemetry.md)
 - [Commands, output, and automation](./en/usage.md)
@@ -16,6 +17,7 @@
 ## 简体中文
 
 - [安装与升级](./zh-CN/installation.md)
+- [自动与显式更新检查](./zh-CN/update-check.md)
 - [配置与凭证](./zh-CN/configuration.md)
 - [遥测数据采集](./zh-CN/telemetry.md)
 - [命令、输出与自动化](./zh-CN/usage.md)

@@ -95,8 +95,9 @@ func (e *InvalidProductError) AgentSuggestions() []string {
 
 // return when use unknown api
 type InvalidApiError struct {
-	Name    string
-	product *meta.Product
+	Name             string
+	product          *meta.Product
+	ImportanceScores map[string]float64
 }
 
 func (e *InvalidApiError) Error() string {
@@ -115,6 +116,10 @@ func (*InvalidApiError) AIRecoveryEligible()    {}
 func (*InvalidApiError) LocalErrorCode() string { return "INVALID_COMMAND" }
 
 func (e *InvalidApiError) GetSuggestions() []string {
+	if ranked, active := rankedAPISuggestions(e.Name, e.product.ApiNames, e.ImportanceScores, false,
+		apiRecoveryCommand(e.Name, e.product.GetLowerCode(), e.product.ApiNames)); active {
+		return ranked
+	}
 	return humanAPISuggestions(e.Name, e.product.ApiNames,
 		apiRecoveryCommand(e.Name, e.product.GetLowerCode(), e.product.ApiNames))
 }
@@ -134,6 +139,7 @@ type InvalidParameterError struct {
 	ParameterNames    []string
 	ParameterExamples map[string]string
 	flags             *cli.FlagSet
+	ImportanceScores  map[string]float64
 }
 
 func (e *InvalidParameterError) Error() string {
@@ -160,6 +166,9 @@ func (e *InvalidParameterError) GetSuggestions() []string {
 	}
 
 	results := sr.GetResults()
+	if ranked, active := rankParameterSuggestions(results, e.ImportanceScores, e.globalSuggestionNames()); active {
+		results = ranked
+	}
 	for i, name := range results {
 		if example := e.ParameterExamples[name]; example != "" {
 			results[i] = fmt.Sprintf("%s (example: %s)", name, example)
@@ -183,6 +192,7 @@ func NewInvalidParameterErrorFromCanonical(name string, api *canonicalmeta.API, 
 	views := api.LegacyTopLevelParameters()
 	params := make([]string, 0, len(views))
 	examples := make(map[string]string)
+	importance := make(map[string]float64)
 	for _, v := range views {
 		pos := v.LegacyPosition()
 		if pos == "Domain" || pos == "Header" {
@@ -190,6 +200,9 @@ func NewInvalidParameterErrorFromCanonical(name string, api *canonicalmeta.API, 
 		}
 		name := v.LegacyName()
 		params = append(params, name)
+		if score := v.ImportanceScore(); score != nil {
+			importance[name] = *score
+		}
 		if example := strings.TrimSpace(v.LegacyExample()); example != "" {
 			examples[name] = example
 		}
@@ -201,6 +214,7 @@ func NewInvalidParameterErrorFromCanonical(name string, api *canonicalmeta.API, 
 		ParameterNames:    params,
 		ParameterExamples: examples,
 		flags:             flags,
+		ImportanceScores:  importance,
 	}
 }
 
@@ -273,8 +287,9 @@ type InvalidBaselineCommandError struct {
 	// Candidates are the kebab command names the runtime engine serves for
 	// the product; populated by the creation site so suggestions stay on the
 	// kebab path instead of jumping to PascalCase APIs.
-	Candidates []string
-	Err        error
+	Candidates       []string
+	Err              error
+	ImportanceScores map[string]float64
 }
 
 func (e *InvalidBaselineCommandError) Error() string {
@@ -291,6 +306,10 @@ func (*InvalidBaselineCommandError) AIRecoveryEligible()    {}
 func (*InvalidBaselineCommandError) LocalErrorCode() string { return "INVALID_COMMAND" }
 
 func (e *InvalidBaselineCommandError) GetSuggestions() []string {
+	if ranked, active := rankedAPISuggestions(e.Command, e.Candidates, e.ImportanceScores, false,
+		apiRecoveryCommand(e.Command, e.Product, e.Candidates)); active {
+		return ranked
+	}
 	return humanAPISuggestions(e.Command, e.Candidates,
 		apiRecoveryCommand(e.Command, e.Product, e.Candidates))
 }

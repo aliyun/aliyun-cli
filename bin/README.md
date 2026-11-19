@@ -6,8 +6,12 @@
 
 ## Install convient script to your laptop
 
-1. `clone git@gitlab.alibaba-inc.com:aliopensource/aliyun-cli.git ` then `cd aliyun-cli`
-2. Add <aliyun-cli repo path>/bin into PATH of env variable `echo PAHT=<aliyun-cli repo path>/bin:%PATH >> ~/.zshrc`
+The scripts under `bin/` are a helper collection for common ECS operations, maintained on a best-effort basis. They are not an alternative to the official CLI installation; install the CLI as described in the top-level README or `docs/` first. The scripts require bash, an installed `aliyun` CLI and `jq`.
+
+1. `git clone https://github.com/aliyun/aliyun-cli.git` then `cd aliyun-cli`
+2. Add the absolute path of this repository's `bin/` directory to `PATH`: `export PATH="/absolute/path/to/aliyun-cli/bin:$PATH"`
+   - Replace `/absolute/path/to/aliyun-cli` with the path where you cloned the repository, and keep the double quotes so the line still works when the path contains spaces.
+   - Append the line to the startup file of your shell: `~/.zshrc` for zsh, `~/.bashrc` for bash. The directory is placed in front of the existing `PATH`, so these scripts win over a same-named command found later in `PATH`; `$PATH` is expanded when the line runs, so your existing entries are kept. Running the line more than once only adds a duplicate entry, it does not truncate `PATH`.
 3. Add following alias to your ~/.zshrc or ~/.bashrc
 
 ```
@@ -30,7 +34,7 @@ alias aliyun-eu-central-1="print_table eu-central-1 "
 alias aliyun-region="aliyun ecs DescribeRegions  | jq -r .Regions.Region | jq -r '.[] | .RegionId'"
 ```
 
-4. 'source ~/.zshrc' to activate setting in shell env.
+4. Reload the startup file you modified (`source ~/.zshrc` for zsh, `source ~/.bashrc` for bash) or open a new terminal, then verify the scripts are discoverable: `command -v aliyun-start`.
 
 #### Have a summary of ecs in different region. 
 
@@ -70,6 +74,8 @@ i-j6cg0s7swgbn77gmrcll	eric-hongkong-1	47.75.14.57	10.1.2.48	cn-hongkong-b	Start
 
 `aliyun-reload <any instanceid, public/private ip, hostname>`
 
+This command **replaces the system disk and reinstalls the operating system; it is not a restart**. Everything on the system disk is lost, so back up the instance before you run it. To restart the instance without touching the disk, use `aliyun-reboot`. The instance, region and target image are printed before any change is made: check them, then answer `y` to continue. If no image can be resolved from the instance, the warning prints `Target image: not resolved from the instance, pass the image id as the second argument` instead of an image.
+
 
 ```
 aliyun-reload i-j6cg0s7swgbn77gmrcll
@@ -77,6 +83,16 @@ aliyun-reload i-j6cg0s7swgbn77gmrcll
 ID                	Hostname            	Public IP	Internal IP	ZoneId	    Status	ImageId
 ---------------------	---------------------	-------------	-------------	-------------	------	------------------
 i-j6cg0s7swgbn77gmrcll	eric-hongkong-1		10.1.2.48	cn-hongkong-b	Stopped	centos_7_04_64_20G_alibase_201701015.vhd
+
+WARNING: this operation replaces the system disk of an ECS instance, which reinstalls the
+         operating system. It is NOT a plain restart. All data on the system disk is lost
+         and cannot be recovered, so back up the instance before you continue. To restart
+         without replacing the system disk, use aliyun-reboot instead.
+         Instance: i-j6cg0s7swgbn77gmrcll
+         Region: cn-hongkong
+         Target image: centos_7_04_64_20G_alibase_201701015.vhd
+
+Confirm to replace the system disk of instance i-j6cg0s7swgbn77gmrcll at region cn-hongkong yes(y/n): y
 Stopping i-j6cg0s7swgbn77gmrcll at cn-hongkong, current status: Stopped
 Replacing system of i-j6cg0s7swgbn77gmrcll at cn-hongkong, current status: Stopped
 {"RequestId":"6308CFF1-6DB6-46B9-9125-EE12DCF0AF7F","DiskId":"d-j6c4pvlm72odu56kolgx"}
@@ -109,6 +125,8 @@ i-j6cg0s7swgbn77gmrcll	eric-hongkong-1	47.75.14.57	10.1.2.48	cn-hongkong-b	Runni
 
 `aliyun-reload <any instanceid, public/private ip, hostname> <image_id>`
 
+Like the command above this replaces the system disk with the given image and reinstalls the operating system, so all data on the system disk is lost. Back up the instance first, and make sure the image id is the one you intend to install: it is printed in the warning together with the instance and region before any change is made.
+
 e.g.
 
 `aliyun-reload i-bp185dy2o3o6lnlo4f07 sles_12_sp2_64_20G_alibase_20170907.vhd`
@@ -125,6 +143,8 @@ i-j6cg0s7swgbn77gmrcll	eric-hongkong-1		10.1.2.48	cn-hongkong-b	Stopped	centos_7
 ```
 
 #### Force to stop an instance or reload
+
+`FORCE=true` only skips the interactive confirmation, it does not change what the command does. `aliyun-reload` still prints the system disk replacement warning, still replaces the system disk and still loses the data on it, so back up the instance first. `aliyun-stop` still stops the instance.
 
 ```
 #export FORCE=true

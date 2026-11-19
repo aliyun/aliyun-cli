@@ -52,6 +52,9 @@ func engineExternalFlags() []argparser.ExternalFlagSpec {
 
 	specs = append(specs,
 		argparser.ExternalFlagSpec{Name: "user-agent", Mode: argparser.ExternalFlagRequired},
+		// Host-level flag expanded into ordinary parameters before dispatch; the
+		// engine only needs to tolerate it if a leftover token ever reaches it.
+		argparser.ExternalFlagSpec{Name: "cli-input-json", Mode: argparser.ExternalFlagRequired},
 		argparser.ExternalFlagSpec{Name: "cli-ai-mode", Mode: argparser.ExternalFlagNone},
 		argparser.ExternalFlagSpec{Name: "no-cli-ai-mode", Mode: argparser.ExternalFlagNone},
 	)

@@ -16,7 +16,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aliyun/aliyun-cli/v3/internal/localstate"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
+	cloudendpoint "github.com/aliyun/aliyun-openapi-runtime/endpoint"
 )
 
 type Config struct {
@@ -35,6 +37,16 @@ type Config struct {
 
 type Client struct {
 	cfg Config
+}
+
+type cacheUseKey struct{}
+
+const maxResponseBytes = 16 << 20
+
+func markCached(ctx context.Context) {
+	if used, ok := ctx.Value(cacheUseKey{}).(*bool); ok {
+		*used = true
+	}
 }
 
 func New(cfg Config) *Client {
@@ -115,6 +127,18 @@ func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*
 	if len(c.cfg.BootstrapRoot) == 0 {
 		return nil, fmt.Errorf("artifact trust bootstrap root is not configured")
 	}
+	// Recovery can remove sibling repositories, so the stable lock lives above
+	// all per-repository state directories and covers the full transaction.
+	if err := os.MkdirAll(c.cfg.CacheDir, 0700); err != nil {
+		return nil, err
+	}
+	unlock, err := localstate.Lock(ctx, filepath.Join(c.cfg.CacheDir, ".metadata.lock"))
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	usedCache := false
+	ctx = context.WithValue(ctx, cacheUseKey{}, &usedCache)
 	now := c.cfg.Now().UTC()
 	discovery, err := c.loadDiscovery(ctx, purpose, now)
 	if err != nil {
@@ -186,11 +210,12 @@ func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*
 	if err != nil {
 		return nil, err
 	}
-	keys, err := VerifyArtifactKeys(keysBytes, root, state.KeysVersion, now, deny)
+	keys, keysIDs, err := verifyArtifactKeysWithSigners(keysBytes, root, state.KeysVersion, now, deny)
 	if err != nil && keysRemote {
 		if cached, readErr := os.ReadFile(keysCache); readErr == nil {
-			if cachedKeys, verifyErr := VerifyArtifactKeys(cached, root, state.KeysVersion, now, deny); verifyErr == nil {
-				keysBytes, keys, keysRemote, err = cached, cachedKeys, false, nil
+			if cachedKeys, cachedIDs, verifyErr := verifyArtifactKeysWithSigners(cached, root, state.KeysVersion, now, deny); verifyErr == nil {
+				keysBytes, keys, keysIDs, keysRemote, err = cached, cachedKeys, cachedIDs, false, nil
+				markCached(ctx)
 			}
 		}
 	}
@@ -209,15 +234,16 @@ func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*
 	if err != nil {
 		return nil, err
 	}
-	timestamp, _, err := VerifyTyped[Timestamp](timestampBytes, keys, "timestamp", "timestamp", now, deny)
+	timestamp, timestampIDs, err := VerifyTyped[Timestamp](timestampBytes, keys, "timestamp", "timestamp", now, deny)
 	timestampValid := func(value Timestamp, verifyErr error) bool {
 		return verifyErr == nil && value.Type == "timestamp" && value.SchemaVersion == SchemaVersion &&
 			value.Authority == root.Authority && value.Version >= state.TimestampVersion && now.Before(value.ExpiresAt)
 	}
 	if !timestampValid(timestamp, err) && timestampRemote {
 		if cached, readErr := os.ReadFile(timestampCache); readErr == nil {
-			if cachedTimestamp, _, verifyErr := VerifyTyped[Timestamp](cached, keys, "timestamp", "timestamp", now, deny); timestampValid(cachedTimestamp, verifyErr) {
-				timestampBytes, timestamp, timestampRemote, err = cached, cachedTimestamp, false, nil
+			if cachedTimestamp, cachedIDs, verifyErr := VerifyTyped[Timestamp](cached, keys, "timestamp", "timestamp", now, deny); timestampValid(cachedTimestamp, verifyErr) {
+				timestampBytes, timestamp, timestampIDs, timestampRemote, err = cached, cachedTimestamp, cachedIDs, false, nil
+				markCached(ctx)
 			}
 		}
 	}
@@ -278,10 +304,33 @@ func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*
 			return nil, err
 		}
 	}
-	if err := atomicWrite(filepath.Join(cacheDir, "trust-state.json"), mustJSON(state), 0600); err != nil {
+	statePath := filepath.Join(cacheDir, "trust-state.json")
+	stateBytes := mustJSON(state)
+	if err := atomicWrite(statePath, stateBytes, 0600); err != nil {
 		return nil, err
 	}
-	return &VerifiedArtifact{Bytes: payload, Descriptor: descriptor, KeyIDs: ids, SignedAt: now}, nil
+	validUntil := descriptor.ExpiresAt
+	for _, deadline := range []time.Time{discovery.ExpiresAt, keys.ExpiresAt, timestamp.ExpiresAt} {
+		if deadline.Before(validUntil) {
+			validUntil = deadline
+		}
+	}
+	for _, key := range keys.Keys {
+		// Both the artifact and the timestamp must remain verifiable while a
+		// cached notification is used. Ignore keys that did not verify either.
+		if (contains(ids, key.KeyID) || contains(timestampIDs, key.KeyID)) && !key.NotAfter.IsZero() && key.NotAfter.Before(validUntil) {
+			validUntil = key.NotAfter
+		}
+	}
+	// Artifact-keys metadata is signed by root.Keys, not by keys.Keys. Its
+	// accepted signers must remain valid for the same cached-notification period.
+	for _, key := range root.Keys {
+		if contains(keysIDs, key.KeyID) && !key.NotAfter.IsZero() && key.NotAfter.Before(validUntil) {
+			validUntil = key.NotAfter
+		}
+	}
+	return &VerifiedArtifact{Bytes: payload, Descriptor: descriptor, KeyIDs: ids, SignedAt: now, Fresh: !usedCache,
+		Proof: CacheProof{SchemaVersion: cacheProofSchemaVersion, StatePath: statePath, StateHash: proofHash(stateBytes, purpose), ValidUntil: validUntil, Purpose: purpose}}, nil
 }
 
 func (c *Client) loadDiscovery(ctx context.Context, purpose string, now time.Time) (Discovery, error) {
@@ -320,6 +369,7 @@ func (c *Client) loadDiscovery(ctx context.Context, purpose string, now time.Tim
 		if cachedErr := validate(cached); cachedErr != nil {
 			return discovery, err
 		}
+		markCached(ctx)
 		return discovery, nil
 	}
 	if remote {
@@ -680,6 +730,7 @@ func (c *Client) fetchWithLKG(ctx context.Context, rawURL, cache string, hosts [
 	if cacheErr != nil {
 		return nil, false, err
 	}
+	markCached(ctx)
 	return cached, false, nil
 }
 
@@ -703,10 +754,13 @@ func (c *Client) fetchStatus(ctx context.Context, rawURL string, hosts []string)
 		if len(via) >= 5 {
 			return fmt.Errorf("too many redirects")
 		}
-		return c.validateURL(req.URL.String(), hosts)
+		return c.validateURL(req.URL.String(), transportHosts(hosts))
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	req, err := cloudendpoint.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
+		return nil, 0, err
+	}
+	if err := c.validateURL(req.URL.String(), transportHosts(hosts)); err != nil {
 		return nil, 0, err
 	}
 	resp, err := client.Do(req)
@@ -714,11 +768,25 @@ func (c *Client) fetchStatus(ctx context.Context, rawURL string, hosts []string)
 		return nil, 0, err
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, (16<<20)+1))
-	if err == nil && len(data) > 16<<20 {
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+	if err == nil && len(data) > maxResponseBytes {
 		err = fmt.Errorf("trust response exceeds size limit")
 	}
 	return data, resp.StatusCode, err
+}
+
+// Signed URLs remain unchanged. Only the configured transport mapping is added
+// to the host allowlist, including redirect validation.
+func transportHosts(hosts []string) []string {
+	result := append([]string(nil), hosts...)
+	for _, host := range hosts {
+		logical := host
+		if !strings.Contains(logical, "://") {
+			logical = "https://" + logical
+		}
+		result = appendHost(result, sourceHost(cloudendpoint.WithSuffix(logical)))
+	}
+	return result
 }
 
 func (c *Client) validateURL(raw string, hosts []string) error {

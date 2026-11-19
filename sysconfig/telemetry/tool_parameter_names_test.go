@@ -66,6 +66,46 @@ func TestParameterInferenceIsLimitedToOpaqueToolRoutes(t *testing.T) {
 			require.Empty(t, executionParameterNames(execution))
 		})
 	}
+	// Empty argv cannot resolve a host extension and must not infer anything.
+	require.Empty(t, executionParameterNames(&activeCommandExecution{}))
+}
+
+// Built-in oss is cliext only for telemetry. Its parameter names must keep
+// coming from the host parser, never from argv inference.
+func TestTelemetryOssClassificationKeepsHostParameterParsing(t *testing.T) {
+	previousTelemetry := telemetryCLIExtCommands
+	previousExtensions := cliExtensions
+	RegisterTelemetryCLIExtCommands([]string{"oss"})
+	RegisterCLIExtensions(map[string]bool{"host-ext-param-test": true})
+	t.Cleanup(func() {
+		telemetryCLIExtCommands = previousTelemetry
+		cliExtensions = previousExtensions
+	})
+	t.Setenv(plugin.EnvPluginsDir, t.TempDir())
+
+	if got := classifyCommandType([]string{"oss", "ls"}, ""); got != CommandTypeCLIExt {
+		t.Fatalf("oss telemetry classification = %q, want %q", got, CommandTypeCLIExt)
+	}
+	require.False(t, isCLIExtension("oss"), "telemetry-only oss must stay out of cliExtensions")
+
+	ctx := cli.NewCommandContext(io.Discard, io.Discard)
+	root := &cli.Command{EnableUnknownFlag: true}
+	root.Flags().Add(&cli.Flag{Name: "region", AssignedMode: cli.AssignedOnce})
+	ctx.EnterCommand(root)
+	args := []string{"oss", "ls", "--region", "cn-hangzhou", "--not-an-oss-option"}
+	ctx.SetInvocationArgs(args)
+	_, err := cli.NewParser(args, ctx).ReadAll()
+	require.NoError(t, err)
+	ossExecution := &activeCommandExecution{context: ctx, scope: Scope{CommandToken: "oss"}, rootArgs: args}
+	require.Equal(t, []string{"--region"}, executionParameterNames(ossExecution))
+
+	// Positive control on the same argv: a host extension really does infer the
+	// unregistered option, so the assertion above is not vacuous.
+	extensionExecution := &activeCommandExecution{
+		scope:    Scope{CommandToken: "host-ext-param-test"},
+		rootArgs: []string{"host-ext-param-test", "ls", "--region", "cn-hangzhou", "--not-an-oss-option"},
+	}
+	require.Equal(t, []string{"--region", "--not-an-oss-option"}, executionParameterNames(extensionExecution))
 }
 
 func TestToolParameterInferenceKeepsHostPrefixWithoutDuplicates(t *testing.T) {

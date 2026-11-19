@@ -23,6 +23,12 @@ var (
 // invocation before host policy is applied) and an unassigned L3 parameter
 // immediately followed by a Help operation.
 func (c *Commando) beforeParseHelpRoute(ctx *cli.Context, args []string) (bool, error) {
+	// --cli-input-json only applies to product API commands; root subcommands
+	// (configure, version, extensions, ...) cannot consume it and must say so
+	// instead of silently ignoring the file.
+	if err := rejectCliInputJSONLocalRoute(ctx, args); err != nil {
+		return true, err
+	}
 	if removed := removedHostHelpOption(args); removed != "" {
 		product, _ := rawHelpProduct(args)
 		if product != "" {
@@ -187,7 +193,7 @@ func (c *Commando) delegateInstalledPluginHelp(ctx *cli.Context, args []string) 
 	if !ok || local == nil {
 		return false, nil
 	}
-	if err := plugin.ValidateLocalPluginCliVersion(pluginName, local); err != nil {
+	if err := plugin.CheckLocalPluginCliVersion(ctx, pluginName, local); err != nil {
 		return true, &externalPluginError{err: err}
 	}
 	positionals := rawHelpPositionals(args)
@@ -681,6 +687,19 @@ func invalidMachineHelpParameter(target HelpTarget, action *machineHelpAPIDocume
 		return cause
 	}
 	names := make([]string, 0)
+	importance := map[string]float64{}
+	for _, parameter := range activeMachineHelpParameters(action) {
+		if parameter.importanceScore == nil {
+			continue
+		}
+		if len(parameter.Options) > 0 {
+			for _, option := range parameter.Options {
+				importance[strings.TrimPrefix(option, "--")] = *parameter.importanceScore
+			}
+		} else {
+			importance[firstNonEmptyMachineHelpString(parameter.Name, parameter.RawName)] = *parameter.importanceScore
+		}
+	}
 	for _, parameter := range append(activeMachineHelpParameters(action), action.GlobalParameters...) {
 		if len(parameter.Options) > 0 {
 			for _, option := range parameter.Options {
@@ -691,11 +710,12 @@ func invalidMachineHelpParameter(target HelpTarget, action *machineHelpAPIDocume
 		names = append(names, firstNonEmptyMachineHelpString(parameter.Name, parameter.RawName))
 	}
 	return &InvalidParameterError{
-		Name:           strings.TrimPrefix(target.Parameter, "--"),
-		ProductCode:    target.Product,
-		ApiName:        target.Action,
-		ParameterNames: names,
-		flags:          flags,
+		Name:             strings.TrimPrefix(target.Parameter, "--"),
+		ProductCode:      target.Product,
+		ApiName:          target.Action,
+		ParameterNames:   names,
+		flags:            flags,
+		ImportanceScores: importance,
 	}
 }
 

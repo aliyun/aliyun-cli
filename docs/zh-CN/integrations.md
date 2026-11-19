@@ -103,7 +103,9 @@ aliyun ecs DescribeInstances --cli-section response --help --cli-output json
 aliyun ecs --help-search instance --cli-output json
 ```
 
-`--cli-output json` 只选择 Help 格式，不是 API 执行结果格式参数。OpenAPI 成功响应默认已经是 JSON；需要格式化 API 响应时使用 `--output` 或 `--cli-query`。
+`--cli-output json` 用于选择宿主 Help、支持的本地错误和 `aliyun upgrade --check`
+检查结果的 JSON 格式。OpenAPI 成功响应默认已经是 JSON；需要格式化 API 响应时使用
+`--output` 或 `--cli-query`。
 
 机器 Help 会向 stdout 写入一个 JSON 文档，并以换行结尾。通用字段如下：
 

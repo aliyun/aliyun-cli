@@ -233,10 +233,15 @@ func TestLogJSONRequestAndResponseBranches(t *testing.T) {
 	logStringMap("Empty", nil)
 
 	out := buf.String()
-	for _, want := range []string{"Object:", "failed to marshal", "Body (bytes)", "Body:", "Response Body: (empty)", "fallback"} {
+	for _, want := range []string{"Object:", "failed to marshal", "Body (bytes)", "Body:", "Response Body: (empty)", "Response Body: (body omitted: 8 bytes of unparseable content)"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q:\n%s", want, out)
 		}
+	}
+	// The opaque fallback body cannot be redacted reliably, so its text must not
+	// be echoed into debug logs at all.
+	if strings.Contains(out, "fallback") {
+		t.Errorf("unparseable response body was echoed:\n%s", out)
 	}
 	for _, secret := range []string{"secret-token", "byte-secret", "object-secret", "header-secret", "raw-secret", "parsed-secret"} {
 		if strings.Contains(out, secret) {

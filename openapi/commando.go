@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"errors"
 
+	"github.com/alibabacloud-go/tea/dara"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
@@ -69,6 +70,8 @@ var hookdo = func(fn func() (*legacyapi.Response, error)) func() (*legacyapi.Res
 var runtimeTryDispatch = runtimehost.TryDispatch
 
 var runtimeDispatch = runtimehost.Dispatch
+
+var streamSSE = (*legacyapi.Client).StreamSSE
 
 var installPluginForCommand = func(c *Commando, ctx *cli.Context, commandName, productCode string) (string, error) {
 	return c.findAndInstallPlugin(ctx, commandName, productCode)
@@ -193,6 +196,7 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 	// the AI gate so non-AI output is protected too.
 	err = sanitizeNetworkTransportError(err)
 	err = suggestKebabProfileFlagCase(err, args)
+	c.attachAPIImportance(err, args)
 
 	enabled := c.applyEffectiveAIModeForArgs(ctx, args)
 	defer func() {
@@ -531,6 +535,15 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			"add --estimate-cost, e.g. aliyun ecs RunInstances ... --estimate-cost --estimate-cost-context EstimatedInternetTrafficOutGB=100")
 	}
 
+	// --cli-input-json fills parameters of a product API call, so it needs the
+	// product and API name. Fail loud instead of printing usage as if the flag
+	// had been honoured.
+	if CliInputJSONFlag(ctx.Flags()) != nil && CliInputJSONFlag(ctx.Flags()).IsAssigned() && len(args) < 2 {
+		return cli.NewErrorWithTip(
+			fmt.Errorf("--cli-input-json requires a product and an API name"),
+			"example: aliyun ecs CreateDeploymentSet --cli-input-json create-deployment-set.json")
+	}
+
 	// aliyun
 	if len(args) == 0 {
 		return c.help(ctx, args)
@@ -550,6 +563,10 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		upperMethod := strings.ToUpper(apiOrMethod)
 		isHttpMethod := upperMethod == "GET" || upperMethod == "POST" || upperMethod == "PUT" || upperMethod == "DELETE"
 		if strings.ToLower(apiOrMethod) == apiOrMethod && !isHttpMethod {
+			// "version" is a local/plugin route, not a product API call here.
+			if err := rejectCliInputJSONVersionRoute(ctx, apiOrMethod); err != nil {
+				return err
+			}
 			// Extract plugin arguments from os.Args
 			var pluginArgs []string
 			cmdIndex := -1
@@ -564,6 +581,14 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			} else {
 				pluginArgs = args
 			}
+
+			// Kebab/engine and installed-plugin commands parse parameters
+			// themselves; expand the file here so they never see the host flag.
+			expandedArgs, expandErr := expandCliInputJSONArgv(ctx, pluginArgs)
+			if expandErr != nil {
+				return expandErr
+			}
+			pluginArgs = expandedArgs
 
 			installed, pluginName, err := plugin.IsPluginInstalled(args[0])
 			if err != nil {
@@ -643,6 +668,9 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			// can fail or forward a subprocess exit code.
 			if local, lookupErr := plugin.LookupLocalPlugin(args[0]); lookupErr == nil {
 				telemetry.SetPluginRoute(local)
+				if local != nil {
+					ctx.SetUpdateOwner("plugin-go", local.Name)
+				}
 			}
 
 			// Prepare config related env for plugin
@@ -721,6 +749,13 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 
 	if cli.HelpFlag(ctx.Flags()).IsAssigned() {
 		return c.help(ctx, args)
+	}
+
+	// Merge --cli-input-json values into the legacy PascalCase route before any
+	// canonical validation so required/unknown parameter checks see the final
+	// set, exactly as if every parameter had been passed on the command line.
+	if err := injectCliInputJSONParams(ctx); err != nil {
+		return err
 	}
 
 	// Reject an unknown built-in API before profile resolution. This is a
@@ -880,7 +915,8 @@ func (c *Commando) dispatchInstalledMetaPlugin(ctx *cli.Context, productCode, ap
 		return false, nil
 	}
 	telemetry.SetPluginRoute(local)
-	if err := plugin.ValidatePluginCliVersion(productCode); err != nil {
+	ctx.SetUpdateOwner("plugin-meta", local.Name)
+	if err := plugin.CheckPluginCliVersion(ctx, productCode); err != nil {
 		return true, err
 	}
 	// Meta plugins have no executable in which to register the package-level version command. Read it from the installed manifest instead.
@@ -988,6 +1024,23 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 	return nil
 }
 
+// sseStreamingProducts lists products whose SSE APIs need the v3 signature and
+// a non-buffered response while staying on their original channel: their SSE
+// endpoints reject the legacy signature and the legacy transport buffers the
+// whole body. Non-SSE APIs are unaffected.
+var sseStreamingProducts = map[string]bool{
+	"das": true,
+}
+
+// isStreamingSSEAPI reports whether api must be streamed with the v3 signature
+// on the original channel.
+func isStreamingSSEAPI(productCode string, api *canonicalmeta.API) bool {
+	if api == nil || !strings.Contains(strings.ToUpper(api.Protocol), "SSE") {
+		return false
+	}
+	return sseStreamingProducts[strings.ToLower(productCode)]
+}
+
 func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
 	// PascalCase / Restful legacy path still uses the V1 Golang SDK, which does
 	// not support signature V4. Fail closed instead of signing incorrectly.
@@ -1040,6 +1093,29 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		cli.Printf(ctx.Stdout(), "Skip invoke in dry-run mode, request is:\n------------------------------------\n%s\n",
 			invoker.getRequest().String())
 		return nil
+	}
+
+	// SSE APIs that reject the legacy signature stream through this same
+	// channel: identical preparation and parameters, v3-signed wire and a
+	// non-buffered response.
+	if isStreamingSSEAPI(invoker.getRequest().Product, legacyAPI) {
+		quiet := QuietFlag(ctx.Flags()).IsAssigned()
+		return streamSSE(invoker.getClient(), invoker.getRequest(), func(event *dara.SSEEvent) error {
+			if quiet {
+				return nil
+			}
+			data, ok := runtime.MarshalSSEEvent(event)
+			if !ok {
+				return nil
+			}
+			if _, err := fmt.Fprintln(ctx.Stdout(), string(data)); err != nil {
+				return err
+			}
+			if f, ok := ctx.Stdout().(interface{ Flush() }); ok {
+				f.Flush()
+			}
+			return nil
+		})
 	}
 
 	// if invoke with helper
@@ -1321,7 +1397,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 					return nil, &InvalidUnifiedApiError{Name: apiOrMethod, product: &product, lPlugin: localPlugin}
 				}
 			}
-			return nil, &InvalidApiError{apiOrMethod, &product}
+			return nil, &InvalidApiError{Name: apiOrMethod, product: &product}
 		}
 
 		//

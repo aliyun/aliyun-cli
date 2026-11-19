@@ -7,10 +7,26 @@ lookup_any $1
 imageid=$image_id # using default image id
 # Overide image id with $2
 [[ $2 != '' ]] &&  imageid=$2
+##Replacing the system disk reinstalls the operating system, it is not a restart.
+echo ""
+echo "WARNING: this operation replaces the system disk of an ECS instance, which reinstalls the"
+echo "         operating system. It is NOT a plain restart. All data on the system disk is lost"
+echo "         and cannot be recovered, so back up the instance before you continue. To restart"
+echo "         without replacing the system disk, use aliyun-reboot instead."
+echo "         Instance: $instance_id"
+echo "         Region: $region_id"
+if [[ $imageid != '' ]];
+then
+    echo "         Target image: $imageid"
+else
+    echo "         Target image: not resolved from the instance, pass the image id as the second argument"
+fi
+
 ##Try to stop and start instance
 if [[ $FORCE != 'true'  ]];
 then
-    echo "\nConfirm to restart instance "$instance_id" at region "$region_id" yes(y/n)": 
+    echo ""
+    echo "Confirm to replace the system disk of instance "$instance_id" at region "$region_id" yes(y/n): "
     read ans
 fi
 #echo $ans

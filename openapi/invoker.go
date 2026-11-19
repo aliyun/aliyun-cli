@@ -153,19 +153,6 @@ func aiModeSuffixForContext(ctx *cli.Context) string {
 	return aimode.RequestUserAgentSuffixForCommand(aiCfg, forceOn, forceOff)
 }
 
-func parseCustomUserAgentSegments(s string) [][2]string {
-	var out [][2]string
-	for _, segment := range strings.Fields(s) {
-		parts := strings.SplitN(segment, "/", 2)
-		if len(parts) == 2 {
-			out = append(out, [2]string{parts[0], parts[1]})
-		} else {
-			out = append(out, [2]string{segment, ""})
-		}
-	}
-	return out
-}
-
 func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	if err := endpoint.Validate(); err != nil {
 		return err
@@ -271,7 +258,7 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 		return fmt.Errorf("init client failed: %w", err)
 	}
 	if vendorEnv, ok := os.LookupEnv("ALIBABA_CLOUD_VENDOR"); ok {
-		a.client.AppendUserAgent("vendor", vendorEnv)
+		a.client.AppendUserAgent("vendor", util.SanitizeUserAgent(vendorEnv))
 	}
 	a.client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
 
@@ -281,20 +268,20 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 
 	if envUA := util.GetFromEnv(sysconfig.EnvUserAgent); envUA != "" {
 		envUA = util.SanitizeUserAgent(envUA)
-		for _, pair := range parseCustomUserAgentSegments(envUA) {
-			a.client.AppendUserAgent(pair[0], pair[1])
+		for _, segment := range strings.Fields(envUA) {
+			a.client.AppendUserAgentToken(segment)
 		}
 	}
 	if v, ok := UserAgentFlag(ctx.Flags()).GetValue(); ok && v != "" {
 		v = util.SanitizeUserAgent(v)
-		for _, pair := range parseCustomUserAgentSegments(v) {
-			a.client.AppendUserAgent(pair[0], pair[1])
+		for _, segment := range strings.Fields(v) {
+			a.client.AppendUserAgentToken(segment)
 		}
 	}
 
 	if suf := aiModeSuffixForContext(ctx); suf != "" {
-		for _, pair := range parseCustomUserAgentSegments(suf) {
-			a.client.AppendUserAgent(pair[0], pair[1])
+		for _, segment := range strings.Fields(suf) {
+			a.client.AppendUserAgentToken(segment)
 		}
 	}
 

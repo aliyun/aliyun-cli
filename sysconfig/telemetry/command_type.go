@@ -70,6 +70,40 @@ func isCLIExtension(command string) bool {
 	return ok
 }
 
+// telemetryCLIExtCommands marks built-in commands whose telemetry semantics are
+// tool extensions. It never joins cliExtensions: host extension registration,
+// safety policy and parameter collection keep their own paths.
+var telemetryCLIExtCommands = map[string]struct{}{}
+
+// RegisterTelemetryCLIExtCommands records built-in commands reported as cliext
+// in telemetry only.
+func RegisterTelemetryCLIExtCommands(commands []string) {
+	defer recoverCollectionPanic()
+	registered := make(map[string]struct{}, len(commands))
+	for _, name := range commands {
+		key := strings.ToLower(strings.TrimSpace(name))
+		if key != "" {
+			registered[key] = struct{}{}
+		}
+	}
+	telemetryCLIExtCommands = registered
+}
+
+func isTelemetryCLIExtension(command string) bool {
+	_, ok := telemetryCLIExtCommands[strings.ToLower(strings.TrimSpace(command))]
+	return ok
+}
+
+// isHostCLIExtensionCommand reports whether argv selects a host-registered
+// cliext command, ignoring telemetry-only classification.
+func isHostCLIExtensionCommand(args []string) bool {
+	parts := positionalParts(args)
+	if len(parts) == 0 {
+		return false
+	}
+	return isCLIExtension(strings.ToLower(strings.TrimSpace(parts[0])))
+}
+
 // DetectCommandType infers the candidate command implementation before routing.
 // An executor-selected Scope.CommandType takes precedence in completed events.
 func DetectCommandType(args []string) string {
@@ -78,7 +112,7 @@ func DetectCommandType(args []string) string {
 		return ""
 	}
 	commandToken := strings.ToLower(strings.TrimSpace(parts[0]))
-	if isCLIExtension(commandToken) {
+	if isCLIExtension(commandToken) || isTelemetryCLIExtension(commandToken) {
 		return CommandTypeCLIExt
 	}
 	if local, err := plugin.LookupLocalPlugin(commandToken); err == nil && local != nil {
@@ -101,7 +135,7 @@ func classifyCommandType(parts []string, pluginType string) string {
 		return ""
 	}
 	commandToken := strings.ToLower(strings.TrimSpace(parts[0]))
-	if isCLIExtension(commandToken) {
+	if isCLIExtension(commandToken) || isTelemetryCLIExtension(commandToken) {
 		return CommandTypeCLIExt
 	}
 	if pluginType != "" {

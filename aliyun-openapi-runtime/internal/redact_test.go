@@ -100,11 +100,7 @@ func TestMaskBodyContentDetection(t *testing.T) {
 		{"form", "name=visible&Password=example-secret", "name=visible&Password=exam***"},
 		{"encoded key and repeated fields", "%50assword=example-secret&Password=another-secret&name=%E4%B8%AD", "%50assword=exam***&Password=anot***&name=%E4%B8%AD"},
 		{"form empty and short secrets", "password=&token=x&name=alice", "password=&token=***&name=alice"},
-		{"form literal newline", "password=example-secret\ncontinued&name=visible", "password=exam***&name=visible"},
-		{"raw lines", "name: visible\npassword: example-secret", "name: visible\npassword: example-secret"},
-		{"raw assignments", "name=visible, password=example-secret", "name=visible, password=example-secret"},
-		{"raw space separated fields", "name=visible password=example-secret", "name=visible password=example-secret"},
-		{"plain text", "ordinary text 正文末尾", "ordinary text 正文末尾"},
+		{"empty non-sensitive value", "name=&x=1", "name=&x=1"},
 		{"JSON", `{"name":"visible","password":"example-secret"}`, `{"name":"visible","password":"exam***"}`},
 		{"unchanged JSON", `{ "name": "visible" }`, `{ "name": "visible" }`},
 		{"original stars", "password=*abcSECRET&note=***", "password=*abc***&note=***"},
@@ -123,27 +119,37 @@ func TestMaskBodyContentDetection(t *testing.T) {
 	}
 }
 
-func TestMaskBodyFormPreservesUnparseableValues(t *testing.T) {
+// Brace-wrapped nested form values are redacted field by field. Nested values
+// that cannot be parsed (damaged JSON, quoted fragments) make the whole body
+// unreliable, so it is omitted instead of echoing the remaining pairs verbatim.
+func TestMaskBodyNestedFormValuesAreMaskedOrOmitted(t *testing.T) {
+	const secret = "example-secret"
+	for _, tc := range []struct{ name, body, want string }{
+		{"plain nested", `ext_params={key=example-string}`, `ext_params={key=example-string}`},
+		{"nested secret", `ext_params={password=` + secret + `}`, `ext_params={password=exam***}`},
+		{"encoded nested secret", `ext_params=%7bpassword%3Dsecret%2avalue%7d`, `ext_params={password=secr***}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := MaskBodyFull(tc.body)
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+			if strings.Contains(got, secret) {
+				t.Errorf("secret leaked from masked body: %q", got)
+			}
+		})
+	}
 	for _, body := range []string{
-		`ext_params={key=example-string}`,
-		`ext_params={password=secret*value}`,
-		`ext_params=%7bpassword%3Dsecret%2avalue%7d`,
 		`ext_params={"password":"secret*value"`,
 		`ext_params="password=secret*value`,
 	} {
-		const sensitive = "&user.password.1=example-secret"
-		if got := MaskBodyFull(body + sensitive); got != body+"&user.password.1=exam***" {
-			t.Errorf("changed unparseable field or missed sibling redaction: %q", got)
+		const sensitive = "&user.password.1=" + secret
+		got := MaskBodyFull(body + sensitive)
+		if got != omittedBody(body+sensitive) {
+			t.Errorf("body with unparseable value was not omitted: %q", got)
 		}
-	}
-	for _, body := range []string{
-		`{password=secret*value}`,
-		`{"password":"secret*value"`,
-		`password=example-secret&name=%zz`,
-		`password=example-secret;name=alice`,
-	} {
-		if got := MaskBodyFull(body); got != body {
-			t.Errorf("changed unparseable form: got %q, want %q", got, body)
+		if strings.Contains(got, secret) {
+			t.Errorf("secret leaked from omitted body: %q", got)
 		}
 	}
 }
@@ -168,6 +174,7 @@ func TestMaskBodyNestedForm(t *testing.T) {
 		{"ordinary encoded value", "name=%E4%B8%AD&note=hello%20world", "name=%E4%B8%AD&note=hello%20world"},
 		{"non-sensitive JSON spelling", "config=" + url.QueryEscape(`{ "name": "alice", "id": 1 }`), "config=" + url.QueryEscape(`{ "name": "alice", "id": 1 }`)},
 		{"flat form map", `{"user.password.1":"FAKE_SECRET_123","user.name":"alice"}`, `{"user.name":"alice","user.password.1":"FAKE***"}`},
+		{"encoded nested form", "ext_params=" + url.QueryEscape(`{key=example-string&password=`+secret+`}`), `ext_params={key=example-string&password=FAKE***}`},
 		{"non-sensitive similar names", "user.passwordHint=visible&tokenizer.1=visible", "user.passwordHint=visible&tokenizer.1=visible"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -190,27 +197,108 @@ func TestMaskBodyNestedForm(t *testing.T) {
 	if err != nil || json.Unmarshal([]byte(form.Get("config")), &decoded) != nil || decoded["inner"] != maskedNested {
 		t.Fatalf("nested JSON string field = %v, error = %v", form, err)
 	}
-	// Preserve damaged nested JSON verbatim so users can diagnose the request.
+	// Damaged JSON cannot be masked field by field, so the body is omitted rather
+	// than echoed verbatim.
 	broken := `{"password":"FAKE_SECRET_123`
 	body = []byte("config=" + url.QueryEscape(broken) + "&name=alice")
-	if got := MaskBodyFull(string(body)); got != string(body) {
-		t.Fatalf("changed malformed JSON value: %s", got)
+	if got := MaskBodyFull(string(body)); got != omittedBody(string(body)) {
+		t.Fatalf("damaged JSON value was not omitted: %s", got)
 	}
 }
 
-func TestMaskBodyPreservesUnparseableContent(t *testing.T) {
+func TestMaskBodyOmittedWhenUnparseable(t *testing.T) {
 	for _, body := range []string{
 		`<Request><Password>example-secret</Password></Request>`,
+		`<Request password="example-secret"/>`,
 		`{"password":"example-secret`,
+		`{"token":"a=b","password":"example-secret`,
+		`[{"password":"example-secret"}`,
 		`password=example-secret&name=%zz`,
 		`password=example-secret;name=alice`,
 		"password: \"example-secret\ncontinued-secret",
 		"password:\n  example-secret",
+		"ordinary text 正文末尾",
+		"name: visible\npassword: example-secret",
 		"\x00example-secret",
 		"\xffexample-secret",
+		`"password":"secret*value"`,
+		"password=example-secret\ncontinued&name=visible",
+		"name=visible, password=example-secret",
+		"name=visible password=example-secret",
+		"name=a=b&x=1",
+		"ext_params=%7Bpassword%3Dexa%20mple%7D",
 	} {
-		if got := MaskBodyFull(body); got != body {
-			t.Errorf("got %q, want unchanged %q", got, body)
+		got := MaskBodyFull(body)
+		if got != omittedBody(body) {
+			t.Errorf("got %q, want omission marker for %q", got, body)
+		}
+		if len(body) > 4 && strings.Contains(got, body[:4]) {
+			t.Errorf("omission marker echoed original content: %q -> %q", body, got)
+		}
+	}
+}
+
+// Each fixture stands for one unparseable body class that assessment finding S2
+// reported as leaking verbatim.
+func TestMaskBodyOmissionFixturesDoNotLeakSecret(t *testing.T) {
+	const secret = "FAKE_SECRET_20261103"
+	fixtures := map[string]string{
+		"broken form encoding": "password=" + secret + "&name=%zz",
+		"xml":                  "<Request><Password>" + secret + "</Password></Request>",
+		"damaged json":         `{"password":"` + secret,
+		"raw text":             "name: fake-user\nPassword: " + secret,
+		"long opaque tail":     strings.Repeat("padding-", 200) + secret,
+	}
+	for name, body := range fixtures {
+		t.Run(name, func(t *testing.T) {
+			for _, got := range []string{MaskBody(body), MaskBodyFull(body)} {
+				if strings.Contains(got, secret) {
+					t.Fatalf("secret leaked from %s body: %q", name, got)
+				}
+				if !strings.HasPrefix(got, "(body omitted:") {
+					t.Fatalf("body was not rendered as an omission marker: %q", got)
+				}
+				if strings.Contains(got, "password") || strings.Contains(got, "Password") {
+					t.Fatalf("omission marker retained body fields: %q", got)
+				}
+			}
+		})
+	}
+}
+
+// Bypasses reported by independent QA: bodies that url.ParseQuery tolerates as a
+// form body but that cannot be reliably identified, so they must be omitted.
+func TestMaskBodyReportedBypassBodiesAreOmitted(t *testing.T) {
+	const secret = "FAKE_SECRET_20261103"
+	for _, tc := range []struct{ name, body string }{
+		{"bom prefixed json", "\ufeff{\"name\":\"a=b\",\"password\":\"" + secret + "\"}"},
+		{"multiline raw", "key=value\npassword=" + secret},
+		{"colon separated segment", "name=x&Password: " + secret},
+		{"yaml like pair", "name: demo, Password: " + secret + "=x"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, got := range []string{MaskBody(tc.body), MaskBodyFull(tc.body)} {
+				if strings.Contains(got, secret) {
+					t.Fatalf("secret leaked from %s body: %q", tc.name, got)
+				}
+				if !strings.HasPrefix(got, "(body omitted:") {
+					t.Fatalf("body was not omitted: %q", got)
+				}
+			}
+		})
+	}
+}
+
+// Valid JSON and form previews keep their existing redaction after the opaque
+// body policy change.
+func TestMaskBodyValidFormatsUnaffectedByOmissionPolicy(t *testing.T) {
+	for _, tc := range []struct{ body, want string }{
+		{"name=visible&password=FAKE_SECRET_20261103", "name=visible&password=FAKE***"},
+		{`{"name":"visible","password":"FAKE_SECRET_20261103"}`, `{"name":"visible","password":"FAKE***"}`},
+		{"x=1&y=2", "x=1&y=2"},
+	} {
+		if got := MaskBodyFull(tc.body); got != tc.want {
+			t.Fatalf("MaskBodyFull(%q) = %q, want %q", tc.body, got, tc.want)
 		}
 	}
 }
@@ -234,6 +322,88 @@ func TestMaskBodyFullPreservesCompleteRedactedJSON(t *testing.T) {
 func TestMaskBodyFullEmpty(t *testing.T) {
 	if got := MaskBodyFull(""); got != "" {
 		t.Fatalf("MaskBodyFull(empty) = %q", got)
+	}
+}
+
+// A segment without '=' has no value, so it cannot be proven to be a field name
+// rather than free text; echoing it would publish whatever the caller put there.
+func TestMaskBodyBareSegmentIsOmitted(t *testing.T) {
+	const secret = "FAKE_SECRET_20261103"
+	for _, body := range []string{
+		secret + "&name=example",
+		"name=example&" + secret,
+		"bare-token",
+	} {
+		if got := MaskBodyFull(body); got != omittedBody(body) {
+			t.Errorf("MaskBodyFull(%q) = %q, want omission", body, got)
+		}
+		if got := MaskBody(body); strings.Contains(got, secret) {
+			t.Errorf("secret leaked from MaskBody(%q) = %q", body, got)
+		}
+	}
+}
+
+// A JSON scalar exposes no fields to redact, so it is omitted instead of echoed.
+func TestMaskBodyJSONScalarIsOmitted(t *testing.T) {
+	const secret = "FAKE_SECRET_20261103"
+	for _, body := range []string{
+		`"password=` + secret + `"`,
+		`"` + secret + `"`,
+		"12345",
+		"true",
+		"null",
+	} {
+		got := MaskBodyFull(body)
+		if got != omittedBody(body) {
+			t.Errorf("MaskBodyFull(%q) = %q, want omission", body, got)
+		}
+		if strings.Contains(got, secret) {
+			t.Errorf("secret leaked: %q", got)
+		}
+	}
+	if got := MaskBodyFull(`[{"password":"` + secret + `"}]`); got != `[{"password":"FAKE***"}]` {
+		t.Errorf("array of objects was not masked: %q", got)
+	}
+}
+
+// Serialized values may carry a BOM or zero-width prefix; the structure behind
+// it must still be recognized and redacted.
+func TestMaskBodyEmbeddedInvisiblePrefixJSON(t *testing.T) {
+	const secret = "FAKE_SECRET_20261103"
+	const want = `note={"password":"FAKE***"}&name=example`
+	for _, prefix := range []string{"\ufeff", "\u200b", "\u2060", "\ufeff\u200b"} {
+		body := "note=" + prefix + `{"password":"` + secret + `"}&name=example`
+		if got := MaskBodyFull(body); got != want {
+			t.Fatalf("MaskBodyFull(%q) = %q, want %q", body, got, want)
+		}
+	}
+	body := "note=\ufeff{\"password\":\"" + secret
+	if got := MaskBodyFull(body); got != omittedBody(body) {
+		t.Fatalf("damaged JSON behind an invisible prefix was not omitted: %q", got)
+	}
+}
+
+// Plain values that merely carry base64 padding or brackets are not
+// assignments and must keep previewing exactly as the base release did.
+func TestMaskBodyPlainFormValuesPreserved(t *testing.T) {
+	for _, body := range []string{
+		"data=YWJjZA==&name=example",
+		"data=YWJjZA=&name=example",
+		"blob=[abc]&name=example",
+	} {
+		if got := MaskBodyFull(body); got != body {
+			t.Errorf("MaskBodyFull(%q) = %q, want unchanged preview", body, got)
+		}
+	}
+	for _, body := range []string{
+		"payload=a=b&name=example",
+		"data=YWJjZA==x&name=example",
+		"data=ab_cd==&name=example",
+		`note="password=secret-value"`,
+	} {
+		if got := MaskBodyFull(body); got != omittedBody(body) {
+			t.Errorf("assignment-bearing value was not omitted: %q -> %q", body, got)
+		}
 	}
 }
 
@@ -286,5 +456,18 @@ func TestAddCustomField(t *testing.T) {
 	Add("my_custom_secret")
 	if !IsSensitive("MY_CUSTOM_SECRET") {
 		t.Fatal("Add did not register the field case-insensitively")
+	}
+}
+
+func TestIsFormFieldName(t *testing.T) {
+	for _, name := range []string{"name", "user.password.1", "user[1][password]", "a_b-c"} {
+		if !isFormFieldName(name) {
+			t.Errorf("%q should be a valid form field name", name)
+		}
+	}
+	for _, name := range []string{"", "file name", "key:value", "{\"name\":\"a"} {
+		if isFormFieldName(name) {
+			t.Errorf("%q should be rejected", name)
+		}
 	}
 }

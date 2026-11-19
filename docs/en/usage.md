@@ -100,6 +100,54 @@ When `--force` is used, these options should normally be provided explicitly:
 
 Use `--header X-foo=bar` repeatedly to add custom HTTP headers. Use `--secure` to force HTTPS. `--skip-secure-verify` disables certificate verification and is not recommended.
 
+## Fill parameters from a JSON file
+
+`--cli-input-json` supplies product API parameters from a single JSON object instead of a long command line. Keys use the parameter spelling of the command style you call: PascalCase for traditional commands, kebab-case for kebab-case and installed-plugin commands.
+
+```sh
+cat > create-deployment-set.json <<'EOF'
+{
+  "RegionId": "cn-hangzhou",
+  "DeploymentSetName": "Default",
+  "Description": "My default deployment set.",
+  "Domain": "Default",
+  "Granularity": "Host",
+  "Strategy": "LooseDispersion"
+}
+EOF
+
+aliyun ecs CreateDeploymentSet --cli-input-json create-deployment-set.json
+aliyun ecs CreateDeploymentSet --cli-input-json create-deployment-set.json --DeploymentSetName demo
+```
+
+The same API on the kebab-case route takes kebab-case keys. Its own region parameter is spelled as `--help` shows (for this API `biz-region-id`), while `--region` selects the endpoint/signing region:
+
+```sh
+cat > create-deployment-set-kebab.json <<'EOF'
+{
+  "biz-region-id": "cn-hangzhou",
+  "deployment-set-name": "Default",
+  "description": "My default deployment set.",
+  "domain": "Default",
+  "granularity": "Host",
+  "strategy": "LooseDispersion"
+}
+EOF
+
+aliyun ecs create-deployment-set --region cn-hangzhou --cli-input-json create-deployment-set-kebab.json
+```
+
+Rules:
+
+- Keys must match the parameter names shown by `aliyun <product> <Api> --help` and are case-sensitive. A key starts with a letter or digit and may only contain letters, digits, `-`, `_`, and `.`; use the full name for nested parameters such as `Tag.1.Key`.
+- Values must be strings, numbers, or booleans. Pass `null`, arrays, or objects on the command line; RESTful HTTP bodies can use `--body-file`.
+- Explicit command line parameters override file values regardless of argument order. A parameter cannot be passed twice.
+- `RegionId` is a legacy-only key. On traditional PascalCase commands it behaves like `--RegionId` and also selects the request region; an explicit `--RegionId` or `--region` on the command line wins. Kebab-case and plugin commands reject a `RegionId` key: pass the API's own region parameter under its kebab-case name (for example `biz-region-id`) and use `--region` for the endpoint/signing region.
+- Kebab-case and plugin commands also reject names reserved by the engine (for example `--pager`/`--all-pages`, `--no-stream`, `--waiter`, and `--output`), so a file value is never expanded into a global option; pass such options on the command line.
+- A missing file, invalid JSON, a non-object root, a key ending in `-FILE`, an invalid key name, or a key that collides with a global flag exits non-zero; the error names the file and parameter but never echoes file contents.
+- Only product API commands accept the flag. Local commands such as `configure`, `help`, and `version` reject it.
+- The override and validation rules are the same on traditional PascalCase, kebab-case, and installed-plugin commands; only the parameter spelling follows the command style. The plugin or engine never receives `--cli-input-json` itself, even when the file contributes no parameters.
+
 ## Validate without invoking
 
 Use `--cli-dry-run` before a mutating call:

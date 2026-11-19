@@ -666,7 +666,8 @@ func (m *Manager) validateVersionAndPlatform(ctx *cli.Context, targetPlugin *Plu
 		return nil, fmt.Errorf("version %s not found for plugin %s", version, actualPluginName)
 	}
 
-	// Check minimum CLI version requirement
+	// Installation and upgrade enforce compatibility before downloading;
+	// advisory checks apply only when executing an already installed plugin.
 	if verInfo.Metadata != nil && verInfo.Metadata.MinCliVersion != "" {
 		currentVersion := cli.GetVersion()
 

@@ -346,7 +346,7 @@ func (c *Commando) printProductUsageForMode(ctx *cli.Context, productCode string
 		}
 		c.setLangEnv(ctx)
 		if localPlugin.IsMeta() {
-			if err := plugin.ValidateLocalPluginCliVersion(pluginName, &localPlugin); err != nil {
+			if err := plugin.CheckLocalPluginCliVersion(ctx, pluginName, &localPlugin); err != nil {
 				return err
 			}
 			if err := productHelpRender(ctx, productCode); err != nil {
@@ -470,7 +470,7 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 	c.printHelpContextHints(ctx)
 	if c.localManifest != nil {
 		if pluginName, lp, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode); ok && lp.IsMeta() {
-			if err := plugin.ValidateLocalPluginCliVersion(pluginName, lp); err != nil {
+			if err := plugin.CheckLocalPluginCliVersion(ctx, pluginName, lp); err != nil {
 				return err
 			}
 		}

@@ -138,23 +138,28 @@ func verifyRootTransition(data []byte, old Root, now time.Time, deny map[string]
 }
 
 func VerifyArtifactKeys(data []byte, root Root, minimum uint64, now time.Time, deny map[string]bool) (ArtifactKeys, error) {
+	result, _, err := verifyArtifactKeysWithSigners(data, root, minimum, now, deny)
+	return result, err
+}
+
+func verifyArtifactKeysWithSigners(data []byte, root Root, minimum uint64, now time.Time, deny map[string]bool) (ArtifactKeys, []string, error) {
 	role, ok := root.Roles["artifact-keys"]
 	if !ok {
-		return ArtifactKeys{}, fmt.Errorf("artifact-keys role is missing")
+		return ArtifactKeys{}, nil, fmt.Errorf("artifact-keys role is missing")
 	}
-	payload, _, err := VerifyEnvelope(data, root.Keys, role, "", now, deny)
+	payload, ids, err := VerifyEnvelope(data, root.Keys, role, "", now, deny)
 	if err != nil {
-		return ArtifactKeys{}, err
+		return ArtifactKeys{}, nil, err
 	}
 	var result ArtifactKeys
 	if err := strictJSON(payload, &result); err != nil {
-		return result, err
+		return result, nil, err
 	}
 	if result.Type != "artifact-keys" || result.SchemaVersion != SchemaVersion ||
 		result.Authority != root.Authority || result.Version < minimum || !now.Before(result.ExpiresAt) {
-		return result, fmt.Errorf("invalid, expired, or rolled-back artifact keys")
+		return result, nil, fmt.Errorf("invalid, expired, or rolled-back artifact keys")
 	}
-	return result, nil
+	return result, ids, nil
 }
 
 func VerifyTyped[T any](data []byte, keys ArtifactKeys, roleName, purpose string, now time.Time, deny map[string]bool) (T, []string, error) {

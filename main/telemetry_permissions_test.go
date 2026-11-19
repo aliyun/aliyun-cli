@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -276,6 +277,7 @@ func runTelemetryPermissionCommand(t *testing.T, home string, disabled bool, arg
 		"NO_COLOR=1", "LANG=C",
 	}
 	cmd.Env = append(cmd.Env, extraEnv...)
+	cmd.Env = append(cmd.Env, raceExitDelayEnv())
 	// Re-executed test binaries need Go's coverage directory too; otherwise
 	// the coverage runtime writes warnings into the CLI's stderr on exit.
 	for _, name := range []string{"PATH", "SYSTEMROOT", "TMPDIR", "TMP", "TEMP", "GOCOVERDIR"} {
@@ -292,4 +294,22 @@ func runTelemetryPermissionCommand(t *testing.T, home string, disabled bool, arg
 		require.True(t, errors.As(err, &exitErr), "could not run CLI child: %v", err)
 	}
 	return telemetryPermissionResult{stdout.String(), stderr.String(), cmd.ProcessState.ExitCode()}
+}
+
+// raceExitDelayEnv disables the race runtime's one-second exit sleep for
+// re-executed children. Each child is itself race-instrumented, and the default
+// atexit_sleep_ms would add a full second to every invocation; reports are still
+// written to stderr before exit, so no diagnostic is lost. Options inherited from
+// the caller (for example halt_on_error) are preserved.
+func raceExitDelayEnv() string {
+	inherited := strings.TrimSpace(os.Getenv("GORACE"))
+	for _, option := range strings.Fields(inherited) {
+		if strings.HasPrefix(option, "atexit_sleep_ms=") {
+			return "GORACE=" + inherited
+		}
+	}
+	if inherited == "" {
+		return "GORACE=atexit_sleep_ms=0"
+	}
+	return "GORACE=" + inherited + " atexit_sleep_ms=0"
 }

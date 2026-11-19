@@ -141,4 +141,6 @@ type VerifiedArtifact struct {
 	Descriptor ArtifactDescriptor
 	KeyIDs     []string
 	SignedAt   time.Time
+	Fresh      bool
+	Proof      CacheProof
 }

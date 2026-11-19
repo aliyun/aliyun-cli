@@ -141,7 +141,7 @@ func SanitizeUserAgent(raw string) string {
 func GetAliyunCliUserAgent() string {
 	ua := "Aliyun-CLI/" + cli.GetVersion()
 	if vendorEnv, ok := os.LookupEnv("ALIBABA_CLOUD_VENDOR"); ok {
-		ua += " vendor/" + vendorEnv
+		ua += " vendor/" + SanitizeUserAgent(vendorEnv)
 	}
 	if seg := GetAgentUserAgentSegment(); seg != "" {
 		ua += " " + seg

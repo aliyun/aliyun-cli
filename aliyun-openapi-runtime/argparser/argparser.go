@@ -121,7 +121,8 @@ func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions)
 
 		p := apiParams.lookup(name)
 		if p == nil {
-			return nil, &UnknownFlagError{Flag: name, Known: apiParams.optionNames()}
+			scores, globals := apiParams.importanceScores(externalFlags)
+			return nil, &UnknownFlagError{Flag: name, Known: apiParams.optionNames(), ImportanceScores: scores, GlobalNames: globals}
 		}
 		if opts.OnParameterNames != nil {
 			flag, _, _ := strings.Cut(tok, "=")

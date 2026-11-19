@@ -34,7 +34,7 @@ type Client struct {
 	ExtraUserAgent                                      string
 	readTimeout, connectTimeout                         time.Duration
 	insecure                                            bool
-	userAgent                                           map[string]string
+	userAgent                                           []string
 	transport                                           http.RoundTripper
 }
 
@@ -52,7 +52,7 @@ var fallbackTimeouts = func() map[string]map[string]int {
 }()
 
 func NewClient(region, id, secret, token string) *Client {
-	return &Client{Region: region, AccessKeyID: id, AccessKeySecret: secret, SecurityToken: token, UseSTSCredential: token != "", userAgent: map[string]string{}}
+	return &Client{Region: region, AccessKeyID: id, AccessKeySecret: secret, SecurityToken: token, UseSTSCredential: token != ""}
 }
 func (c *Client) SetReadTimeout(v time.Duration)    { c.readTimeout = v }
 func (c *Client) GetReadTimeout() time.Duration     { return c.readTimeout }
@@ -60,10 +60,17 @@ func (c *Client) SetConnectTimeout(v time.Duration) { c.connectTimeout = v }
 func (c *Client) GetConnectTimeout() time.Duration  { return c.connectTimeout }
 func (c *Client) SetHTTPSInsecure(v bool)           { c.insecure = v }
 func (c *Client) SetTransport(v http.RoundTripper)  { c.transport = v }
+
+// Segments keep call order and may repeat, so the same key from different
+// sources is reported instead of collapsed.
 func (c *Client) AppendUserAgent(key, value string) {
-	if !strings.EqualFold(key, "core") && !strings.EqualFold(key, "go") {
-		c.userAgent[key] = value
-	}
+	c.userAgent = append(c.userAgent, key+"/"+value)
+}
+
+// AppendUserAgentToken records a caller-supplied segment verbatim: a token
+// without "/" must not gain a trailing slash.
+func (c *Client) AppendUserAgentToken(token string) {
+	c.userAgent = append(c.userAgent, token)
 }
 
 func (c *Client) Send(r *Request) (*Response, error) {
@@ -177,6 +184,123 @@ func (c *Client) send(r *Request, preview bool) (*Response, error) {
 		}
 		return resp, nil
 	}
+}
+
+// StreamSSE sends r on the same legacy channel with the current v3 (ACS3)
+// signature and hands every server-sent event to emit as it arrives. Legacy
+// signing and the buffered response capture are skipped: SSE endpoints reject
+// the former, and buffering would defeat streaming.
+func (c *Client) StreamSSE(r *Request, emit func(event *dara.SSEEvent) error) error {
+	if r.Domain == "" {
+		return NewClientError("SDK.CanNotResolveEndpoint", "Can not resolve endpoint, please check your accessKey with secret, and read the user guide", nil)
+	}
+	readTimeout, connectTimeout := c.timeouts(r)
+	dialTarget := endpoint(r)
+	// The V2 SDK derives the URL and the ACS3 signed host from one endpoint. A
+	// user Host override therefore becomes the SDK endpoint; streamCall restores
+	// the URL host to the resolved endpoint after signing, so the signed Host
+	// header stays while proxies, CONNECT and TLS keep addressing that endpoint.
+	signedEndpoint := dialTarget
+	hostOverride, overrideAssigned := r.Headers["Host"]
+	if overrideAssigned && hostOverride != "" {
+		signedEndpoint = hostOverride
+	}
+	transport := c.transport
+	if transport == nil {
+		proxy, err := legacyProxy(r)
+		if err != nil {
+			return err
+		}
+		plain := &http.Transport{Proxy: proxy, DialContext: (&net.Dialer{Timeout: connectTimeout, DualStack: true}).DialContext,
+			// Wait for response headers with the configured read timeout; the
+			// streamed body after the headers stays open without a client-wide
+			// deadline.
+			ResponseHeaderTimeout: readTimeout,
+			TLSClientConfig:       &tls.Config{InsecureSkipVerify: c.insecure}}
+		defer plain.CloseIdleConnections()
+		transport = plain
+	}
+	stream := &streamCall{http: &http.Client{Transport: transport}}
+	if signedEndpoint != dialTarget {
+		stream.endpoint = dialTarget
+	}
+	conf := &openapi.Config{AccessKeyId: dara.String(c.AccessKeyID), AccessKeySecret: dara.String(c.AccessKeySecret),
+		SecurityToken: dara.String(c.SecurityToken), Endpoint: dara.String(signedEndpoint), RegionId: dara.String(c.Region),
+		UserAgent: dara.String(c.agent()), HttpClient: stream}
+	sdk, err := openapi.NewClient(conf)
+	if err != nil {
+		return err
+	}
+	sdk.DisableSDKError = dara.Bool(true)
+	query := copyMap(r.QueryParams)
+	for _, key := range []string{"Action", "Version", "Format", "Timestamp", "SignatureNonce", "Signature", "SignatureMethod", "SignatureVersion", "AccessKeyId", "SignatureType"} {
+		delete(query, key)
+	}
+	if _, ok := query["RegionId"]; !ok {
+		query["RegionId"] = c.Region
+		if r.RegionId != "" {
+			query["RegionId"] = r.RegionId
+		}
+	}
+	params := &openapi.Params{Action: dara.String(r.ApiName), Version: dara.String(r.Version), Protocol: dara.String(protocol(r)),
+		Method: dara.String(r.Method), AuthType: dara.String("AK"), Style: dara.String(r.GetStyle()), Pathname: dara.String(r.path()),
+		ReqBodyType: dara.String("form"), BodyType: dara.String("string")}
+	req := &openapi.OpenApiRequest{Query: pointers(query), Headers: pointers(r.Headers)}
+	for key := range req.Headers {
+		if strings.EqualFold(key, "host") {
+			delete(req.Headers, key)
+		}
+	}
+	if r.GetStyle() == "RPC" && len(r.FormParams) > 0 {
+		req.Body = r.FormParams
+	}
+	yield := make(chan *openapi.SSEResponse)
+	// The SDK reads per-attempt errors back from this channel itself; a buffer
+	// of one keeps the terminal send non-blocking for both parties.
+	yieldErr := make(chan error, 1)
+	go sdk.CallSSEApi(params, req, &dara.RuntimeOptions{IgnoreSSL: dara.Bool(c.insecure), ReadTimeout: dara.Int(int(readTimeout / time.Millisecond)),
+		ConnectTimeout: dara.Int(int(connectTimeout / time.Millisecond)), NoProxy: dara.String(dialTarget)}, yield, yieldErr)
+
+	var emitErr error
+	// Only the event channel is consumed here: the SDK keeps yieldErr for its
+	// retry decision and leaves just the final error after closing yield.
+	for resp := range yield {
+		if emitErr != nil {
+			// Keep draining so the SDK can finish and close its channels.
+			continue
+		}
+		if resp == nil || resp.Event == nil {
+			continue
+		}
+		if emit != nil {
+			emitErr = emit(resp.Event)
+		}
+	}
+	if emitErr != nil {
+		return emitErr
+	}
+	if err := <-yieldErr; err != nil {
+		return dara.TeaSDKError(err)
+	}
+	return nil
+}
+
+// streamCall is the V2 SDK HTTP extension point for streaming: after signing it
+// points the URL back at the resolved endpoint and hands the response back
+// unread. The signed Host override stays on request.Host, so an HTTP(S) proxy,
+// its CONNECT target, TLS/SNI and the port all keep using the real endpoint.
+type streamCall struct {
+	http *http.Client
+	// endpoint replaces the Host-override URL host the SDK built; empty when no
+	// override rewrote it.
+	endpoint string
+}
+
+func (s *streamCall) Call(request *http.Request, _ *http.Transport) (*http.Response, error) {
+	if s.endpoint != "" {
+		request.URL.Host = s.endpoint
+	}
+	return s.http.Do(request)
 }
 
 func (c *Client) timeouts(r *Request) (time.Duration, time.Duration) {
@@ -349,8 +473,8 @@ func (w *wireCall) savePreview(h *http.Request) {
 func (c *Client) agent() string {
 	// Preserve historical CLI attribution; SDK implementation identity is V2.
 	ua := dara.StringValue(openapiutil.GetUserAgent(nil))
-	for _, key := range sortedKeys(c.userAgent) {
-		ua += " " + key + "/" + c.userAgent[key]
+	for _, segment := range c.userAgent {
+		ua += " " + segment
 	}
 	if c.ExtraUserAgent != "" {
 		ua += " Extra/" + c.ExtraUserAgent

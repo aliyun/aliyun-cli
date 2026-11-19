@@ -1,6 +1,6 @@
 module github.com/aliyun/aliyun-openapi-runtime
 
-go 1.26.9
+go 1.26.11
 
 require (
 	github.com/alibabacloud-go/alibabacloud-gateway-pop v0.1.6
