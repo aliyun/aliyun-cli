@@ -27,6 +27,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewHeaderFlag())
 	fs.Add(NewBodyFlag())
 	fs.Add(NewBodyFileFlag())
+	fs.Add(NewCliInputJSONFlag())
 	fs.Add(PagerFlag)
 	fs.Add(NewAcceptFlag())
 	fs.Add(NewOutputFlag())
@@ -59,6 +60,7 @@ const (
 	HeaderFlagName              = "header"
 	BodyFlagName                = "body"
 	BodyFileFlagName            = "body-file"
+	CliInputJSONFlagName        = "cli-input-json"
 	AcceptFlagName              = "accept"
 	RoaFlagName                 = "roa"
 	DryRunFlagName              = "dryrun"
@@ -106,8 +108,8 @@ func NewCliOutputFlag() *cli.Flag {
 		Persistent:   true,
 		Category:     "help",
 		Short: i18n.T(
-			"set host CLI Help and local error output format (json)",
-			"设置宿主 CLI Help 和本地错误的输出格式（json）",
+			"set host CLI Help, local error and update-check output format (json)",
+			"设置宿主 CLI Help、本地错误和更新检查的输出格式（json）",
 		),
 	}
 }
@@ -197,6 +199,10 @@ func BodyFlag(fs *cli.FlagSet) *cli.Flag {
 
 func BodyFileFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(BodyFileFlagName)
+}
+
+func CliInputJSONFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(CliInputJSONFlagName)
 }
 
 func AcceptFlag(fs *cli.FlagSet) *cli.Flag {
@@ -332,6 +338,16 @@ func NewBodyFileFlag() *cli.Flag {
 		Short: i18n.T(
 			"assign http body in Restful call with local file",
 			"使用 `--body-file foo.json` 来指定输入包体")}
+}
+
+func NewCliInputJSONFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         CliInputJSONFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--cli-input-json foo.json` to fill product API parameters from a JSON object; command line parameters override file values",
+			"使用 `--cli-input-json foo.json` 从 JSON 对象读取产品 API 参数，命令行显式参数覆盖文件值")}
 }
 
 func NewAcceptFlag() *cli.Flag {

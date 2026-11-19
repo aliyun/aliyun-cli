@@ -53,11 +53,12 @@ type AgentErrorEnvelope struct {
 	Message       string `json:"message"`
 	// Structured server-error facts, populated only for remote server errors so
 	// agents can branch on them instead of parsing the message string.
-	ErrorCode  string             `json:"error_code,omitempty"`
-	StatusCode int                `json:"status_code,omitempty"`
-	RequestId  string             `json:"request_id,omitempty"`
-	DidYouMean []string           `json:"did_you_mean,omitempty"`
-	Recovery   AgentErrorRecovery `json:"recovery"`
+	ErrorCode     string             `json:"error_code,omitempty"`
+	StatusCode    int                `json:"status_code,omitempty"`
+	RequestId     string             `json:"request_id,omitempty"`
+	DidYouMean    []string           `json:"did_you_mean,omitempty"`
+	Recovery      AgentErrorRecovery `json:"recovery"`
+	UpdateNotices []UpdateNotice     `json:"update_notices,omitempty"`
 }
 
 type AgentError struct {

@@ -78,8 +78,21 @@ func isolateAgentDetectionEnvs(t *testing.T) {
 	}
 }
 
+// unsetVendorEnv keeps suffix assertions independent of an ambient vendor value.
+func unsetVendorEnv(t *testing.T) {
+	t.Helper()
+	old, ok := os.LookupEnv("ALIBABA_CLOUD_VENDOR")
+	require.NoError(t, os.Unsetenv("ALIBABA_CLOUD_VENDOR"))
+	t.Cleanup(func() {
+		if ok {
+			_ = os.Setenv("ALIBABA_CLOUD_VENDOR", old)
+		}
+	})
+}
+
 func TestBuildUserAgentSuffix(t *testing.T) {
 	isolateAgentDetectionEnvs(t)
+	unsetVendorEnv(t)
 	t.Setenv(sysconfig.EnvUserAgent, "env-\nagent/1")
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	userAgent := &cli.Flag{Name: "user-agent", AssignedMode: cli.AssignedOnce}
@@ -95,8 +108,48 @@ func TestBuildUserAgentSuffix(t *testing.T) {
 	}
 }
 
+// ALIBABA_CLOUD_VENDOR must reach this path too, ahead of Agent/custom segments.
+func TestBuildUserAgentSuffixIncludesVendor(t *testing.T) {
+	isolateAgentDetectionEnvs(t)
+	unsetVendorEnv(t)
+	t.Setenv(sysconfig.EnvUserAgent, "env/1")
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	userAgent := &cli.Flag{Name: "user-agent", AssignedMode: cli.AssignedOnce}
+	ctx.Flags().Add(userAgent)
+	userAgent.SetAssigned(true)
+	userAgent.SetValue("core/x hello")
+	forceOff := &cli.Flag{Name: "no-cli-ai-mode", AssignedMode: cli.AssignedOnce}
+	ctx.Flags().Add(forceOff)
+	forceOff.SetAssigned(true)
+
+	if got, want := buildUserAgentSuffix(ctx), "env/1 core/x hello"; got != want {
+		t.Fatalf("suffix without vendor = %q, want %q", got, want)
+	}
+	t.Setenv("ALIBABA_CLOUD_VENDOR", "team-vendor")
+	if got, want := buildUserAgentSuffix(ctx), "vendor/team-vendor env/1 core/x hello"; got != want {
+		t.Fatalf("suffix with vendor = %q, want %q", got, want)
+	}
+	t.Setenv("ALIBABA_CLOUD_VENDOR", "")
+	if got, want := buildUserAgentSuffix(ctx), "vendor/ env/1 core/x hello"; got != want {
+		t.Fatalf("suffix with empty vendor = %q, want %q", got, want)
+	}
+	t.Setenv("ALIBABA_CLOUD_VENDOR", "team\x01blue")
+	if got, want := buildUserAgentSuffix(ctx), "vendor/teamblue env/1 core/x hello"; got != want {
+		t.Fatalf("suffix with control chars in vendor = %q, want %q", got, want)
+	}
+	t.Setenv("ALIBABA_CLOUD_VENDOR", "\x01")
+	if got, want := buildUserAgentSuffix(ctx), "vendor/ env/1 core/x hello"; got != want {
+		t.Fatalf("suffix with control-only vendor = %q, want %q", got, want)
+	}
+	t.Setenv("ALIBABA_CLOUD_VENDOR", strings.Repeat("v", 300))
+	if got, want := buildUserAgentSuffix(ctx), "vendor/"+strings.Repeat("v", 256)+" env/1 core/x hello"; got != want {
+		t.Fatalf("suffix with overlong vendor = %q, want %q", got, want)
+	}
+}
+
 func TestBuildUserAgentSuffixForDetectedAgentUsesMarkerOnly(t *testing.T) {
 	isolateAgentDetectionEnvs(t)
+	unsetVendorEnv(t)
 	t.Setenv(aimode.EnvAIMode, "")
 	t.Setenv(aimode.EnvAgentIntegration, "")
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
@@ -130,6 +183,7 @@ func TestBuildUserAgentSuffixForDetectedAgentUsesMarkerOnly(t *testing.T) {
 
 func TestBuildUserAgentSuffixIncludesDetectedAgentSegment(t *testing.T) {
 	isolateAgentDetectionEnvs(t)
+	unsetVendorEnv(t)
 	t.Setenv("CURSOR_AGENT", "1")
 	t.Setenv(sysconfig.EnvUserAgent, "skill/foo")
 	t.Setenv(aimode.EnvAIMode, "")
@@ -167,6 +221,7 @@ func TestQoderUserAgentWithAIModeDisabled(t *testing.T) {
 	} {
 		t.Run(test.env, func(t *testing.T) {
 			isolateAgentDetectionEnvs(t)
+			unsetVendorEnv(t)
 			t.Setenv(test.env, "1")
 			t.Setenv(sysconfig.EnvUserAgent, "")
 			ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
@@ -526,6 +581,7 @@ func TestHostSettingsAppliedToExecContext(t *testing.T) {
 			ConnectTimeout:   10 * time.Second,
 			RetryCount:       3,
 			EndpointType:     "vpc",
+			Endpoint:         "settings.example.com",
 			Language:         "en",
 			SkipSecureVerify: true,
 			CLIVersion:       "3.0.234",
@@ -565,6 +621,9 @@ func TestHostSettingsAppliedToExecContext(t *testing.T) {
 	}
 	if !cap.last.UseVPC {
 		t.Errorf("endpoint-type=vpc should set UseVPC")
+	}
+	if cap.last.Endpoint != "settings.example.com" {
+		t.Errorf("Endpoint = %q", cap.last.Endpoint)
 	}
 	if cap.last.Region != "cn-hangzhou" {
 		t.Errorf("region = %q", cap.last.Region)

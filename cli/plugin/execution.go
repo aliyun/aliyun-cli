@@ -136,7 +136,10 @@ func executePlugin(command string, args []string, ctx *cli.Context) (bool, error
 		// Real error (e.g., manifest file corrupted)
 		return false, err
 	}
-	if err := ValidateLocalPluginCliVersion(pluginName, plugin); err != nil {
+	if ctx != nil {
+		ctx.SetUpdateOwner("plugin-go", pluginName)
+	}
+	if err := CheckLocalPluginCliVersion(ctx, pluginName, plugin); err != nil {
 		return true, err
 	}
 

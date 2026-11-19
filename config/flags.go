@@ -434,8 +434,8 @@ func NewOIDCTokenFlag() *cli.Flag {
 		Name:         OIDCTokenFlagName,
 		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
-			"use `--oidc-token-value <OIDCToken>` to assign the OIDC token string",
-			"使用 `--oidc-token-value <OIDCToken>` 直接指定 OIDC Token 内容"),
+			"use `--oidc-token-value <OIDCToken>` to assign the OIDC token string; the value is visible in argv, shell history, process listings and logs, `configure set` saves it unencrypted (JSON, file mode 0600), prefer `--oidc-token-file` with a permission-protected token file",
+			"使用 `--oidc-token-value <OIDCToken>` 直接指定 OIDC Token 内容；该值会出现在命令行参数、Shell 历史、进程列表和日志中，`configure set` 会以明文（JSON，文件权限 0600，未加密）保存，建议改用 `--oidc-token-file` 指定受权限保护的 Token 文件"),
 	}
 }
 
@@ -445,8 +445,8 @@ func NewOIDCTokenFileFlag() *cli.Flag {
 		Name:         OIDCTokenFileFlagName,
 		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
-			"use `--oidc-token-file <OIDCTokenFile>` to assign OIDC token file path",
-			"使用 `--oidc-token-file <OIDCTokenFile>` 来指定 OIDC Token 文件路径"),
+			"use `--oidc-token-file <OIDCTokenFile>` to assign OIDC token file path, recommended over `--oidc-token-value`; an exported `ALIBABA_CLOUD_OIDC_TOKEN` takes precedence and makes this file ignored",
+			"使用 `--oidc-token-file <OIDCTokenFile>` 指定 OIDC Token 文件路径，推荐优先于 `--oidc-token-value`；若仍导出 `ALIBABA_CLOUD_OIDC_TOKEN`，该环境变量优先，此文件会被忽略"),
 	}
 }
 

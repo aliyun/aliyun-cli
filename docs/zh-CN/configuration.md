@@ -6,6 +6,8 @@
 
 遥测设置与采集范围见[遥测数据采集](./telemetry.md)。
 
+自动更新检测、关闭开关和 `aliyun upgrade --check` 见[更新检测](./update-check.md)。
+
 ## 创建和管理 Profile
 
 本地交互使用推荐从 OAuth 开始：
@@ -186,7 +188,7 @@ aliyun configure set \
 
 ### OIDC 工作负载身份
 
-在支持 OIDC 的 CI 或工作负载环境中，需要配置 Provider ARN、Token 文件、RAM 角色 ARN 和会话名称：
+在支持 OIDC 的 CI 或工作负载环境中，需要配置 Provider ARN、Token 来源、RAM 角色 ARN 和会话名称：
 
 ```text
 $ aliyun configure --mode OIDC --profile oidc-profile
@@ -200,6 +202,32 @@ Default Output Format [json]: json (Only support json)
 Default Language [zh|en] zh:
 Saving profile[oidc-profile] ...Done.
 ```
+
+#### 选择 Token 来源
+
+- **Token 文件（推荐）。** `--oidc-token-file` 在每次请求时从文件读取 Token。请只允许 CLI 运行用户读取该文件（例如 `chmod 600`），典型来源是工作负载投射的 ServiceAccount Token 或运行时挂载的 CI Secret。Token 不会进入命令行，也不会写入 Profile 文件。
+- **直接值。** `--oidc-token-value` 便于用假 Token 做一次性验证。该值会成为 argv 的一部分，因此也会出现在 Shell 历史、`ps` 输出、终端回滚缓冲和 CI 日志中。使用 `aliyun configure set` 时还会把它以明文写入 Profile JSON；配置文件写入权限为 `0600`，但内容未加密。
+- **环境变量注入。** 在 CI 任务环境中设置 `ALIBABA_CLOUD_OIDC_TOKEN` 或 `ALIBABA_CLOUD_OIDC_TOKEN_FILE`，不要把值放进命令行，也不要让它出现在任务日志中。
+
+使用 Token 文件的非交互式配置：
+
+```sh
+aliyun configure set --profile oidc-profile --mode OIDC \
+  --region cn-hangzhou \
+  --oidc-provider-arn 'acs:ram::<账号ID>:oidc-provider/<Provider名称>' \
+  --oidc-token-file /var/run/secrets/oidc/token \
+  --ram-role-arn 'acs:ram::<账号ID>:role/<角色名>' \
+  --role-session-name aliyun-cli
+```
+
+> **残留环境变量可能覆盖 Token 文件。** 直接指定的 Token 优先于 Token 文件，而只要 Profile 中没有保存 Token，`ALIBABA_CLOUD_OIDC_TOKEN` 就会被采用。若该变量仍被导出，已配置的 Token 文件会被忽略。依赖文件前先检查并清除它：
+>
+> ```sh
+> echo "${ALIBABA_CLOUD_OIDC_TOKEN:+set}"
+> unset ALIBABA_CLOUD_OIDC_TOKEN
+> ```
+>
+> 示例、脚本和测试数据中只使用假 Token，例如 `header.payload.signature`。
 
 ## 交互式身份登录
 

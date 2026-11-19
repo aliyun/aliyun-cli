@@ -384,18 +384,31 @@ func TestUserAgentAndCustomHost(t *testing.T) {
 	c.ExtraUserAgent = "extra"
 	c.AppendUserAgent("Agent", "one")
 	c.AppendUserAgent("Agent", "two")
-	c.AppendUserAgent("Core", "ignored")
-	c.AppendUserAgent("Go", "ignored")
+	c.AppendUserAgent("Core", "kept")
+	c.AppendUserAgent("Go", "kept-too")
 	c.SetTransport(roundTrip(func(h *http.Request) (*http.Response, error) {
 		require.Equal(t, "fixture.invalid:8080", h.URL.Host)
 		require.Equal(t, "gateway.invalid", h.Host)
-		require.Contains(t, h.UserAgent(), "Agent/two")
+		require.Contains(t, h.UserAgent(), "Agent/one Agent/two")
+		require.Contains(t, h.UserAgent(), "Core/kept")
+		require.Contains(t, h.UserAgent(), "Go/kept-too")
 		require.Contains(t, h.UserAgent(), "Extra/extra")
-		require.NotContains(t, h.UserAgent(), "ignored")
 		return reply(200, ""), nil
 	}))
 	_, err := c.Send(r)
 	require.NoError(t, err)
+}
+
+func TestAgentPreservesOrderDuplicatesAndBareTokens(t *testing.T) {
+	c := NewClient("cn-hangzhou", "id", "secret", "")
+	c.AppendUserAgentToken("team/blue")
+	c.AppendUserAgentToken("team/green")
+	c.AppendUserAgentToken("hello")
+	c.AppendUserAgentToken("core/x")
+
+	ua := c.agent()
+	require.Contains(t, ua, "team/blue team/green hello core/x")
+	require.NotContains(t, ua, "hello/")
 }
 
 func TestPreviewIgnoresNetworkProxyConfiguration(t *testing.T) {

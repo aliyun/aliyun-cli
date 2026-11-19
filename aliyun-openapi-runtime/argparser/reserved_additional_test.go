@@ -131,6 +131,19 @@ func TestReservedParsingErrorsAndValueModes(t *testing.T) {
 	}
 }
 
+func TestIsReservedFlag(t *testing.T) {
+	for _, name := range []string{"region", "output", "all-pages", "pager", "no-stream", "waiter"} {
+		if !IsReservedFlag(name) {
+			t.Fatalf("IsReservedFlag(%q) = false", name)
+		}
+	}
+	for _, name := range []string{"", "instance-id", "Tag.1.Key", "All-Pages", "deployment-set-name"} {
+		if IsReservedFlag(name) {
+			t.Fatalf("IsReservedFlag(%q) = true", name)
+		}
+	}
+}
+
 func TestHelpReservedFlags(t *testing.T) {
 	got, err := Parse(nil, []string{
 		"--cli-section", "response",

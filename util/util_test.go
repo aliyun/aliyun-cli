@@ -668,6 +668,36 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 		assert.Contains(t, ua, "skill/demo")
 	})
 
+	t.Run("vendor control characters are sanitized", func(t *testing.T) {
+		os.Setenv("ALIBABA_CLOUD_VENDOR", "team\x01blue")
+		os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
+
+		ua := GetAliyunCliUserAgent()
+
+		assert.Contains(t, ua, "vendor/teamblue")
+		assert.NotContains(t, ua, "\x01")
+	})
+
+	t.Run("control-only vendor keeps vendor prefix", func(t *testing.T) {
+		os.Setenv("ALIBABA_CLOUD_VENDOR", "\x01")
+		os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
+
+		ua := GetAliyunCliUserAgent()
+
+		assert.True(t, strings.HasSuffix(ua, "vendor/"), ua)
+		assert.NotContains(t, ua, "\x01")
+	})
+
+	t.Run("vendor truncated when too long", func(t *testing.T) {
+		os.Setenv("ALIBABA_CLOUD_VENDOR", strings.Repeat("v", 300))
+		os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
+
+		ua := GetAliyunCliUserAgent()
+
+		assert.Contains(t, ua, "vendor/"+strings.Repeat("v", 256))
+		assert.NotContains(t, ua, strings.Repeat("v", 257))
+	})
+
 	t.Run("custom user agent is sanitized", func(t *testing.T) {
 		os.Unsetenv("ALIBABA_CLOUD_VENDOR")
 		os.Setenv("ALIBABA_CLOUD_USER_AGENT", "skill/bad\r\nX-Inject: yes")

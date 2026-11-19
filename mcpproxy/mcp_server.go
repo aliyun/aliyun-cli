@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -525,9 +526,9 @@ func (p *MCPProxy) ServeMCPProxyRequest(w http.ResponseWriter, r *http.Request) 
 	// 第一次发送请求
 	resp, err := sendRequest(accessToken)
 	if err != nil {
-		log.Println("MCP Proxy sends upstream request error", err.Error())
+		log.Printf("MCP Proxy sends upstream request error: %s", upstreamErrorReport("initial", err, true))
 		atomic.AddInt64(&p.stats.ErrorRequests, 1)
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		http.Error(w, upstreamErrorReport("initial", err, false), http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
@@ -591,9 +592,9 @@ func (p *MCPProxy) ServeMCPProxyRequest(w http.ResponseWriter, r *http.Request) 
 
 		resp, err = sendRequest(newAccessToken)
 		if err != nil {
-			log.Printf("MCP Proxy retry request after token refresh error: %v", err)
+			log.Printf("MCP Proxy retry request after token refresh error: %s", upstreamErrorReport("retry_after_refresh", err, true))
 			atomic.AddInt64(&p.stats.ErrorRequests, 1)
-			http.Error(w, err.Error(), http.StatusBadGateway)
+			http.Error(w, upstreamErrorReport("retry_after_refresh", err, false), http.StatusBadGateway)
 			return
 		}
 		defer resp.Body.Close()
@@ -932,6 +933,48 @@ func safeResponseURLForLog(resp *http.Response) string {
 		return "<unknown>"
 	}
 	return safeURLForLog(resp.Request.URL)
+}
+
+// upstreamErrorReport renders a secret-free phase/category summary; includeTarget adds the sanitized origin and path for logs only.
+func upstreamErrorReport(phase string, err error, includeTarget bool) string {
+	report := fmt.Sprintf("phase=%s category=%s", phase, upstreamErrorCategory(err))
+	if includeTarget {
+		report += " target=" + upstreamErrorTarget(err)
+	}
+	return report
+}
+
+func upstreamErrorCategory(err error) string {
+	if err == nil {
+		return "unknown"
+	}
+
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && urlErr.Op == "parse" {
+		return "invalid_target"
+	}
+
+	var netErr net.Error
+	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout()) {
+		return "timeout"
+	}
+
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return "network"
+	}
+
+	return "transport"
+}
+
+func upstreamErrorTarget(err error) string {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && urlErr.URL != "" {
+		if parsed, parseErr := url.Parse(urlErr.URL); parseErr == nil {
+			return safeURLForLog(parsed)
+		}
+	}
+	return "<unknown>"
 }
 
 func (r *TokenRefresher) Start() {

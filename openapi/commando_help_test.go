@@ -686,7 +686,7 @@ func TestPrintProductUsage_BuiltinMetaPluginWinsAndUsesRuntimeHelp(t *testing.T)
 	assert.NotContains(t, out, "Available Api List")
 }
 
-func TestPrintProductUsage_MetaPluginChecksMinCliVersionBeforeRuntimeHelp(t *testing.T) {
+func TestPrintProductUsage_MetaPluginMinimumIsAdvisory(t *testing.T) {
 	originalVersion := cli.Version
 	cli.Version = "3.3.5"
 	t.Cleanup(func() { cli.Version = originalVersion })
@@ -704,17 +704,20 @@ func TestPrintProductUsage_MetaPluginChecksMinCliVersionBeforeRuntimeHelp(t *tes
 	}}
 
 	originalRender := productHelpRender
+	called := false
 	productHelpRender = func(*cli.Context, string) error {
-		t.Fatal("runtime help must not run when minCliVersion is not satisfied")
+		called = true
 		return nil
 	}
 	t.Cleanup(func() { productHelpRender = originalRender })
 
 	err = c.printProductUsage(ctx, "ecs")
-	assert.ErrorContains(t, err, "requires CLI version 9.0.0 or higher")
+	assert.NoError(t, err)
+	assert.True(t, called)
+	assert.Empty(t, stderr.String())
 }
 
-func TestPrintApiUsage_MetaPluginChecksMinCliVersionBeforeRuntimeHelp(t *testing.T) {
+func TestPrintApiUsage_MetaPluginMinimumIsAdvisory(t *testing.T) {
 	originalVersion := cli.Version
 	cli.Version = "3.3.5"
 	t.Cleanup(func() { cli.Version = originalVersion })
@@ -732,7 +735,8 @@ func TestPrintApiUsage_MetaPluginChecksMinCliVersionBeforeRuntimeHelp(t *testing
 	}}
 
 	err = c.printApiUsage(ctx, "ecs", "describe-instances")
-	assert.ErrorContains(t, err, "requires CLI version 9.0.0 or higher")
+	assert.NoError(t, err)
+	assert.Empty(t, stderr.String())
 }
 
 func TestPrintApiUsageAlwaysTriesRuntime(t *testing.T) {

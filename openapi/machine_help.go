@@ -270,18 +270,19 @@ type machineHelpParameter struct {
 	Name string `json:"name"`
 	// RawName carries the wire name for legacy-camel views where it is set;
 	// it is only ever equal to Name, so it stays struct-only.
-	RawName       string                   `json:"-"`
-	Options       []string                 `json:"options"`
-	Type          string                   `json:"type"`
-	Location      string                   `json:"location"`
-	Required      bool                     `json:"required"`
-	Serialization string                   `json:"serialization"`
-	Help          machineHelpLocalizedText `json:"help"`
-	Example       string                   `json:"example"`
-	Constraints   machineHelpConstraints   `json:"constraints"`
-	Fields        []machineHelpParameter   `json:"fields,omitempty"`
-	Element       *machineHelpShape        `json:"element,omitempty"`
-	Value         *machineHelpShape        `json:"value,omitempty"`
+	RawName         string                   `json:"-"`
+	Options         []string                 `json:"options"`
+	Type            string                   `json:"type"`
+	Location        string                   `json:"location"`
+	Required        bool                     `json:"required"`
+	Serialization   string                   `json:"serialization"`
+	Help            machineHelpLocalizedText `json:"help"`
+	Example         string                   `json:"example"`
+	Constraints     machineHelpConstraints   `json:"constraints"`
+	Fields          []machineHelpParameter   `json:"fields,omitempty"`
+	Element         *machineHelpShape        `json:"element,omitempty"`
+	Value           *machineHelpShape        `json:"value,omitempty"`
+	importanceScore *float64
 }
 
 type machineHelpParameterSets struct {
@@ -893,6 +894,7 @@ func projectCanonicalParameter(parameter *canonicalmeta.Parameter) machineHelpPa
 			MinLength: parameter.MinLength,
 			MaxLength: parameter.MaxLength,
 		},
+		importanceScore: parameter.ImportanceScore.Value(),
 	}
 	for i := range parameter.Fields {
 		result.Fields = append(result.Fields, projectCanonicalField(&parameter.Fields[i]))
@@ -921,6 +923,7 @@ func projectCanonicalField(field *canonicalmeta.Field) machineHelpParameter {
 			MinLength: field.MinLength,
 			MaxLength: field.MaxLength,
 		},
+		importanceScore: field.ImportanceScore.Value(),
 	}
 	for i := range field.Fields {
 		result.Fields = append(result.Fields, projectCanonicalField(&field.Fields[i]))
@@ -978,6 +981,7 @@ func projectLegacyParameter(view *canonicalmeta.LegacyParameterView, prefix stri
 			MinLength: constraints.MinLength,
 			MaxLength: constraints.MaxLength,
 		},
+		importanceScore: view.ImportanceScore(),
 	}
 	children := view.LegacyChildren()
 	if view.IsLegacyRepeatList() {

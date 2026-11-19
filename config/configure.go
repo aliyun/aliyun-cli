@@ -193,6 +193,7 @@ func NewConfigureCommand() *cli.Command {
 	c.AddSubCommand(NewConfigureSafetyPolicyCommand())
 	c.AddSubCommand(NewConfigureAiModeCommand())
 	c.AddSubCommand(NewConfigureTelemetryCommand())
+	c.AddSubCommand(NewConfigureUpdateNotifierCommand())
 	c.AddSubCommand(NewConfigurePluginSettingsCommand())
 	return c
 }

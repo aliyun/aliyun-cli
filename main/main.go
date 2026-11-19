@@ -53,6 +53,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/export"
 	go_migrate "github.com/aliyun/aliyun-cli/v3/go-migrate"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/internal/updatecheck"
 	"github.com/aliyun/aliyun-cli/v3/mcpproxy"
 	"github.com/aliyun/aliyun-cli/v3/mock"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
@@ -72,6 +73,11 @@ var (
 func Main(args []string) {
 	stdout := newStdoutWriter()
 	stderr := newStderrWriter()
+	if len(args) > 0 && args[0] == updatecheck.WorkerCommand {
+		// Return directly: internal work must not invoke stale exit observers.
+		_ = updatecheck.RunWorker(args[1:])
+		return
+	}
 
 	if len(args) > 0 && args[0] == "__telemetry-upload" {
 		exit(telemetry.RunUploadCommand(args[1:]))
@@ -91,26 +97,18 @@ func Main(args []string) {
 		}
 	}
 
-	// load current configuration
-	profile, err := config.LoadOrCreateDefaultProfile()
-	if err != nil {
-		if startupAIMode(args) {
-			// Configuration errors can contain configuration values. Keep the
-			// machine diagnostic stable without echoing potentially secret data.
-			agentErr := cli.NewAgentError(cli.AgentErrorEnvelope{
-				Message:   "load current configuration failed",
-				ErrorCode: "ConfigurationError",
-				Recovery: cli.AgentErrorRecovery{
-					Action: "check_configuration",
-					Hint:   "Check that the CLI configuration is readable, contains valid JSON, and selects an existing profile; repair it before retrying.",
-				},
-			}, err).WithSchemaVersion()
-			_ = json.NewEncoder(stderr).Encode(agentErr.Envelope())
-		} else {
-			cli.Errorf(stderr, "ERROR: load current configuration failed %s", err)
-		}
-		exit(1)
-		return
+	// Load the current configuration, but never let a broken configuration file
+	// block startup: version, help and configure must stay usable so the user can
+	// diagnose and repair it. Commands that need credentials reload and validate
+	// the configuration on their own (see openapi.Commando and
+	// openapi/runtimehost), so real API calls still fail with the actionable
+	// configuration error instead of silently running unauthenticated.
+	profile, cfgErr := config.LoadOrCreateDefaultProfile()
+	if cfgErr != nil {
+		// Keep an unauthenticated placeholder so language/telemetry defaults still
+		// work and routing continues; the error is surfaced by the command that
+		// actually needs the configuration.
+		profile = config.NewProfile(config.DefaultConfigProfileName)
 	}
 
 	// Resolve language before command routing so Core and OpenAPI Help observe
@@ -131,6 +129,7 @@ func Main(args []string) {
 	cli.SetBeforeExit(telemetry.EndWithExitCode)
 	plugin.SetBeforePluginExit(telemetry.EndWithExitCode)
 	configDir := config.GetConfigPath()
+	updatecheck.Begin(configDir, ctx, args)
 	telemetry.Begin(telemetry.BeginInput{
 		ConfigDir:   configDir,
 		Context:     ctx,
@@ -263,15 +262,19 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	// plugin command
 	rootCmd.AddSubCommand(plugin.NewPluginCommand())
 	// upgrade command
-	rootCmd.AddSubCommand(upgrade.NewUpgradeCommand())
+	rootCmd.AddSubCommand(upgrade.NewUpgradeCommand(func(ctx *cli.Context) error { return updatecheck.RunCheck(config.GetConfigPath(), ctx) }))
 	// mock command
 	rootCmd.AddSubCommand(mock.NewMockCommand(config.GetConfigPath))
 	commando.SetRootHelpSpecs(rootCommandHelpSpecs, rootFlagHelpSpecs)
 
 	telemetry.RegisterCLIExtensions(extensions)
+	// Built-in oss is a tool extension by product semantics even though it is
+	// registered directly on the root command. Telemetry-only: it stays out of
+	// extensions and keeps host parameter parsing.
+	telemetry.RegisterTelemetryCLIExtCommands([]string{"oss"})
 	cliext.AttachSafetyPolicy(rootCmd, extensions)
 
-	plugin.RegisterReservedTopLevelCommands(rootCmd.SubCommandNames())
+	plugin.RegisterReservedTopLevelCommands(append(rootCmd.SubCommandNames(), updatecheck.WorkerCommand, "__telemetry-upload"))
 
 	return rootCmd
 }
@@ -449,6 +452,7 @@ var rootFlagHelpSpecs = []openapi.RootFlagSpec{
 	{Name: "cli-output", Visibility: openapi.RootVisibilityDefault},
 	{Name: "cli-dry-run", Visibility: openapi.RootVisibilityDefault},
 	{Name: "cli-sign-version", Visibility: openapi.RootVisibilityDefault},
+	{Name: "cli-input-json", Visibility: openapi.RootVisibilityDefault},
 	{Name: "yes", Visibility: openapi.RootVisibilityDefault},
 	{Name: "cli-ai-mode", Visibility: openapi.RootVisibilityDefault},
 	{Name: "help", Visibility: openapi.RootVisibilityDefault},

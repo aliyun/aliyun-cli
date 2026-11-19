@@ -1,4 +1,11 @@
-export VERSION ?= 3.5.1
+# Default VERSION comes from the tracked version file; an explicit VERSION on the
+# command line or in the environment still takes precedence.
+VERSION_FILE := $(CURDIR)/version
+DEFAULT_VERSION := $(strip $(shell cat $(VERSION_FILE) 2>/dev/null))
+export VERSION ?= $(DEFAULT_VERSION)
+ifeq ($(strip $(VERSION)),)
+$(error VERSION is empty: pass VERSION=<x.y.z> or provide a non-empty version file at $(VERSION_FILE))
+endif
 export RELEASE_PATH="releases/aliyun-cli-${VERSION}"
 
 MODULE := github.com/aliyun/aliyun-cli/v3

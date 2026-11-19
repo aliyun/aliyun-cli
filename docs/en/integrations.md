@@ -103,7 +103,9 @@ aliyun ecs DescribeInstances --cli-section response --help --cli-output json
 aliyun ecs --help-search instance --cli-output json
 ```
 
-`--cli-output json` selects the Help format only. It is not an execution-output flag; successful OpenAPI calls already return JSON by default. Use `--output` or `--cli-query` to format an API response.
+`--cli-output json` selects JSON for host Help, supported local errors and
+`aliyun upgrade --check` results. Successful OpenAPI calls already return JSON by
+default; use `--output` or `--cli-query` to format an API response.
 
 Machine Help writes one JSON document plus a trailing newline to stdout. Its common fields are:
 

@@ -100,6 +100,54 @@ aliyun newproduct SomeAction \
 
 可以重复使用 `--header X-foo=bar` 添加自定义 HTTP Header。`--secure` 强制使用 HTTPS。`--skip-secure-verify` 会关闭证书校验，不建议使用。
 
+## 从 JSON 文件传入参数
+
+`--cli-input-json` 从一个 JSON 对象整体提供产品 API 参数，避免逐项拼长命令。键名使用所调命令风格的参数写法：传统大驼峰命令用大驼峰，短横线命令和已安装插件命令用短横线。
+
+```sh
+cat > create-deployment-set.json <<'EOF'
+{
+  "RegionId": "cn-hangzhou",
+  "DeploymentSetName": "Default",
+  "Description": "My default deployment set.",
+  "Domain": "Default",
+  "Granularity": "Host",
+  "Strategy": "LooseDispersion"
+}
+EOF
+
+aliyun ecs CreateDeploymentSet --cli-input-json create-deployment-set.json
+aliyun ecs CreateDeploymentSet --cli-input-json create-deployment-set.json --DeploymentSetName demo
+```
+
+同一 API 的短横线命令使用短横线键名；它自身的地域参数以 `--help` 显示的名称为准（本 API 为 `biz-region-id`），`--region` 则用于选择接入点/签名地域：
+
+```sh
+cat > create-deployment-set-kebab.json <<'EOF'
+{
+  "biz-region-id": "cn-hangzhou",
+  "deployment-set-name": "Default",
+  "description": "My default deployment set.",
+  "domain": "Default",
+  "granularity": "Host",
+  "strategy": "LooseDispersion"
+}
+EOF
+
+aliyun ecs create-deployment-set --region cn-hangzhou --cli-input-json create-deployment-set-kebab.json
+```
+
+规则：
+
+- 键名与 `aliyun <product> <Api> --help` 中的参数名一致，区分大小写。键名以字母或数字开头，只允许字母、数字、`-`、`_` 和 `.`；带层级的参数写完整名称，如 `Tag.1.Key`。
+- 值只支持字符串、数字和布尔。`null`、数组或对象值请在命令行传入；RESTful 请求体可用 `--body-file`。
+- 命令行显式参数优先于文件值，与参数出现顺序无关。同一参数不能重复传入。
+- `RegionId` 仅适用于传统大驼峰命令：在那里等价于命令行 `--RegionId`，同时决定请求地域；命令行给出 `--RegionId` 或 `--region` 时以命令行为准。短横线命令和插件命令会拒绝 `RegionId` 键，请改用该 API 自身地域参数的短横线名称（如 `biz-region-id`），接入点/签名地域用 `--region` 指定。
+- 短横线命令和插件命令还会拒绝引擎保留的全局 flag 名（例如 `--pager`/`--all-pages`、`--no-stream`、`--waiter`、`--output`），文件值不会被展开成全局选项；这类选项请在命令行直接传入。
+- 文件不存在、JSON 非法、根节点不是对象、键名以 `-FILE` 结尾、键名形状非法或与全局 flag 重名时返回非零退出码；错误信息包含文件路径和参数名，不回显文件内容。
+- 只适用于产品 API 命令。`configure`、`help`、`version` 等本地命令使用该 flag 会报错。
+- 传统大驼峰、短横线和已安装插件命令的覆盖与校验规则一致，只有参数拼写随命令风格；即使文件没有可展开参数，插件或引擎也不会收到 `--cli-input-json` 本身。
+
 ## 调用前验证
 
 对写操作可以先使用 `--cli-dry-run`：

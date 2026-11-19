@@ -2,9 +2,13 @@ package appmanagerutil
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -73,40 +77,83 @@ func TestNewAppManagerCommandMetadata(t *testing.T) {
 	}
 }
 
+// Re-execute only this helper instead of requiring Python or an AppManager binary.
+func TestAppManagerVersionProcess(t *testing.T) {
+	if os.Getenv("ALIYUN_TEST_APPMANAGER_VERSION") != "1" {
+		return
+	}
+	fmt.Fprintln(os.Stdout, "appmanager offline-test")
+	os.Exit(0)
+}
+
 func TestAppManagerCommandRunInstalledSkipNetwork(t *testing.T) {
-	// 准备临时目录作为配置路径
-	tmpDir := t.TempDir()
+	home := t.TempDir()
+	prepareConfig(t, home, "en")
+	tmpDir := filepath.Join(home, ".aliyun")
 	oldGet := getConfigurePathFunc
 	getConfigurePathFunc = func() string { return tmpDir }
-	defer func() { getConfigurePathFunc = oldGet }()
+	t.Cleanup(func() { getConfigurePathFunc = oldGet })
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("ALIYUN_TEST_APPMANAGER_VERSION", "1")
 
-	// 创建假可执行文件(appmanager)
-	execPath := filepath.Join(tmpDir, "appmanager")
-	if err := os.WriteFile(execPath, []byte("#!/bin/sh\necho dummy\n"), 0755); err != nil {
-		t.Fatalf("write fake exec: %v", err)
-	}
-
-	// 创建版本缓存文件，跳过远程版本检查（占位符URL暂不可用）
-	cacheFile := filepath.Join(tmpDir, ".appmanager_version_check")
-	if err := os.WriteFile(cacheFile, []byte(fmt.Sprintf("%d", time.Now().Unix())), 0644); err != nil {
-		t.Fatalf("write cache file: %v", err)
-	}
-
-	// 创建 config.json 以便 PrepareEnv 跳过写入
-	if err := os.WriteFile(filepath.Join(tmpDir, "config.json"), []byte(`{"current":"default"}`), 0644); err != nil {
-		t.Fatalf("write config.json: %v", err)
-	}
-
-	cmd := NewAppManagerCommand()
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	ctx := cli.NewCommandContext(stdout, stderr)
+	installed := NewContext(ctx)
+	if err := installed.InitBasicInfo(); err != nil {
+		t.Fatal(err)
+	}
+	// Populate the real platform-specific layout. These placeholders are never
+	// executed; missing Python or entry points must not trigger an installation.
+	for _, path := range []string{installed.getEmbeddedPythonPath(), installed.venvPythonPath, installed.execFilePath} {
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("fixture"), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
 
-	// 直接调用Run函数，空参数下 appmanager 会执行并返回
-	err := cmd.Run(ctx, []string{"--version"})
-	// 假的 shell 脚本会输出 dummy 然后退出，不会返回错误
+	// A fresh cache must skip upgrades as well as first-time installation.
+	if err := os.WriteFile(installed.checkVersionCacheFilePath, []byte(fmt.Sprintf("%d", timeNowFunc().Unix())), 0644); err != nil {
+		t.Fatalf("write cache file: %v", err)
+	}
+
+	originalClient := http.DefaultClient
+	t.Cleanup(func() { http.DefaultClient = originalClient })
+	http.DefaultClient = &http.Client{Transport: pythonDownloadTransport(func(r *http.Request) (*http.Response, error) {
+		t.Errorf("installed AppManager attempted a network request: %s", r.URL)
+		return nil, fmt.Errorf("network disabled in installed AppManager test")
+	})}
+
+	executable, err := os.Executable()
 	if err != nil {
-		// 可能因为平台差异导致执行失败，允许 exec 相关错误
-		t.Logf("Run returned error (may be expected on some platforms): %v", err)
+		t.Fatal(err)
+	}
+	processContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+	originalCommand := execCommandFunc
+	t.Cleanup(func() { execCommandFunc = originalCommand })
+	calls := 0
+	execCommandFunc = func(name string, args ...string) *exec.Cmd {
+		calls++
+		if name != installed.execFilePath || !reflect.DeepEqual(args, []string{"--version"}) {
+			t.Fatalf("unexpected process (Python/pip must not run): %q %v", name, args)
+		}
+		return exec.CommandContext(processContext, executable, "-test.run=^TestAppManagerVersionProcess$")
+	}
+
+	cmd := NewAppManagerCommand()
+	if err := cmd.Run(ctx, []string{"--version"}); err != nil {
+		t.Fatalf("Run failed: %v; stderr: %s", err, stderr.String())
+	}
+	if calls != 1 {
+		t.Fatalf("process calls = %d, want exactly one AppManager invocation", calls)
+	}
+	if got := stdout.String(); got != "appmanager offline-test\n" {
+		t.Fatalf("version output = %q", got)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("unexpected stderr: %s", stderr.String())
 	}
 }

@@ -103,6 +103,7 @@ func (h *cliHost) Settings() runtime.Settings {
 		s.ConnectTimeout = time.Duration(h.profile.ConnectTimeout) * time.Second
 		s.RetryCount = h.profile.RetryCount
 		s.EndpointType = h.profile.EndpointType
+		s.Endpoint = h.profile.Endpoint
 		s.Language = h.profile.Language
 	}
 	s.CLIVersion = cli.GetVersion()
@@ -161,12 +162,17 @@ func splitCommaList(raw string) []string {
 	return values
 }
 
-// buildUserAgentSuffix merges detected Agent/<name>, ALIBABA_CLOUD_USER_AGENT
-// and --user-agent with the host AI-mode suffix
+// buildUserAgentSuffix merges ALIBABA_CLOUD_VENDOR, detected Agent/<name>,
+// ALIBABA_CLOUD_USER_AGENT and --user-agent with the host AI-mode suffix
 // (config + detected agent + --cli-ai-mode / --no-cli-ai-mode).
 // The engine prefixes Aliyun-CLI/{cliVer} aliyun-openapi-runtime/{ver}.
 func buildUserAgentSuffix(ctx *cli.Context) string {
 	var parts []string
+	// Mirrors the V1 and SLS V2 paths: the vendor segment follows the identity
+	// segment and precedes Agent/custom segments.
+	if vendor, ok := os.LookupEnv("ALIBABA_CLOUD_VENDOR"); ok {
+		parts = append(parts, "vendor/"+util.SanitizeUserAgent(vendor))
+	}
 	if seg := util.GetAgentUserAgentSegment(); seg != "" {
 		parts = append(parts, seg)
 	}
@@ -392,6 +398,13 @@ func ProductCommands(product string) []string {
 		return nil
 	}
 	return Engine().ProductCommands(product)
+}
+
+func ProductCommandImportance(product string, args []string) map[string]float64 {
+	if product == "" {
+		return nil
+	}
+	return Engine().ProductCommandImportance(product, args)
 }
 
 // MetaPluginProvenance resolves product ownership through the engine loader.

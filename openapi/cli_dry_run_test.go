@@ -3,6 +3,7 @@ package openapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -197,6 +198,11 @@ func TestBuildCliDryRunFromInvoker_MasksPathSecret(t *testing.T) {
 func TestCliDryRunPreservesLongBodyAndRedaction(t *testing.T) {
 	const secret = "FAKE_SECRET_123"
 	text := strings.Repeat("流水线", 450) + "正文末尾"
+	omitted := func(body string) string {
+		return fmt.Sprintf("(body omitted: %d bytes of unparseable content)", len(body))
+	}
+	xmlBody := "<Name>" + text + "</Name><Password>" + secret + "</Password>"
+	rawBody := "name: " + text + "\npassword: " + secret
 	for _, tc := range []struct {
 		name string
 		body string
@@ -209,10 +215,10 @@ func TestCliDryRunPreservesLongBodyAndRedaction(t *testing.T) {
 		},
 		{
 			"xml",
-			"<Name>" + text + "</Name><Password>" + secret + "</Password>",
-			"<Name>" + text + "</Name><Password>" + secret + "</Password>",
+			xmlBody,
+			omitted(xmlBody),
 		},
-		{"raw", "name: " + text + "\npassword: " + secret, "name: " + text + "\npassword: " + secret},
+		{"raw", rawBody, omitted(rawBody)},
 		{
 			"json",
 			`{"content":"` + text + `","password":"` + secret + `"}`,
@@ -236,14 +242,10 @@ func TestCliDryRunPreservesLongBodyAndRedaction(t *testing.T) {
 				assert.Equal(t, tc.want, out.Body)
 				human := formatCliDryRunHuman(out)
 				assert.Contains(t, human, tc.want)
-				if !strings.Contains(tc.want, secret) {
-					assert.NotContains(t, human, secret)
-				}
+				assert.NotContains(t, human, secret)
 				encoded, err := marshalCliDryRunOutput(out)
 				assert.NoError(t, err)
-				if !strings.Contains(tc.want, secret) {
-					assert.NotContains(t, encoded, secret)
-				}
+				assert.NotContains(t, encoded, secret)
 				var decoded CliDryRunOutput
 				assert.NoError(t, json.Unmarshal([]byte(encoded), &decoded))
 				assert.Equal(t, tc.want, decoded.Body)
@@ -726,8 +728,11 @@ func TestProcessCliDryRunJson(t *testing.T) {
 
 func TestProcessCliDryRunRedactsFormBodyInStdoutAndStderr(t *testing.T) {
 	const secret = "FAKE_SECRET_123"
-	body := strings.Repeat("x", 1100) + "&password=" + secret
-	want := strings.Repeat("x", 1100) + "&password=FAKE***"
+	// Serializers always emit key=value; a bare segment is treated as free
+	// text and now forces the whole body to be omitted, so the long value
+	// under test must belong to a real field.
+	body := "note=" + strings.Repeat("x", 1100) + "&password=" + secret
+	want := "note=" + strings.Repeat("x", 1100) + "&password=FAKE***"
 
 	for _, jsonOutput := range []bool{false, true} {
 		name := "human"
@@ -767,6 +772,59 @@ func TestProcessCliDryRunRedactsFormBodyInStdoutAndStderr(t *testing.T) {
 			assert.Empty(t, stderr.String())
 			assert.Equal(t, body, string(req.Content), "dry-run must not mutate the request")
 		})
+	}
+}
+
+func TestProcessCliDryRunOmitsBareFormSegmentAndJSONScalar(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"bare segment", "FAKE_SECRET_123&name=example"},
+		{"json string scalar", `"FAKE_SECRET_123"`},
+	}
+	for _, tc := range cases {
+		want := fmt.Sprintf("(body omitted: %d bytes of unparseable content)", len(tc.body))
+		for _, jsonOutput := range []bool{false, true} {
+			name := tc.name + "/human"
+			if jsonOutput {
+				name = tc.name + "/json"
+			}
+			t.Run(name, func(t *testing.T) {
+				stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+				ctx := cli.NewCommandContext(stdout, stderr)
+				cmd := &cli.Command{}
+				cmd.EnableUnknownFlag = true
+				AddFlags(cmd.Flags())
+				ctx.EnterCommand(cmd)
+
+				req := legacyapi.NewRequest()
+				req.Method = "POST"
+				req.SetContent([]byte(tc.body))
+				req.Headers["Content-Type"] = "application/x-www-form-urlencoded"
+				invoker := &RestfulInvoker{BasicInvoker: &BasicInvoker{request: req}}
+
+				var err error
+				if jsonOutput {
+					err = processCliDryRunJson(ctx, invoker)
+				} else {
+					err = processCliDryRun(ctx, invoker)
+				}
+				assert.NoError(t, err)
+				if jsonOutput {
+					var decoded CliDryRunOutput
+					assert.NoError(t, json.Unmarshal(stdout.Bytes(), &decoded))
+					assert.Equal(t, want, decoded.Body)
+				} else {
+					assert.Contains(t, stdout.String(), want)
+				}
+				assert.NotContains(t, stdout.String(), "FAKE_SECRET_123")
+				assert.NotContains(t, stderr.String(), "FAKE_SECRET_123")
+				assert.NotContains(t, stderr.String(), tc.body)
+				assert.Empty(t, stderr.String())
+				assert.Equal(t, tc.body, string(req.Content), "dry-run must not mutate the request")
+			})
+		}
 	}
 }
 
@@ -1405,10 +1463,11 @@ func newOpenapiParams(method, pathname, action, version string) *openapiClient.P
 
 func TestCliDryRunExplicitContentTypes(t *testing.T) {
 	const body = `<Name>visible</Name><Password>FAKE_SECRET_123</Password>`
+	omitted := fmt.Sprintf("(body omitted: %d bytes of unparseable content)", len(body))
 	for _, tc := range []struct{ contentType, want string }{
-		{"application/xml", body},
-		{"application/octet-stream", body},
-		{"application/x-custom-format", body},
+		{"application/xml", omitted},
+		{"application/octet-stream", omitted},
+		{"application/x-custom-format", omitted},
 	} {
 		t.Run(tc.contentType, func(t *testing.T) {
 			req := legacyapi.NewRequest()
@@ -1421,12 +1480,14 @@ func TestCliDryRunExplicitContentTypes(t *testing.T) {
 			}
 			for _, out := range []*CliDryRunOutput{classic, buildCliDryRunFromOpenapi(oc)} {
 				assert.Equal(t, tc.want, out.Body)
-				assert.Contains(t, formatCliDryRunHuman(out), body)
+				assert.NotContains(t, out.Body, "FAKE_SECRET_123")
+				assert.Contains(t, formatCliDryRunHuman(out), tc.want)
 				encoded, err := marshalCliDryRunOutput(out)
 				assert.NoError(t, err)
+				assert.NotContains(t, encoded, "FAKE_SECRET_123")
 				var decoded CliDryRunOutput
 				assert.NoError(t, json.Unmarshal([]byte(encoded), &decoded))
-				assert.Equal(t, body, decoded.Body)
+				assert.Equal(t, tc.want, decoded.Body)
 			}
 			assert.Equal(t, body, string(req.Content))
 			assert.Equal(t, body, string(oc.openapiRequest.Body.([]byte)))

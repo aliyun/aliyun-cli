@@ -3,6 +3,7 @@ package telemetry
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
+	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
 func TestTelemetryEnvironmentDisabled(t *testing.T) {
@@ -152,6 +154,105 @@ func TestBuildEventClassifiesLocalAndAPIErrors(t *testing.T) {
 	))
 	if serverEvent.APIErrorCode != "Throttling.User" || serverEvent.HTTPStatusCode != 429 {
 		t.Fatalf("unexpected legacy API error event: %+v", serverEvent)
+	}
+}
+
+func TestBuildEventExtractsOSSAPIErrors(t *testing.T) {
+	build := func(err error) Event {
+		t.Helper()
+		event, buildErr := BuildEvent(BuildInput{
+			Scope:      Scope{Active: true, Pipeline: PipelinePublic, CommandToken: "oss"},
+			RootArgs:   []string{"oss", "stat", "oss://bucket/object"},
+			InstanceID: "instance-id",
+			Err:        err,
+		})
+		if buildErr != nil {
+			t.Fatal(buildErr)
+		}
+		return event
+	}
+
+	for name, test := range map[string]struct {
+		err        error
+		apiErrCode string
+		httpStatus int
+	}{
+		"value type": {
+			err:        oss.ServiceError{Code: "NoSuchKey", StatusCode: 404},
+			apiErrCode: "NoSuchKey",
+			httpStatus: 404,
+		},
+		"pointer type": {
+			err:        &oss.ServiceError{Code: "AccessDenied", StatusCode: 403},
+			apiErrCode: "AccessDenied",
+			httpStatus: 403,
+		},
+		"multi layer wrapping": {
+			err: fmt.Errorf("stat failed: %w", fmt.Errorf("transport: %w",
+				oss.ServiceError{Code: "Throttling", StatusCode: 429})),
+			apiErrCode: "Throttling",
+			httpStatus: 429,
+		},
+		"head failure with status only": {
+			err:        oss.ServiceError{StatusCode: 404, RequestID: "must-not-be-collected"},
+			apiErrCode: "",
+			httpStatus: 404,
+		},
+		"unexpected status code": {
+			err:        oss.CheckRespCode(http.StatusInternalServerError, []int{http.StatusOK}),
+			apiErrCode: "",
+			httpStatus: 500,
+		},
+		"wrapped unexpected status code pointer": {
+			err: func() error {
+				statusErr, ok := oss.CheckRespCode(http.StatusBadGateway, []int{http.StatusOK}).(oss.UnexpectedStatusCodeError)
+				if !ok {
+					t.Fatal("expected UnexpectedStatusCodeError")
+				}
+				return fmt.Errorf("stat failed: %w", &statusErr)
+			}(),
+			apiErrCode: "",
+			httpStatus: 502,
+		},
+		"unsafe error code": {
+			err:        oss.ServiceError{Code: "AccessDenied\nbucket=must-not-be-collected", StatusCode: 403},
+			apiErrCode: "",
+			httpStatus: 403,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			event := build(test.err)
+			if event.Result != "Failure" ||
+				event.LocalErrorCode != "" ||
+				event.APIErrorCode != test.apiErrCode ||
+				event.HTTPStatusCode != test.httpStatus {
+				t.Fatalf("unexpected OSS API error event: %+v", event)
+			}
+		})
+	}
+
+	adapted := cli.NewAgentError(cli.AgentErrorEnvelope{
+		Message:    "oss: service returned error, Bucket=must-not-be-collected",
+		ErrorCode:  "NoSuchKey",
+		StatusCode: 404,
+		Recovery:   cli.AgentErrorRecovery{Action: "check_resource", Hint: "Verify the bucket and key."},
+	}, oss.ServiceError{Code: "NoSuchKey", StatusCode: 404})
+	adaptedEvent := build(fmt.Errorf("oss stat failed: %w", adapted))
+	if adaptedEvent.Result != "Failure" ||
+		adaptedEvent.LocalErrorCode != "" ||
+		adaptedEvent.APIErrorCode != "NoSuchKey" ||
+		adaptedEvent.HTTPStatusCode != 404 {
+		t.Fatalf("unexpected AI adapted OSS error event: %+v", adaptedEvent)
+	}
+
+	networkEvent := build(&net.DNSError{Err: "timeout", Name: "example.invalid", IsTimeout: true})
+	if networkEvent.Result != "Failure" || networkEvent.APIErrorCode != "" || networkEvent.HTTPStatusCode != 0 {
+		t.Fatalf("network errors must not fabricate API errors: %+v", networkEvent)
+	}
+
+	uploaded := newUploadEvent(build(oss.ServiceError{Code: "NoSuchKey", StatusCode: 404}))
+	if uploaded.Attributes["apiErrorCode"] != "NoSuchKey" || uploaded.Attributes["httpStatusCode"] != 404 {
+		t.Fatalf("unexpected uploaded OSS API error attributes: %+v", uploaded.Attributes)
 	}
 }
 

@@ -6,6 +6,8 @@ Alibaba Cloud CLI stores named profiles in `~/.aliyun/config.json` by default.
 
 For telemetry settings and the information collected, see [Telemetry data collection](./telemetry.md).
 
+For automatic check preferences and `aliyun upgrade --check`, see [Update checks](./update-check.md).
+
 ## Create and manage profiles
 
 For interactive local use, OAuth is the recommended starting point:
@@ -186,7 +188,7 @@ The resulting profile relationship is equivalent to:
 
 ### OIDC workload identity
 
-In an OIDC-enabled CI or workload environment, configure the provider ARN, token file, RAM role ARN, and session name:
+In an OIDC-enabled CI or workload environment, configure the provider ARN, token source, RAM role ARN, and session name:
 
 ```text
 $ aliyun configure --mode OIDC --profile oidc-profile
@@ -200,6 +202,32 @@ Default Output Format [json]: json (Only support json)
 Default Language [zh|en] en:
 Saving profile[oidc-profile] ...Done.
 ```
+
+#### Choose a token source
+
+- **Token file (recommended).** `--oidc-token-file` reads the token from a file at request time. Keep the file readable only by the CLI user (`chmod 600`), for example a workload-projected service account token or a CI secret mounted at runtime. The token stays out of the command line and out of the profile file.
+- **Direct value.** `--oidc-token-value` is convenient for one-off checks with a fake token. The value becomes part of argv, so it also appears in shell history, `ps` output, terminal scrollback and CI logs. `aliyun configure set` additionally stores it in the profile JSON in plaintext; the configuration file is written with mode `0600`, but its contents are not encrypted.
+- **Environment injection.** Set `ALIBABA_CLOUD_OIDC_TOKEN` or `ALIBABA_CLOUD_OIDC_TOKEN_FILE` in the CI job environment instead of the command line, and keep the value out of job logs.
+
+Non-interactive setup with a token file:
+
+```sh
+aliyun configure set --profile oidc-profile --mode OIDC \
+  --region cn-hangzhou \
+  --oidc-provider-arn 'acs:ram::<account-id>:oidc-provider/<provider-name>' \
+  --oidc-token-file /var/run/secrets/oidc/token \
+  --ram-role-arn 'acs:ram::<account-id>:role/<role-name>' \
+  --role-session-name aliyun-cli
+```
+
+> **Token file may be overridden by a leftover environment variable.** A direct token takes precedence over a token file, and `ALIBABA_CLOUD_OIDC_TOKEN` is applied whenever the profile has no saved token. If that variable is still exported, the configured token file is ignored. Check and unset it before you rely on a file:
+>
+> ```sh
+> echo "${ALIBABA_CLOUD_OIDC_TOKEN:+set}"
+> unset ALIBABA_CLOUD_OIDC_TOKEN
+> ```
+>
+> Use only fake tokens such as `header.payload.signature` in examples, scripts and test fixtures.
 
 ## Interactive identity sign-in
 

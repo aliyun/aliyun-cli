@@ -19,6 +19,7 @@ import (
 	"archive/zip"
 	"bufio"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -75,7 +76,7 @@ var (
 	clientSignatureVersion = publishsig.SignatureVersion
 )
 
-func NewUpgradeCommand() *cli.Command {
+func NewUpgradeCommand(checkers ...CheckRunner) *cli.Command {
 	cmd := &cli.Command{
 		Name: "upgrade",
 		Short: i18n.T(
@@ -83,19 +84,45 @@ func NewUpgradeCommand() *cli.Command {
 			"升级阿里云CLI到最新版本"),
 		Long: i18n.T(
 			"Upgrade Alibaba Cloud CLI to the latest release.\n"+
+				"Use --check for a read-only text summary, or --check --cli-output json for structured output.\n"+
 				"If installed via Homebrew, delegates to 'brew upgrade'.\n"+
 				"Otherwise downloads from Alibaba Cloud OSS mirror.\n"+
 				"Only a release newer than this CLI and listing this CLI's publisher key generation is installed, after its publisher signature verifies.",
 			"升级阿里云CLI到最新版本。\n"+
+				"使用 --check 查看更新摘要，或使用 --check --cli-output json 获取结构化检查结果，不执行安装。\n"+
 				"如果通过Homebrew安装，自动调用brew upgrade升级。\n"+
 				"否则从阿里云OSS镜像源下载。\n"+
 				"只会安装比当前更新、且列出本包公钥版本、并且发行方签名校验通过的版本。"),
-		Usage: "upgrade [--yes]",
+		Usage: "upgrade [--yes] [--check [--cli-output json]]",
 		Run: func(ctx *cli.Context, args []string) error {
+			if len(args) > 0 {
+				return cli.NewInvalidCommandError(args[0], ctx)
+			}
+			if ctx.Flags().Get("check").IsAssigned() {
+				format, err := CheckOutputFormat(ctx)
+				if err != nil {
+					return err
+				}
+				if len(checkers) > 0 {
+					return checkers[0](ctx)
+				}
+				result, err := CheckUpdate(context.Background(), cli.GetVersion())
+				if format == cli.HelpOutputJSON {
+					encoder := json.NewEncoder(ctx.Stdout())
+					encoder.SetIndent("", "  ")
+					if encodeErr := encoder.Encode(result); encodeErr != nil {
+						return encodeErr
+					}
+				} else if writeErr := WriteCheckSummary(ctx.Stdout(), result); writeErr != nil {
+					return writeErr
+				}
+				return err
+			}
 			return doUpgrade(ctx)
 		},
 	}
 
+	cmd.Flags().Add(&cli.Flag{Name: "check", AssignedMode: cli.AssignedNone, Short: i18n.T("check CLI and plugin updates without installing", "检查 CLI 和插件更新，不执行安装")})
 	cmd.Flags().Add(&cli.Flag{
 		Name:      "yes",
 		Shorthand: 'y',
@@ -278,7 +305,15 @@ func resolveExecPath() (string, error) {
 }
 
 func fetchVersionFromOSS() (string, error) {
-	resp, err := cloudendpoint.Get(httpClient, ossVersionURL)
+	return fetchVersionFromOSSContext(context.Background())
+}
+
+func fetchVersionFromOSSContext(ctx context.Context) (string, error) {
+	req, err := cloudendpoint.NewRequestWithContext(ctx, http.MethodGet, ossVersionURL, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to reach OSS: %s", err)
 	}
@@ -311,7 +346,15 @@ type publishedVersion struct {
 // fetchVersionList reads the stable history published beside /version.
 // A missing object is not an error: the caller follows /version once.
 func fetchVersionList() ([]publishedVersion, bool, error) {
-	resp, err := cloudendpoint.Get(httpClient, ossBaseURL+"/versions")
+	return fetchVersionListContext(context.Background())
+}
+
+func fetchVersionListContext(ctx context.Context) ([]publishedVersion, bool, error) {
+	req, err := cloudendpoint.NewRequestWithContext(ctx, http.MethodGet, ossBaseURL+"/versions", nil)
+	if err != nil {
+		return nil, false, err
+	}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to reach OSS: %s", err)
 	}

@@ -601,6 +601,15 @@ func (f ReservedFlag) Desc(lang string) string {
 	return f.DescZH
 }
 
+// IsReservedFlag reports whether name is owned by the engine, including the
+// hidden entries that ReservedFlags omits from help (for example all-pages).
+// The name is given without the leading "--", matching the JSON keys that the
+// host expands into argv.
+func IsReservedFlag(name string) bool {
+	_, ok := reservedFlags.byName[name]
+	return ok
+}
+
 // ReservedFlags returns the engine's reserved (global) flags for help
 // rendering, filtering hidden entries directly from the reserved flag index and sorting
 // visible entries by their declared help order.

@@ -109,6 +109,39 @@ func TestLegacyInvokerClientSettingsAndUserAgent(t *testing.T) {
 	}
 }
 
+// Custom user-agent input must keep env-then-flag order, repeat segments, and
+// bare tokens, matching the SLS V2 and metadata-engine paths.
+func TestLegacyInvokerCustomUserAgentOrderAndTokens(t *testing.T) {
+	_, ctx, _, _ := newCanonicalHelpTestContext(t)
+	config.AddFlags(ctx.Flags())
+	config.ConfigurePathFlag(ctx.Flags()).SetValue(t.TempDir())
+	config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
+	config.SkipSecureVerify(ctx.Flags()).SetAssigned(true)
+	profile := &config.Profile{Mode: config.AK, AccessKeyId: "id", AccessKeySecret: "secret", RegionId: "cn-hangzhou", Endpoint: "local.invalid"}
+	t.Setenv("ALIBABA_CLOUD_VENDOR", "team\x01vendor")
+	// \x01 must be stripped by SanitizeUserAgent before segments are split.
+	t.Setenv(sysconfig.EnvUserAgent, "team/blue\x01 hello")
+	UserAgentFlag(ctx.Flags()).SetValue("team/green")
+	UserAgentFlag(ctx.Flags()).SetAssigned(true)
+
+	invoker := NewBasicInvoker(profile)
+	require.NoError(t, invoker.Init(ctx, &meta.Product{Code: "Ecs", Version: "2014-05-26"}))
+	var userAgent string
+	invoker.client.SetTransport(boundaryTransport(func(r *http.Request) (*http.Response, error) {
+		userAgent = r.Header.Get("User-Agent")
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+	}))
+	invoker.request.ApiName = "DescribeRegions"
+	_, err := invoker.client.Send(invoker.request)
+	require.NoError(t, err)
+
+	require.Contains(t, userAgent, "vendor/teamvendor")
+	require.Equal(t, 1, strings.Count(userAgent, "vendor/teamvendor"))
+	require.Contains(t, userAgent, "team/blue hello team/green")
+	require.NotContains(t, userAgent, "hello/")
+	require.NotContains(t, userAgent, "\x01")
+}
+
 type boundaryInvoker struct {
 	request *legacyapi.Request
 	bodies  []string

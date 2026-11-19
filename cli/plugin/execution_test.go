@@ -421,7 +421,10 @@ func TestExecutePlugin(t *testing.T) {
 		assert.Contains(t, stdout.String(), "test plugin output")
 	})
 
-	t.Run("Minimum CLI version is checked before resolving binary", func(t *testing.T) {
+	t.Run("Minimum CLI version is advisory and successful execution stays silent", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("POSIX shell fixture")
+		}
 		testHome := t.TempDir()
 		cleanup := setTestHomeDir(t, testHome)
 		defer cleanup()
@@ -445,11 +448,14 @@ func TestExecutePlugin(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NoError(t, os.WriteFile(manifestPath, manifestJSON, 0644))
 
-		ok, err := ExecutePlugin("test", []string{}, nil)
+		assert.NoError(t, os.WriteFile(filepath.Join(pluginDir, "aliyun-cli-test"), []byte("#!/bin/sh\nprintf 'plugin result\\n'\n"), 0700))
+		var stdout, stderr bytes.Buffer
+		ctx := cli.NewCommandContext(&stdout, &stderr)
+		ok, err := ExecutePlugin("test", []string{}, ctx)
 		assert.True(t, ok)
-		assert.ErrorContains(t, err, "requires CLI version 9.0.0 or higher")
-		assert.ErrorContains(t, err, "but you have 3.3.5")
-		assert.NotContains(t, err.Error(), "plugin binary not found")
+		assert.NoError(t, err)
+		assert.Equal(t, "plugin result\n", stdout.String())
+		assert.Empty(t, stderr.String())
 	})
 
 	t.Run("Plugin binary path resolution fails", func(t *testing.T) {

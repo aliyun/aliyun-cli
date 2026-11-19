@@ -65,7 +65,8 @@ func normalizeAgentError(err error, args []string) error {
 	return normalizeAgentErrorWithSearch(err, args, nil)
 }
 
-func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySearchValidator) error {
+func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySearchValidator) (result error) {
+	defer func() { result = withImportanceSuggestions(err, args, result) }()
 	if err == nil {
 		return nil
 	}
@@ -319,8 +320,11 @@ func profileConfigurationAgentError(cause error) error {
 		exitCode = 3
 	}
 	// Configuration and credential-provider errors may contain secret values.
+	// Keep the established error code: callers use it to recognize configuration
+	// failures and pick a recovery action.
 	return cli.NewAgentError(cli.AgentErrorEnvelope{
-		Message: "profile configuration failed",
+		Message:   "profile configuration failed",
+		ErrorCode: "ConfigurationError",
 		Recovery: cli.AgentErrorRecovery{
 			Action:  "check_configuration",
 			Command: "aliyun configure",

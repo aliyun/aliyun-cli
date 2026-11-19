@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -797,6 +798,13 @@ func TestPipInstall(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows")
 	}
+
+	// Exercise the missing-pip error without downloading a real wheel first.
+	originalClient := http.DefaultClient
+	t.Cleanup(func() { http.DefaultClient = originalClient })
+	http.DefaultClient = &http.Client{Transport: pythonDownloadTransport(func(r *http.Request) (*http.Response, error) {
+		return nil, fmt.Errorf("simulated offline")
+	})}
 
 	ctx, _, errOut := newOriginCtx()
 	c := NewContext(ctx)

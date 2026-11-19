@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
@@ -102,7 +103,7 @@ func LoadProfile(path string, name string) (Profile, error) {
 	var p Profile
 	config, err := hookLoadOrCreateConfiguration(LoadOrCreateConfiguration)(path)
 	if err != nil {
-		return p, fmt.Errorf("init config failed %v", err)
+		return p, fmt.Errorf("init config failed %v; repair or remove the file, then run 'aliyun configure'", err)
 	}
 	if name == "" {
 		name = config.CurrentProfile
@@ -110,9 +111,31 @@ func LoadProfile(path string, name string) (Profile, error) {
 	p, ok := config.GetProfile(name)
 	p.parent = config
 	if !ok {
-		return p, fmt.Errorf("unknown profile %s, run configure to check", name)
+		return p, newUnknownProfileError(name, path, config)
 	}
 	return p, nil
+}
+
+// profileNames lists the selectable profiles for diagnostics without exposing
+// any credential values.
+func profileNames(conf *Configuration) string {
+	if conf == nil {
+		return "none"
+	}
+	names := make([]string, 0, len(conf.Profiles))
+	for _, p := range conf.Profiles {
+		if p.Name != "" {
+			names = append(names, p.Name)
+		}
+	}
+	if len(names) == 0 {
+		return "none"
+	}
+	return strings.Join(names, ", ")
+}
+
+func newUnknownProfileError(name, path string, conf *Configuration) error {
+	return fmt.Errorf("unknown profile %s: not found in config file '%s' (available profiles: %s); run 'aliyun configure switch <name>' to select an existing profile or 'aliyun configure' to create it", name, path, profileNames(conf))
 }
 
 func getConfigurePath(ctx *cli.Context) (currentPath string) {
@@ -189,7 +212,7 @@ func LoadProfileForDryRunWithContext(ctx *cli.Context) (profile Profile, err err
 	}
 	profile, ok := conf.GetProfile(profileName)
 	if !ok {
-		return profile, fmt.Errorf("unknown profile %s, run configure to check", profileName)
+		return profile, newUnknownProfileError(profileName, getConfigurePath(ctx), conf)
 	}
 	profile.parent = conf
 	profile.OverwriteWithFlags(ctx)
@@ -223,6 +246,9 @@ func LoadOrCreateConfiguration(path string) (conf *Configuration, err error) {
 	}
 
 	conf, err = NewConfigFromBytes(bytes)
+	if err != nil {
+		err = fmt.Errorf("parsing config file '%s' failed: %w", path, err)
+	}
 	return
 }
 
@@ -234,6 +260,9 @@ func LoadConfigurationFromFile(filePath string) (conf *Configuration, err error)
 	}
 
 	conf, err = NewConfigFromBytes(bytes)
+	if err != nil {
+		err = fmt.Errorf("parsing config file '%s' failed: %w", filePath, err)
+	}
 	return
 }
 

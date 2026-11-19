@@ -60,9 +60,10 @@ type Parameter struct {
 	IsWildcard bool // path value replaces the complete URL template
 
 	// Composite descriptors.
-	Fields    []Parameter // Type == TypeObject
-	ItemType  *Parameter  // Type == TypeArray
-	ValueType *Parameter  // Type == TypeMap
+	Fields          []Parameter // Type == TypeObject
+	ItemType        *Parameter  // Type == TypeArray
+	ValueType       *Parameter  // Type == TypeMap
+	ImportanceScore *float64    `json:"-"`
 }
 
 // IsComposite reports whether the parameter has structural children.

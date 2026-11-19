@@ -1425,7 +1425,7 @@ func TestValidateVersionAndPlatform_VersionCheck(t *testing.T) {
 
 		ctx := newTestContext()
 		platInfo, err := mgr.validateVersionAndPlatform(ctx, targetPlugin, "1.0.0", "test-plugin")
-		assert.NotNil(t, err)
+		assert.Error(t, err)
 		assert.Nil(t, platInfo)
 		assert.Contains(t, err.Error(), "requires CLI version")
 		assert.Contains(t, err.Error(), "3.4.0")
@@ -1456,7 +1456,7 @@ func TestValidateVersionAndPlatform_VersionCheck(t *testing.T) {
 
 		ctx := newTestContext()
 		platInfo, err := mgr.validateVersionAndPlatform(ctx, targetPlugin, "1.0.0", "test-plugin")
-		assert.NotNil(t, err)
+		assert.Error(t, err)
 		assert.Nil(t, platInfo)
 		assert.Contains(t, err.Error(), "requires CLI version")
 		assert.Contains(t, err.Error(), "3.4.0")
@@ -2230,6 +2230,9 @@ func TestManager_installPlugin(t *testing.T) {
 	})
 
 	t.Run("Success - install plugin with specified version", func(t *testing.T) {
+		previousVersion := cli.Version
+		cli.Version = "3.5.4"
+		t.Cleanup(func() { cli.Version = previousVersion })
 		tmpDir := t.TempDir()
 		mgr := &Manager{
 			rootDir:    tmpDir,
@@ -2253,7 +2256,7 @@ func TestManager_installPlugin(t *testing.T) {
 			Name: "test-plugin",
 			Versions: map[string]VersionInfo{
 				"1.0.0": {
-					Metadata: &VersionMetadata{MinCliVersion: "9.0.0"},
+					Metadata: &VersionMetadata{MinCliVersion: "3.5.0"},
 					Platforms: map[string]PlatformInfo{
 						platform: {
 							URL:      server.URL + "/artifacts/test-plugin.tar.gz",
@@ -2276,7 +2279,7 @@ func TestManager_installPlugin(t *testing.T) {
 		assert.Equal(t, "test-plugin", plugin.Name)
 		assert.Equal(t, "1.0.0", plugin.Version)
 		assert.Equal(t, "test", plugin.Command)
-		assert.Equal(t, "9.0.0", plugin.MinCliVersion)
+		assert.Equal(t, "3.5.0", plugin.MinCliVersion)
 
 		pluginDir := filepath.Join(tmpDir, "test-plugin")
 		assert.DirExists(t, pluginDir)

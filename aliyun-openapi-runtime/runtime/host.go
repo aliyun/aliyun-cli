@@ -53,6 +53,7 @@ type Settings struct {
 	ConnectTimeout time.Duration
 	RetryCount     int
 	EndpointType   string // e.g. "vpc" -> prefer VPC endpoints
+	Endpoint       string // service address override; empty resolves from metadata
 	Language       string // "zh" / "en"
 
 	// SkipSecureVerify disables TLS certificate verification (from host --skip-secure-verify). Not recommended.

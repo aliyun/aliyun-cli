@@ -61,8 +61,12 @@ type Context struct {
 	// recognized as an agent environment.
 	agentName string
 	// use http instead of https
-	insecure    bool
-	runtimeEnvs map[string]string
+	insecure             bool
+	runtimeEnvs          map[string]string
+	updateNoticeProvider func() ([]UpdateNotice, func(bool))
+	updateOwnerKind      string
+	updateOwnerName      string
+	compatibilityNotices []UpdateNotice
 }
 
 // SetInvocationArgs records the original argv passed to the root command.

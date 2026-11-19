@@ -1,6 +1,9 @@
 package canonicalmeta
 
-import "encoding/json"
+import (
+	"encoding/json"
+	runtimemeta "github.com/aliyun/aliyun-openapi-runtime/meta"
+)
 
 // API represents a Canonical API JSON file.
 // Fields not needed by the old CLI are omitted from deserialization.
@@ -99,12 +102,13 @@ type VersionEndpoint struct {
 
 // VersionAPIEntry is one API entry in version.json.
 type VersionAPIEntry struct {
-	CmdName       string `json:"cmd_name"`
-	Deprecated    bool   `json:"deprecated"`
-	TitleZh       string `json:"title_zh,omitempty"`
-	TitleEn       string `json:"title_en,omitempty"`
-	DescriptionZh string `json:"description_zh"`
-	DescriptionEn string `json:"description_en"`
+	CmdName         string                       `json:"cmd_name"`
+	Deprecated      bool                         `json:"deprecated"`
+	TitleZh         string                       `json:"title_zh,omitempty"`
+	TitleEn         string                       `json:"title_en,omitempty"`
+	DescriptionZh   string                       `json:"description_zh"`
+	DescriptionEn   string                       `json:"description_en"`
+	ImportanceScore *runtimemeta.ImportanceScore `json:"importance_score,omitempty"`
 }
 
 // Description returns the API-level description for the given language.
@@ -210,9 +214,10 @@ type Parameter struct {
 	HelpZh        string `json:"help_zh,omitempty"`
 	HelpEn        string `json:"help_en,omitempty"`
 
-	Fields  []Field    `json:"fields,omitempty"`
-	Element *TypeShape `json:"element,omitempty"`
-	Value   *TypeShape `json:"value,omitempty"`
+	Fields          []Field                      `json:"fields,omitempty"`
+	Element         *TypeShape                   `json:"element,omitempty"`
+	Value           *TypeShape                   `json:"value,omitempty"`
+	ImportanceScore *runtimemeta.ImportanceScore `json:"importance_score,omitempty"`
 }
 
 // Help returns the CLI-facing parameter help for the given language.
@@ -245,9 +250,10 @@ type Field struct {
 	HelpZh        string `json:"help_zh,omitempty"`
 	HelpEn        string `json:"help_en,omitempty"`
 
-	Fields  []Field    `json:"fields,omitempty"`
-	Element *TypeShape `json:"element,omitempty"`
-	Value   *TypeShape `json:"value,omitempty"`
+	Fields          []Field                      `json:"fields,omitempty"`
+	Element         *TypeShape                   `json:"element,omitempty"`
+	Value           *TypeShape                   `json:"value,omitempty"`
+	ImportanceScore *runtimemeta.ImportanceScore `json:"importance_score,omitempty"`
 }
 
 // Help returns the CLI-facing field help for the given language.
@@ -260,17 +266,18 @@ func (f *Field) Help(lang string) string {
 
 // V1Parameter represents a v1_parameters/v1_body_parameters compatibility projection.
 type V1Parameter struct {
-	Name          string        `json:"name"`
-	Position      string        `json:"position"`
-	Type          string        `json:"type"`
-	ParamStyle    string        `json:"param_style,omitempty"`
-	Required      bool          `json:"required"`
-	DescriptionZh string        `json:"description_zh,omitempty"`
-	DescriptionEn string        `json:"description_en,omitempty"`
-	HelpZh        string        `json:"help_zh,omitempty"`
-	HelpEn        string        `json:"help_en,omitempty"`
-	Example       string        `json:"example,omitempty"`
-	SubParameters []V1Parameter `json:"sub_parameters,omitempty"`
+	Name            string                       `json:"name"`
+	Position        string                       `json:"position"`
+	Type            string                       `json:"type"`
+	ParamStyle      string                       `json:"param_style,omitempty"`
+	Required        bool                         `json:"required"`
+	DescriptionZh   string                       `json:"description_zh,omitempty"`
+	DescriptionEn   string                       `json:"description_en,omitempty"`
+	HelpZh          string                       `json:"help_zh,omitempty"`
+	HelpEn          string                       `json:"help_en,omitempty"`
+	Example         string                       `json:"example,omitempty"`
+	SubParameters   []V1Parameter                `json:"sub_parameters,omitempty"`
+	ImportanceScore *runtimemeta.ImportanceScore `json:"importance_score,omitempty"`
 }
 
 // HelpOrDescription returns the CLI-facing V1 parameter help for the locale.

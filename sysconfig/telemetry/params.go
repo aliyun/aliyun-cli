@@ -76,11 +76,12 @@ func telemetryFlagDefinition(token string, flags *cli.FlagSet) *cli.Flag {
 
 func executionParameterNames(execution *activeCommandExecution) []string {
 	names := execution.parameterNames
-	commandType := detectCommandTypeForScope(execution.rootArgs, execution.scope)
-	// An installed Go plugin is only a candidate until dispatch selects it.
-	// Native OpenAPI calls can fail parsing before that decision is reached.
+	// Telemetry-only cliext classification must not switch built-in commands to
+	// argv inference. Only host extensions and opaque tool routes infer names.
 	inferToolNames := !execution.runtimeParametersSet &&
-		(execution.scope.CommandType == CommandTypePluginGo || commandType == CommandTypeCLIExt)
+		(execution.scope.CommandType == CommandTypePluginGo ||
+			execution.scope.CommandType == CommandTypeCLIExt ||
+			isHostCLIExtensionCommand(execution.rootArgs))
 	if inferToolNames {
 		names = inferToolParameterNames(execution.rootArgs)
 	}
