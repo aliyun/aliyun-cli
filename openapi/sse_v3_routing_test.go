@@ -31,7 +31,9 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/internal/legacyapi"
+	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const sseRoutingTestConfig = `{
@@ -177,9 +179,20 @@ func TestMain_DasSSECarriesLegacyRegionIdFlag(t *testing.T) {
 	ctx, command := newDasRoutingTestCommando(t, stdout)
 	installDasTestLibrary(t, command, dasSSEAPI())
 
+	const region = "cn-north-2-gov-1"
+	const endpoint = "das.cn-north-2-gov-1.aliyuncs.com"
+	// Keep the routing assertion independent of endpoint changes in the Meta submodule.
+	repo, err := meta.MockLoadRepository([]meta.Product{{
+		Code: "DAS", Version: "2020-01-16", ApiStyle: "rpc",
+		GlobalEndpoint:    "das.aliyuncs.com",
+		RegionalEndpoints: map[string]string{region: endpoint},
+	}})
+	require.NoError(t, err)
+	command.library.builtinRepo = repo
+
 	regionFlag := config.NewRegionIdFlag()
 	regionFlag.SetAssigned(true)
-	regionFlag.SetValue("cn-north-2-gov-1")
+	regionFlag.SetValue(region)
 	ctx.Flags().Add(regionFlag)
 	queryFlag := &cli.Flag{Name: "Query"}
 	queryFlag.SetAssigned(true)
@@ -187,12 +200,11 @@ func TestMain_DasSSECarriesLegacyRegionIdFlag(t *testing.T) {
 	ctx.UnknownFlags().Add(queryFlag)
 	DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
 
-	err := command.main(ctx, []string{"das", "GetDasAgentSSE"})
-	assert.NoError(t, err)
+	require.NoError(t, command.main(ctx, []string{"das", "GetDasAgentSSE"}))
 
 	var out CliDryRunOutput
-	assert.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &out))
-	assert.Equal(t, "das.aliyuncs.com", out.Endpoint, "--RegionId must select the regional endpoint")
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &out))
+	assert.Equal(t, endpoint, out.Endpoint, "--RegionId must select the regional endpoint")
 }
 
 func TestMain_DasNonSSEPascalCaseKeepsLegacyChannel(t *testing.T) {
