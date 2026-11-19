@@ -2,6 +2,16 @@
 
 Release notes are also published at https://github.com/aliyun/aliyun-cli/releases. This file summarizes the major changes in each version.
 
+### v3.5.4
+
+- Migrated the default legacy OpenAPI transport to the Alibaba Cloud SDK V2 runtime, added V4 signing for kebab-case OpenAPI commands, and added global Alibaba Cloud endpoint suffix overrides.
+- Added `--cli-input-json` for loading OpenAPI parameters from a JSON file and improved API and parameter suggestions by ranking more relevant results first.
+- Added background update checks for the CLI and installed plugins, plus `aliyun upgrade --check` for on-demand checks. Updates still require an explicit install or upgrade action.
+- Fixed endpoint handling for metadata commands, enabled proper streaming for DAS SSE APIs, and kept custom User-Agent segments consistent across OpenAPI execution paths.
+- Kept `version`, `help`, and `configure` available when the CLI configuration file is invalid.
+- Extended sensitive value redaction to nested form values and upstream MCP transport errors, and improved telemetry classification for built-in OSS commands.
+- Clarified that `aliyun-reload` replaces the system disk and reinstalls the operating system. Before proceeding, it displays the target instance, region, and image and warns about data loss.
+
 ### v3.5.1
 
 - Added a shared `schemaVersion: "v1"` to AI-mode OpenAPI and OSS error envelopes, and structured initial configuration-loading failures in AI mode. Preserved non-AI output, existing exit statuses, and the separately versioned OSS extension.
